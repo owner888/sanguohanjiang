@@ -312,7 +312,8 @@
 
             /* 日常任务 */
             var dailytask_wrap = $('#dailytask_wrap');
-            switch (parseInt(this.info.daily_task.status)) {
+            var dailyStatus = (this.info.daily_task && this.info.daily_task.status != null) ? parseInt(this.info.daily_task.status) : 0;
+            switch (dailyStatus) {
             case 0:
                 dailytask_wrap.hide();
                 break;
@@ -331,7 +332,7 @@
                     
                     xGame.showpop('dailytask');
                 });
-                dailytask_wrap.find('p').html(lang('task_left') + '(' + this.info.daily_task.number + ')');
+                dailytask_wrap.find('p').html(lang('task_left') + '(' + (this.info.daily_task ? this.info.daily_task.number : 0) + ')');
                 dailytask_wrap.show();
                 break;
             case 2:
