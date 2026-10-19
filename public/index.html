@@ -66,6 +66,49 @@
 
 <link rel="stylesheet" type="text/css" href="static/css/core.css">
 
+<script type="text/javascript">
+// 桌面端鼠标事件自动桥接为移动端 touch 事件，让 PC 浏览器鼠标点击 100% 触发游戏按钮
+(function() {
+    var lastFired = 0;
+    function fireTouch(type, e) {
+        var target = e.target;
+        if (!target) return;
+        var now = Date.now();
+        if (type === 'touchend') {
+            if (now - lastFired < 100) return;
+            lastFired = now;
+        }
+        var touchObj = {
+            pageX: e.pageX,
+            pageY: e.pageY,
+            clientX: e.clientX,
+            clientY: e.clientY,
+            screenX: e.screenX,
+            screenY: e.screenY,
+            target: target
+        };
+        try {
+            var evt = document.createEvent('CustomEvent');
+            evt.initCustomEvent(type, true, true, null);
+            evt.touches = [touchObj];
+            evt.targetTouches = [touchObj];
+            evt.changedTouches = [touchObj];
+            evt.pageX = e.pageX;
+            evt.pageY = e.pageY;
+            evt.clientX = e.clientX;
+            evt.clientY = e.clientY;
+            target.dispatchEvent(evt);
+        } catch(err) {}
+    }
+
+    if (!('ontouchstart' in window) || navigator.maxTouchPoints === 0) {
+        document.addEventListener('mousedown', function(e) { fireTouch('touchstart', e); }, true);
+        document.addEventListener('mouseup', function(e) { fireTouch('touchend', e); }, true);
+        document.addEventListener('click', function(e) { fireTouch('touchend', e); }, true);
+    }
+})();
+</script>
+
 </head>
 <body>
 <!-- 大界面跳转loading -->
