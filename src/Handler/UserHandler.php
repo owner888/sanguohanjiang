@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler;
 
 use Hanjiang\Context;
+use Hanjiang\Database\DB;
 
 final class UserHandler
 {
@@ -23,6 +24,24 @@ final class UserHandler
             ];
         }
 
+        $user = DB::table('user')->where('username', $username)->first();
+        if ($user === null) {
+            return [
+                'status' => -1,
+                'message' => '用户不存在',
+            ];
+        }
+
+        if ($user['password'] !== sha1($password)) {
+            return [
+                'status' => -2,
+                'message' => '密码错误，请重新输入',
+            ];
+        }
+
+        $uid = (int)$user['uid'];
+        $member = DB::table('member')->where('uid', $uid)->first();
+
         $serverBasePort = 18100;
         $host = $ctx->request->host();
         $hostname = explode(':', $host)[0];
@@ -40,8 +59,6 @@ final class UserHandler
             ],
         ];
 
-        $uid = 10001;
-
         return [
             'status' => 1,
             'message' => '登录成功',
@@ -49,8 +66,8 @@ final class UserHandler
             'member' => [
                 'uid' => $uid,
                 'username' => $username,
-                'nickname' => $username,
-                'channel' => 106,
+                'nickname' => $member['nickname'] ?? $username,
+                'channel' => (int)$user['channel'],
             ],
             'serverlist' => $serverList,
         ];

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/vendor/autoload.php';
 
+use Hanjiang\Database\DB;
+use Hanjiang\Database\Redis;
 use Hanjiang\Handler\IosHandler;
 use Hanjiang\Handler\LoginHandler;
 use Hanjiang\Handler\MemberHandler;
@@ -18,6 +20,11 @@ use Workerman\Protocols\Http\Request;
 use Workerman\Worker;
 
 $config = require __DIR__ . '/config/app.php';
+$dbConfig = require __DIR__ . '/config/database.php';
+
+// 初始化数据库与 Redis
+DB::init($dbConfig['mysql']);
+Redis::init($dbConfig['redis']);
 
 $httpWorker = new Worker($config['http']['listen']);
 $httpWorker->count = $config['http']['count'];

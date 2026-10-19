@@ -130,8 +130,8 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - [x] Pure memory 9-grid battle simulation prototype
 - [x] Desktop mouse-to-touch seamless bridge (unified PC & Mobile gameplay)
 - [x] Role creation and prologue story tutorial loop
-- [ ] Redis asynchronous write-behind caching layer
-- [ ] Database connection pool integration (MySQL `zc_sanguo` schema migration)
+- [x] Redis high-speed caching layer (`token`, `player`, `session`)
+- [x] MySQL schema migration & persistent storage integration (`zc_sanguo`)
 - [ ] Native WebSocket server for real-time world chat & guild broadcasts
 - [ ] Complete port of remaining legacy modules (`arena`, `tower`, `pass_general`)
 
