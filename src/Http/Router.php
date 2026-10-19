@@ -107,7 +107,8 @@ final class Router
         }
 
         $mime = $this->getMimeType($realFile);
-        $connection->send((new WorkermanResponse())->file($realFile)->withHeader('Content-Type', $mime));
+        $content = (string)file_get_contents($realFile);
+        $connection->send(new WorkermanResponse(200, ['Content-Type' => $mime], $content));
         return true;
     }
 
