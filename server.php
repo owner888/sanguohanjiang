@@ -5,6 +5,7 @@ declare(strict_types=1);
 require_once __DIR__ . '/vendor/autoload.php';
 
 use Hanjiang\Handler\IosHandler;
+use Hanjiang\Handler\LoginHandler;
 use Hanjiang\Handler\MemberHandler;
 use Hanjiang\Handler\RegisterHandler;
 use Hanjiang\Handler\UserHandler;
@@ -29,6 +30,7 @@ $router->use(new CorsMiddleware());
 $router->use(new ResponseEnvelopeMiddleware());
 $router->use(new GameProtocolMiddleware([
     'ios' => IosHandler::class,
+    'login' => LoginHandler::class,
     'user' => UserHandler::class,
     'register' => RegisterHandler::class,
     'member' => MemberHandler::class,

@@ -21,9 +21,11 @@ final class MemberHandler
             'username' => 'dev_player',
             'nickname' => '天命主公',
             'sex' => 1,
+            'gender' => 0, // 0表示进入选角创角流程
             'roleid' => 1,
             'country' => 1, // 1魏 2蜀 3吴
             'Level' => 1,
+            'level' => 1,
             'silver' => 88888,   // 银两
             'gold' => 9999,      // 元宝
             'reputation' => 100, // 声望
@@ -33,6 +35,12 @@ final class MemberHandler
             'exp' => 0,
             'maxexp' => 100,
             'bagnum' => 20,
+            'guide' => 0,
+            'guidestep' => 0,
+            'missionsite' => 1,
+            'missionlevel' => 1,
+            'missionstage' => 1,
+            'mainquest' => [],
             'attackcd' => [
                 'status' => 0,
                 'cd' => 0,
