@@ -385,47 +385,28 @@
     else events.split(/\s/).forEach(function(type){ iterator(type, fn) })
   }
 
-  var lastTouchEventTime = 0;
   function add(element, events, fn, selector, getDelegate, capture){
     capture = !!capture
     var id = zid(element), set = (handlers[id] || (handlers[id] = []))
     eachEvent(events, fn, function(event, fn){
-      var eventList = [event];
-      if (event === 'touchend') {
-        eventList.push('click');
+      var delegate = getDelegate && getDelegate(fn, event),
+        callback = delegate || fn
+      var proxyfn = function (event) {
+        var result = callback.apply(element, [event].concat(event.data))
+        if (result === false) event.preventDefault()
+        return result
       }
-      eventList.forEach(function(evName) {
-        var delegate = getDelegate && getDelegate(fn, evName),
-          callback = delegate || fn
-        var proxyfn = function (e) {
-          var now = Date.now();
-          if (e.type === 'touchend') {
-            lastTouchEventTime = now;
-          } else if (e.type === 'click' && (now - lastTouchEventTime < 400)) {
-            return;
-          }
-          var result = callback.apply(element, [e].concat(e.data))
-          if (result === false) e.preventDefault()
-          return result
-        }
-        var handler = $.extend(parse(evName), {fn: fn, proxy: proxyfn, sel: selector, del: delegate, i: set.length})
-        set.push(handler)
-        element.addEventListener(handler.e, proxyfn, capture)
-      })
+      var handler = $.extend(parse(event), {fn: fn, proxy: proxyfn, sel: selector, del: delegate, i: set.length})
+      set.push(handler)
+      element.addEventListener(handler.e, proxyfn, capture)
     })
   }
   function remove(element, events, fn, selector){
     var id = zid(element)
     eachEvent(events || '', fn, function(event, fn){
-      var eventList = [event];
-      if (event === 'touchend') {
-        eventList.push('click');
-      }
-      eventList.forEach(function(evName) {
-        findHandlers(element, evName, fn, selector).forEach(function(handler){
-          delete handlers[id][handler.i]
-          element.removeEventListener(handler.e, handler.proxy, false)
-        })
+      findHandlers(element, event, fn, selector).forEach(function(handler){
+        delete handlers[id][handler.i]
+        element.removeEventListener(handler.e, handler.proxy, false)
       })
     })
   }
