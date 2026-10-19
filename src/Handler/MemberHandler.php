@@ -2,23 +2,20 @@
 
 declare(strict_types=1);
 
-namespace Hanjiang\Controller;
+namespace Hanjiang\Handler;
 
-use Hanjiang\Http\Response;
-use Workerman\Protocols\Http\Request;
-use Workerman\Protocols\Http\Response as WorkermanResponse;
+use Hanjiang\Context;
 
-final class MemberController
+final class MemberHandler
 {
     /**
      * 玩家主信息接口: c=member&m=index
      */
-    public function index(Request $request): WorkermanResponse
+    public static function index(Context $ctx): array
     {
         $now = time();
 
-        // 基础玩家数据模型（与 zc_sanguo_menber 对应）
-        $data = [
+        return [
             'status' => 1,
             'uid' => 10001,
             'username' => 'dev_player',
@@ -57,22 +54,22 @@ final class MemberController
             'opennewyearboss' => 0,
             'timestamp' => $now,
         ];
-
-        return Response::json($data);
     }
 
     /**
-     * 创角/选角接口: c=member&m=select_role
+     * 选角/创角: c=member&m=select_role
      */
-    public function select_role(Request $request): WorkermanResponse
+    public static function select_role(Context $ctx): array
     {
-        $roleId = (int)($request->get('roleid') ?? 1);
-        $nickname = trim((string)($request->get('nickname') ?? '主公'));
+        $roleId = (int)($ctx->input('roleid', 1));
+        $nickname = trim((string)$ctx->input('nickname', '主公'));
 
-        return Response::success([
+        return [
+            'status' => 1,
+            'message' => '角色创建成功',
             'roleid' => $roleId,
             'nickname' => $nickname,
             'Level' => 1,
-        ], '角色创建成功');
+        ];
     }
 }

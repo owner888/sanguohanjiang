@@ -46,14 +46,20 @@
 │   │   ├── BattleEngine.php # 核心战斗推演逻辑 (源自 battle_model.php 重构)
 │   │   ├── Hero.php         # 战斗英雄实体模型
 │   │   └── Position.php     # 九宫格战位 (1-9号位) 枚举
-│   ├── Controller/          # 业务控制器
-│   │   ├── IosController.php       # 客户端握手与版本校验
-│   │   ├── UserController.php      # 用户登录与 Token 交换
-│   │   ├── RegisterController.php  # 试玩游客与正式注册
-│   │   └── MemberController.php    # 玩家数据、军令体力与主城信息
+│   ├── Context.php          # 请求上下文封装 (属性注入、输入、Query、Header)
+│   ├── Middleware/          # 中间件流水线 (完全对齐 smart-book 架构)
+│   │   ├── MiddlewareInterface.php
+│   │   ├── CorsMiddleware.php             # 跨域与 OPTIONS 预检处理
+│   │   ├── GameProtocolMiddleware.php     # 将 c=xxx&m=yyy 智能分发至对应 Handler
+│   │   └── ResponseEnvelopeMiddleware.php # 统一协议响应信封自动包装
+│   ├── Handler/             # 纯无状态动作处理器 (杜绝类属性常驻污染)
+│   │   ├── IosHandler.php        # 客户端握手与版本校验
+│   │   ├── UserHandler.php       # 用户登录与 Token 交换
+│   │   ├── RegisterHandler.php   # 试玩游客与正式注册
+│   │   └── MemberHandler.php     # 玩家数据、军令体力与主城信息
 │   └── Http/                # HTTP 协议层与网关
-│       ├── Router.php       # 兼容原版 `c=xxx&m=yyy` 路由分发器及静态文件服务器
-│       └── Response.php     # 统一协议 JSON 响应助手
+│       ├── Router.php       # 流水线驱动器及静态文件服务器
+│       └── Response.php     # 统一协议响应助手
 ├── server.php               # Workerman 服务启动脚本
 ├── composer.json            # Composer 依赖与 PSR-4 自动加载
 ├── README.md                # 英文说明文档

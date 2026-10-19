@@ -2,28 +2,29 @@
 
 declare(strict_types=1);
 
-namespace Hanjiang\Controller;
+namespace Hanjiang\Handler;
 
-use Hanjiang\Http\Response;
-use Workerman\Protocols\Http\Request;
-use Workerman\Protocols\Http\Response as WorkermanResponse;
+use Hanjiang\Context;
 
-final class UserController
+final class UserHandler
 {
     /**
-     * 用户账号登录: c=user&m=login
+     * 账号密码登录: c=user&m=login
      */
-    public function login(Request $request): WorkermanResponse
+    public static function login(Context $ctx): array
     {
-        $username = trim((string)($request->get('u') ?? $request->post('u') ?? ''));
-        $password = trim((string)($request->get('p') ?? $request->post('p') ?? ''));
+        $username = trim((string)$ctx->input('u', ''));
+        $password = trim((string)$ctx->input('p', ''));
 
         if ($username === '' || $password === '') {
-            return Response::error('用户名或密码不能为空', -3);
+            return [
+                'status' => -3,
+                'message' => '用户名或密码不能为空',
+            ];
         }
 
         $serverBasePort = 18100;
-        $host = $request->host();
+        $host = $ctx->request->host();
         $hostname = explode(':', $host)[0];
 
         $serverList = [
@@ -41,10 +42,9 @@ final class UserController
 
         $uid = 10001;
 
-        return Response::json([
+        return [
             'status' => 1,
             'message' => '登录成功',
-            'msg' => '登录成功',
             'uid' => $uid,
             'member' => [
                 'uid' => $uid,
@@ -53,18 +53,19 @@ final class UserController
                 'channel' => 106,
             ],
             'serverlist' => $serverList,
-        ]);
+        ];
     }
 
     /**
-     * 通过临时 token 获取用户信息: c=user&m=get_info_by_temptoken
+     * 根据临时 Token 获取用户数据: c=user&m=get_info_by_temptoken
      */
-    public function get_info_by_temptoken(Request $request): WorkermanResponse
+    public static function get_info_by_temptoken(Context $ctx): array
     {
-        return Response::success([
+        return [
+            'status' => 1,
             'uid' => 10001,
             'username' => 'dev_player',
             'token' => 'mock_token_' . time(),
-        ]);
+        ];
     }
 }

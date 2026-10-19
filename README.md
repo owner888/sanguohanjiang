@@ -46,14 +46,20 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   │   ├── BattleEngine.php # Core simulation logic (ported from battle_model.php)
 │   │   ├── Hero.php         # Combat entity model
 │   │   └── Position.php     # 9-grid tactical positions (1-9) enum
-│   ├── Controller/          # Business controllers
-│   │   ├── IosController.php       # Client bootstrap & version checks
-│   │   ├── UserController.php      # User authentication & token exchange
-│   │   ├── RegisterController.php  # Guest & account registration
-│   │   └── MemberController.php    # Player profile, stamina, and city data
-│   └── Http/                # HTTP Gateway & Protocol
-│       ├── Router.php       # Legacy `c=xxx&m=yyy` dispatcher & static files
-│       └── Response.php     # Standardized JSON protocol response helper
+│   ├── Context.php          # Request context (attributes, input, query, headers)
+│   ├── Middleware/          # Middleware pipeline (aligned with smart-book)
+│   │   ├── MiddlewareInterface.php
+│   │   ├── CorsMiddleware.php             # Cross-origin and OPTIONS preflight
+│   │   ├── GameProtocolMiddleware.php     # Dispatches c=xxx&m=yyy to Handler actions
+│   │   └── ResponseEnvelopeMiddleware.php # Standardizes JSON response envelopes
+│   ├── Handler/             # Stateless action handlers (no class state leaks)
+│   │   ├── IosHandler.php        # Client bootstrap & version checks
+│   │   ├── UserHandler.php       # User authentication & token exchange
+│   │   ├── RegisterHandler.php   # Guest & account registration
+│   │   └── MemberHandler.php     # Player profile, stamina, and city data
+│   └── Http/                # HTTP Gateway & Router
+│       ├── Router.php       # Pipeline runner & static asset server
+│       └── Response.php     # Protocol response helper
 ├── server.php               # Workerman service entrypoint
 ├── composer.json            # Dependencies & PSR-4 autoloading
 ├── README.md                # English documentation

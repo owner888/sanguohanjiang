@@ -4,67 +4,85 @@ declare(strict_types=1);
 
 namespace Hanjiang\Http;
 
+use Hanjiang\Context;
+use Hanjiang\Middleware\MiddlewareInterface;
 use Workerman\Connection\TcpConnection;
 use Workerman\Protocols\Http\Request;
 use Workerman\Protocols\Http\Response as WorkermanResponse;
 
 final class Router
 {
-    /** @var array<string, object> */
-    private array $controllers = [];
+    /** @var list<MiddlewareInterface> */
+    private array $middlewares = [];
 
     public function __construct(
         private readonly string $publicPath
     ) {
     }
 
-    public function register(string $name, object $controller): void
+    public function use(MiddlewareInterface $middleware): self
     {
-        $this->controllers[strtolower($name)] = $controller;
+        $this->middlewares[] = $middleware;
+        return $this;
     }
 
     public function dispatch(TcpConnection $connection, Request $request): void
     {
         $path = $request->path();
 
-        // 1. 静态文件优先
+        // 1. 静态文件直出
         if ($this->serveStatic($connection, $path, $request)) {
             return;
         }
 
-        // 2. 跨域 OPTIONS 预检请求直接通过
-        if ($request->method() === 'OPTIONS') {
-            $connection->send(new WorkermanResponse(204, [
-                'Access-Control-Allow-Origin' => '*',
-                'Access-Control-Allow-Methods' => 'GET, POST, OPTIONS',
-                'Access-Control-Allow-Headers' => '*',
-            ], ''));
-            return;
-        }
+        // 2. 组装请求上下文 Context
+        $ctx = new Context($connection, $request);
 
-        // 3. 业务接口路由 (兼容原版 c=xxx&m=yyy 协议)
-        $c = (string)($request->get('c') ?? $request->post('c') ?? 'index');
-        $m = (string)($request->get('m') ?? $request->post('m') ?? 'index');
-
-        $cLower = strtolower($c);
-        if (!isset($this->controllers[$cLower])) {
-            $connection->send(Response::error("接口未实现: {$c}.{$m}", 0));
-            return;
-        }
-
-        $controller = $this->controllers[$cLower];
-        if (!method_exists($controller, $m)) {
-            $connection->send(Response::error("接口方法未实现: {$c}.{$m}", 0));
-            return;
-        }
+        // 3. 构建中间件流水线 (Pipeline)
+        $pipeline = array_reduce(
+            array_reverse($this->middlewares),
+            static fn(callable $next, MiddlewareInterface $middleware): callable =>
+                static fn(Context $ctx): mixed => $middleware->handle($ctx, $next),
+            static fn(Context $ctx): mixed => self::executeHandler($ctx)
+        );
 
         try {
-            /** @var WorkermanResponse $res */
-            $res = $controller->$m($request);
-            $connection->send($res);
+            /** @var mixed $result */
+            $result = $pipeline($ctx);
+
+            if ($result instanceof WorkermanResponse) {
+                $connection->send($result);
+            } else {
+                $connection->send(new WorkermanResponse(
+                    200,
+                    ['Content-Type' => 'application/json; charset=utf-8'],
+                    json_encode($result, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)
+                ));
+            }
         } catch (\Throwable $e) {
-            $connection->send(Response::error('系统异常: ' . $e->getMessage(), -500, 500));
+            $connection->send(new WorkermanResponse(
+                500,
+                ['Content-Type' => 'application/json; charset=utf-8'],
+                json_encode([
+                    'status' => -500,
+                    'message' => '系统异常: ' . $e->getMessage(),
+                ], JSON_UNESCAPED_UNICODE)
+            ));
         }
+    }
+
+    private static function executeHandler(Context $ctx): mixed
+    {
+        /** @var callable|null $target */
+        $target = $ctx->get('handler_target');
+        if (is_callable($target)) {
+            return $target($ctx);
+        }
+
+        return [
+            'status' => 0,
+            'message' => '未定义执行动作',
+        ];
     }
 
     private function serveStatic(TcpConnection $connection, string $path, Request $request): bool
