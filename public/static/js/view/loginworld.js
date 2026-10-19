@@ -658,6 +658,7 @@
                     window.plugins.localNotification.cancel('practice');
                 }
                 loginWorld.fireEnd();
+                loginWorld.clear();
                 if (player.info.gender == 0) { //选角色
                     xGame.loadWorld('role');
                 } else {
