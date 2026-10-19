@@ -114,7 +114,11 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=register&m=guest`: Instant trial / guest account initialization
 - `c=register&m=reg`: User registration
 - `c=user&m=login`: Account authentication & server selection
+- `c=login&m=guest`: Server-side trial session token issuance
+- `c=login&m=user`: Server-side member authentication & token issuance
 - `c=member&m=index`: Player profile, attributes, stamina, and city states
+- `c=member&m=select_role`: Character creation and custom nickname binding
+- `c=member&m=get_guidestep`: Tutorial step synchronization
 
 ---
 
@@ -124,6 +128,8 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - [x] Backward-compatible parameter dispatcher (`c` / `m`)
 - [x] Authentication & guest account onboarding flows
 - [x] Pure memory 9-grid battle simulation prototype
+- [x] Desktop mouse-to-touch seamless bridge (unified PC & Mobile gameplay)
+- [x] Role creation and prologue story tutorial loop
 - [ ] Redis asynchronous write-behind caching layer
 - [ ] Database connection pool integration (MySQL `zc_sanguo` schema migration)
 - [ ] Native WebSocket server for real-time world chat & guild broadcasts
