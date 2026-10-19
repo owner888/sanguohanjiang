@@ -1,0 +1,15 @@
+{
+    "name": "owner888/sanguohanjiang",
+    "description": "Modern high-performance Three Kingdoms game server built with Workerman 5 and modern PHP 8.4+",
+    "type": "project",
+    "license": "MIT",
+    "require": {
+        "php": ">=8.3",
+        "workerman/workerman": "^5.1"
+    },
+    "autoload": {
+        "psr-4": {
+            "Hanjiang\\": "src/"
+        }
+    }
+}

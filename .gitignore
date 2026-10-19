@@ -1,0 +1,5 @@
+/vendor/
+/runtime/
+.DS_Store
+.env
+*.log

@@ -1,0 +1,388 @@
+/*只有iphone5才会有用
+@media (device-height:568px) and (-webkit-min-device-pixel-ratio:2){
+*/
+body {
+width: 1136px;
+max-height: 852px;
+}
+/*cityworld*/
+#cityworld_page >  #levy_building {
+left:91px;
+top:115px;
+}
+#cityworld_page >  #shop_building {
+left:258px;
+top:362px;
+}
+#cityworld_page >  #bar_building {
+left:766px;
+top:425px;
+}
+#cityworld_page >  #trade_building {
+left:888px;
+top:145px;
+}
+#cityworld_page >  #muster_building {
+left:666px;
+top:311px;
+}
+#cityworld_page >  #practice_building {
+left:622px;
+top:156px;
+}
+#cityworld_page >  #mine_building {
+left:111px;
+top:375px;
+}
+#cityworld_page >  #smithy_building {
+left:494px;
+top:561px;
+}
+#cityworld_page >  #arena_building {
+left:523px;
+top:367px;
+}
+#cityworld_page >  #worldarena_building {
+left:500px;
+top:338px;
+}
+#cityworld_page >  #workshop_building {
+left:466px;
+top:482px;
+}
+#cityworld_page >  #inherit_building {
+left:449px;
+top:49px;
+}
+#cityworld_page > #champions_building {
+left:134px;
+top:49px;
+}
+#cityworld_page > #heromanual_building {
+left:916px;
+top:314px;
+}
+#cityworld_page > #newbar_building {
+left:777px;
+top:466px;
+}
+#header > .rightside_wrap {
+right: -1126px;
+}
+#header > .rightside2_wrap {
+right: -1136px;
+}
+#footer> #chatpop_small {
+right: 776px;
+}
+#footer> .menu_mailbox {
+right: 1050px;
+}
+/*cityworld end*/
+/*mineworld*/
+#minepop{
+background-size: 100% !important;
+}
+/*mineworld end*/
+/*sanctumworld*/
+#sanctumworld #four_beast_dom {
+background-size: 100% !important;
+}
+#sanctumworld > #beast_dom > #beast_way ul{
+width: 1136px;
+height: 852px;
+background-size: 100% !important;
+}
+#sanctumworld #four_beast {
+width: 1065px;
+margin-left: -533px;
+}
+#sanctumworld #four_beast .beast2,
+#sanctumworld #four_beast .beast3 {
+left: 430px;
+}
+/*sanctumworld end*/
+/*gemworld*/
+#gemworld_page {
+background-size: 100% !important;
+}
+/*gemworld end*/
+/*soulworld*/
+#soulpop,
+#towerpop {
+background-size: 100% !important;
+}
+/*soulworld end*/
+/*towerworld*/
+#towerpop > #starway {
+background-size: 100% !important;
+}
+/*towerworld end*/
+/*roleworld*/
+#roleworld_page {
+background-size: 100% !important;
+}
+/*roleworld end*/
+/*bossworld*/
+#bosspop {
+background: url(../img/worldboss/bosspop_bg1.ip5.jpg) 50% 50% no-repeat;
+}
+#bosspop #sidr_band {
+right: -88px;
+}
+/*bossworld end*/
+/*mapworld*/
+#footer .bottom_page_wrap {
+right: 390px;
+}
+@-webkit-keyframes cloudAni {
+    0% {
+		-webkit-transform: translateX(0);
+	}
+    100% {
+		-webkit-transform: translateX(1256px);
+	}
+}
+/*mapworld end*/
+/*treasureworld*/
+#map_wrap,#map_wrap .map_page {
+width: 1136px;
+height: 852px;
+background-size: 100% !important;
+background-repeat:no-repeat;
+}
+/*treasureworld end*/
+/*countryworld end*/
+.world_page {
+width: 1136px;
+height: 852px;
+background-size: 100% !important;
+}
+#countryworld_page.world_page{
+height: 768px;
+background-size: 1136px 768px !important;
+}
+/*countryworld end*/
+/*countrybattleworld*/
+#cbattle_chat_wrap {
+width: 736px;
+left: -88px;
+}
+#cbattle_chat_wrap li {
+width: 715px;
+}
+/*countrybattleworld end*/
+/*herothroneworld*/
+#herothroneworld_page {
+background-size: 100% !important;
+}
+/*herothroneworld end*/
+/*championsworld*/
+#championsworld_page > #champions_enter > #champions_enter_rewardbox{
+right: 0;
+}
+#championsworld_page > #champions_enter > #show_rule{
+right: 0;
+bottom: 20px;
+}
+#championsworld_page > #champions_enter > #go_to_house {
+left: 0;
+bottom: 20px;
+}
+#championsworld_page > #champions_pvp > .left {
+left: -30px;
+}
+#championsworld_page > #champions_pvp > .right {
+right: -30px;
+}
+#championsworld_page > #champions_pvp > #pvp_center {
+top: 60px;
+height: 440px;
+}
+#championsworld_page > #champions_pvp > #pvp_center > #pvp_round{
+top: 190px;
+}
+#championsworld_page > #champions_pvp > #pvp_center > #pvp_time {
+top: 235px;
+}
+#championsworld_page > #champions_pvp > #pvp_center > #pvp_round span {
+top: -130px;
+}
+#championsworld_page > #champions_pvp > #pvp_center > #pvp_reward {
+top: 290px;
+}
+/*championsworld end*/
+/*palaceheroworld*/
+#palaceheroworld_page #ph_player_scroller li{
+width: 1136px;
+}
+#palaceheroworld_page #ph_player_scroller li p {
+right: 165px;
+}
+#palaceheroworld_page #palacehero_right {
+right: -50px;
+}
+/*palaceheroworld end*/
+/*xGame*/
+#chat_horn_msg{
+left: 320px;
+}
+#mail_btns.mail_have1{
+right: 518px;
+}
+#mail_btns.mail_have2{
+right: 465px;	
+}
+#mail_btns.mail_have3{
+right: 412px;
+}
+#mail_btns.mail_have4{
+right: 359px;	
+}
+#mail_btns.mail_have5{
+right: 306px;	
+}
+#mail_btns.mail_have6{
+right: 253px;
+}
+#mail_btns.mail_have7{
+right: 200px;	
+}
+#guidestory_page > .p1 {
+left: 350px;
+top: 240px;
+}
+#guidestory_page > .p2 {
+left: 350px;
+top: 320px;
+}
+/*xGame end*/
+/*countrybossworld*/
+#countryworld_page > #countrybattle_building {
+right: 176px;
+bottom: 80px;
+}
+#countryworld_page > #country_building {
+left: 244px;
+top: 155px;
+}
+#countryworld_page > #countryhouse_building {
+left: 685px;
+top: 210px;
+}
+#countryworld_page > #countryworship_building {
+left: 230px;
+top: 445px;
+}
+#countryworld_page > #countrydice_building {
+left: 515px;
+top: 355px;
+}
+#countryworld_page > #countrymine_building {
+left: 525px;
+top: 120px;
+}
+/*countrybossworld end*/
+/*#loginworld*/
+#loginworld_page{
+background:url(../img/login/login_bg.ip5.jpg) 50% 50% no-repeat
+}
+/*#loginworld end*/
+/*towerworld*/
+#towerpop > #starway{
+background:url(../img/pop/starway_bg.ip5.jpg) 0 0 no-repeat;
+background-position: 0 -80px;
+}
+#towerpop > #starway > #holebtn1 {
+left: 796px;
+top: 397px;
+}
+#towerpop > #starway > #holebg1 {
+left: 810px;
+top: 420px;
+}
+#towerpop > #starway > #holebtn2 {
+left: 150px;
+top: 320px;
+}
+#towerpop > #starway > #holebg2{
+left: 165px;
+top: 350px;
+}
+#towerpop > #starway > #holebtn3 {
+left: 508px;
+top: 165px;
+}
+#towerpop > #starway > #holebg3{
+left: 525px;
+top: 188px;
+}
+#towerpop > #starway > #holebtn4 {
+left: 766px;
+top: 37px;
+}
+#towerpop > #starway > #holebg4{
+left: 780px;
+top: 65px;
+}
+#towerpop > #starway > #holebtn5 {
+left: 195px;
+top: 17px;
+}
+#towerpop > #starway > #holebg5{
+left: 212px;
+top: 45px;
+}
+/*towerworld end*/
+/*generaltaskworld*/
+#generaltaskpop {
+background: url(../img/pop/generaltaskpop_bg.ip5.jpg) center center no-repeat;
+}
+/*generaltaskworld end*/
+/*bossworld*/
+#countryboss{
+background: url(../img/pop/countryboss_bg.ip5.jpg) 50% 50% no-repeat;
+}
+#countryboss #cboss_scroller_bg {
+right: -88px;
+}
+/*bossworld end*/
+/*gvgworld*/
+#gvgworld_page #gvgworld_result > div.d1{
+top: 487px;
+}
+#gvgworld_page #gvgworld_result > div.d2{
+left: 15px;
+top: 434px;
+}
+#gvgworld_page #gvgworld_result > div.d3{
+left: 745px;
+top: 410px;
+}
+#gvgworld_page #gvgworld_result > div.d4{
+left: 200px;
+}
+#gvgworld_page #gvgworld_result > div.d5{
+left: 550px;
+}
+#gvgworld_page #gvgworld_result > .histroy_btn {
+right: 30px;
+bottom: 15px;
+}
+#gvgworld_page #gvg_center {
+height: 508px;
+top: 53px;
+}
+#gvgworld_page #gvg_center ul {
+left: 25px;
+}
+#gvgworld_page #gvg_center #gvg_reward_player {
+top: 290px;
+}
+#gvgworld_page #gvg_center #gvg_reward_server {
+top: 435px;
+}
+/*gvgworld end*/
+/*
+}
+*/

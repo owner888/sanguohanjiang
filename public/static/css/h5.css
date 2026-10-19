@@ -1,0 +1,215 @@
+.ui-add2home {
+position: fixed;
+bottom: 20px;
+display: none;
+left: 50%;
+width: 300px;
+height: 76px;
+padding: 16px 0px 10px 20px;
+margin-left: -160px;
+z-index: 99;
+color: #fff;
+background: #494949;
+border-radius: 2px;
+box-shadow: 0 0 3px rgba(0,0,0,0.8);
+outline: 1px solid rgba(0,0,0,0);
+-webkit-animation-name: dot_bounce;
+-webkit-animation-duration: 0.5s;
+-webkit-animation-iteration-count: infinite;
+border: 2px solid #5ACBF8;
+}
+.ui-add2home img {
+display: block;
+height: 68px;
+width: 68px;
+float: left;
+}
+.ui-add2home p {
+position: relative;
+right: 0px;
+padding: 0;
+margin: 0;
+font-size: 22px;
+width: 200px;
+float: right;
+line-height: 30px;
+padding-top: 4px;
+font-weight: bold;
+}
+.ui-add2home-icon-new {
+margin: -6px 6px;
+display: inline-block;
+height: 30px;
+width: 30px;
+background: url(../img/common/add2home_arrow.png) no-repeat;
+-webkit-background-size: 30px 30px;
+}
+.ui-add2home-close {
+position: absolute;
+right: 0;
+top: 0;
+height: 40px;
+width: 40px;
+cursor: pointer;
+-webkit-tap-highlight-color: rgba(0,0,0,0);
+}
+.ui-add2home-close b {
+position: absolute;
+display: inline-block;
+right: 8px;
+top: 10px;
+height: 5px;
+width: 16px;
+background: #fff;
+border-radius: 2px;
+-webkit-transform: rotate(45deg);
+}
+.ui-add2home-close b:after {
+content: '';
+position: absolute;
+display: inline-block;
+height: 5px;
+width: 16px;
+background: #fff;
+border-radius: 2px;
+-webkit-transform: rotate(90deg);
+}
+.ui-add2home-arrow {
+width: 30px;
+height: 30px;
+overflow: hidden;
+position: absolute;
+bottom: -30px;
+left: 50%;
+margin-left: -15px;
+}
+.ui-add2home-arrow b {
+display: inline-block;
+position: absolute;
+top: -14px;
+left: 2px;
+width: 22px;
+height: 20px;
+background: #494949;
+-webkit-transform: rotate(45deg);
+border: 2px solid #5ACBF8;
+}
+body.iPad .ui-add2home {
+top: 20px;
+bottom: 0;
+}
+body.iPad .ui-add2home-arrow {
+top: -30px;
+bottom: 0;
+}
+body.iPad .ui-add2home-arrow b {
+top: 20px;
+}
+#loginworld_page{
+background:url(../img/login/login_bg.ip5.jpg) 50% -52px no-repeat
+}
+#generaltasklistpop .ante_desc .info {
+top:200px;
+}
+#generaltasklistpop .ante_desc .flag {
+top:180px;
+}
+#generaltaskpop #gold {
+left: 428px;
+}
+#generaltaskpop #soul {
+left: 602px;
+}
+#cbattleworld_page #rightsider .scroller {
+height: 74%;
+}
+/*towerworld*/
+#towerpop > #starway{
+background-position: 0 -40px;
+}
+#towerpop > #starway > #holebtn1 {
+left: 740px;
+top: 397px;
+}
+#towerpop > #starway > #holebg1 {
+left: 758px;
+top: 420px;
+}
+#towerpop > #starway > #holebtn2 {
+left: 94px;
+top: 320px;
+}
+#towerpop > #starway > #holebg2{
+left: 110px;
+top: 350px;
+}
+#towerpop > #starway > #holebtn3 {
+left: 452px;
+top: 165px;
+}
+#towerpop > #starway > #holebg3{
+left: 469px;
+top: 188px;
+}
+#towerpop > #starway > #holebtn4 {
+left: 710px;
+top: 37px;
+}
+#towerpop > #starway > #holebg4{
+left: 722px;
+top: 65px;
+}
+#towerpop > #starway > #holebtn5 {
+left: 139px;
+top: 17px;
+}
+#towerpop > #starway > #holebg5{
+left: 155px;
+top: 45px;
+}
+/*towerworld iPhone5 */
+body.iPhone5 #towerpop > #starway{
+background:url(../img/pop/starway_bg.ip5.jpg) 0 0 no-repeat;
+background-position: 0 -80px;
+}
+body.iPhone5 #towerpop > #starway > #holebtn1 {
+left: 796px;
+top: 397px;
+}
+body.iPhone5 #towerpop > #starway > #holebg1 {
+left: 810px;
+top: 420px;
+}
+body.iPhone5 #towerpop > #starway > #holebtn2 {
+left: 150px;
+top: 320px;
+}
+body.iPhone5 #towerpop > #starway > #holebg2{
+left: 165px;
+top: 350px;
+}
+body.iPhone5 #towerpop > #starway > #holebtn3 {
+left: 508px;
+top: 165px;
+}
+body.iPhone5 #towerpop > #starway > #holebg3{
+left: 525px;
+top: 188px;
+}
+body.iPhone5 #towerpop > #starway > #holebtn4 {
+left: 766px;
+top: 37px;
+}
+body.iPhone5 #towerpop > #starway > #holebg4{
+left: 780px;
+top: 65px;
+}
+body.iPhone5 #towerpop > #starway > #holebtn5 {
+left: 195px;
+top: 17px;
+}
+body.iPhone5 #towerpop > #starway > #holebg5{
+left: 212px;
+top: 45px;
+}
+/*towerworld end*/

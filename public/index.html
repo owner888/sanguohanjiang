@@ -1,0 +1,285 @@
+<!doctype html>
+<html>
+<head>
+<title>悍将三国</title>
+<meta charset="UTF-8">
+<meta content="width=960,user-scalable=no,viewport-fit=cover" name="viewport" id="viewport">
+<script type="text/javascript">
+// 手机端 fit-height：动态改写 viewport 宽度，让 960×768 的设计高度完整映射到
+// 屏幕高度（不用 body zoom——移动端 zoom 与 position:fixed 弹窗相互干扰）。
+// v = 768 × 屏幕宽高比；横屏 iPhone(844×390) → v≈1662、缩放≈0.508，
+// 整幅画面完整可见、无黑边裁切，弹窗关闭按钮必然落在屏内。
+// 必须在首次布局前（<head> 内）改写，布局后再改 meta 部分浏览器不会重新评估。
+(function () {
+    var isMobile = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent)
+        || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent));
+    if (!isMobile) { return; }
+    try {
+        var sw = window.screen.width || 0, sh = window.screen.height || 0;
+        if (sw > 0 && sh > 0) {
+            // 恒按横屏比例（max/min）：iOS 的 screen.width/height 不随旋转互换
+            // （永远报竖屏值），安卓才互换——不能用"当前方向"算 meta，否则
+            // iPhone 横屏会算出 ≈355 的布局宽、画面放大 2.4 倍只看到左上角
+            // （2026-10-18 回归教训）。竖屏打开时布局虽塌，但"请横屏"遮罩
+            // （fixed 全屏 + innerHeight>innerWidth 判定）会盖住整屏。
+            var ratio = Math.max(sw, sh) / Math.min(sw, sh); // 横屏宽高比
+            var vw = Math.round(768 * ratio);
+            if (vw < 960) { vw = 960; }
+            if (vw > 3000) { vw = 3000; }
+            var vp = document.getElementById('viewport');
+            if (vp) { vp.content = 'width=' + vw + ',user-scalable=no,viewport-fit=cover'; }
+            // 标记宽布局：game.css 据此把场景背景图 cover 铺满（右侧不再露黑底）
+            document.documentElement.className += ' hj-wide';
+            // 布局视口宽度写入 CSS 变量：game.css 据此让聊天小框贴屏幕左侧
+            // （原版 iPad/iPhone5 也是宽布局贴左，见 body.iPad #chatpop_small）
+            var syncVW = function () {
+                // Fullscreen API 全屏期间由 zoom 兜底脚本接管（其布局宽 ≠ clientWidth）
+                if (document.fullscreenElement) { return; }
+                var w = document.documentElement.clientWidth;
+                if (w > 0) {
+                    document.documentElement.style.setProperty('--hj-vw', w + 'px');
+                    // 建筑群居中偏移：主城/国家场景 .building 按 960 设计宽绝对定位
+                    document.documentElement.style.setProperty(
+                        '--hj-offx', Math.floor(Math.max(0, w - 960) / 2) + 'px');
+                }
+            };
+            window.addEventListener('resize', syncVW);
+            window.addEventListener('orientationchange', function () { setTimeout(syncVW, 300); });
+            syncVW();
+        }
+    } catch (e) {}
+})();
+</script>
+<!--
+<meta http-equiv="cache-control" content="no-cache">
+<meta http-equiv="expires" content="mon, 22 jul 2002 11:12:01 GMT">
+<meta http-equiv="pragma" content="no-cache">-->
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="悍将三国" />
+<meta name="apple-touch-fullscreen" content="yes" />
+<meta name="format-detection" content="telephone=no" />
+<meta name="description" content="悍将三国" />
+
+<!--<script type="text/javascript" charset="utf-8" src="cordova.js"></script>-->
+
+<link rel="stylesheet" type="text/css" href="static/css/core.css">
+
+</head>
+<body>
+<!-- 大界面跳转loading -->
+
+<div id="initloading">
+    <div class="mask"></div>
+    <div class="initloading_wrap">
+        <div class="bar_wrap">
+            <div class="bar" id="initloading_progress">
+                <div class="light" id="initloading_progress_light"></div>
+            </div>
+            
+        </div>
+        <p id="tips">正在加载中，请耐心等待...</p>
+        <p id="updateinfo"></p>
+    </div>
+    <div class="longtimetips btn" onclick="cleanGameCache();"><b>清空游戏缓存</b></div>
+</div>
+
+<!-- ajaxloading-->
+<div id="ajaxloading">
+    <div class="mask"></div>
+    <div class="main"></div>
+</div>
+<!-- world loading -->
+<div id="worldloading">
+    <div class="mask"></div>
+    <div class="main"><span></span></div>
+</div>
+<div id="initmsg">
+    <div class="mask"></div>
+    <div class="main">
+        <div class="text"></div>
+        <button class="btn" id="initmsg_btn"></button>
+        <div class="waittext"></div>
+    </div>
+</div>
+
+<!-- 竖屏提示层：手机竖屏时由 autoload.js orientationchangeNotice 显示"请横屏" -->
+<div id="orientationchange" class="orientationchange"></div>
+
+<!-- 基础JS -->
+<!-- 关键前置脚本：onerror 里换参数重试一次——浏览器缓存条目损坏
+     （ERR_CACHE_READ_FAILURE）会让同步 script 直接加载失败、整局起不来，
+     重试换新 URL 可绕过坏缓存 -->
+<script type="text/javascript" charset="utf-8" src="static/js/zepto.js?v=1792412165" onerror="if(!this.getAttribute('data-r')){this.setAttribute('data-r','1');this.src=this.src+'&_r=1';}"></script>
+<script type="text/javascript" charset="utf-8" src="static/js/zepto_fn.js?v=1792412165" onerror="if(!this.getAttribute('data-r')){this.setAttribute('data-r','1');this.src=this.src+'&_r=1';}"></script>
+<script type="text/javascript" charset="utf-8" src="static/js/iscroll.js?v=1792412165" onerror="if(!this.getAttribute('data-r')){this.setAttribute('data-r','1');this.src=this.src+'&_r=1';}"></script>
+<!-- ?v=1792412165 由服务端替换为启动时间戳，避免浏览器缓存旧的前端 -->
+<script type="text/javascript" charset="utf-8" src="static/js/autoload.js?v=1792412165" onerror="if(!this.getAttribute('data-r')){this.setAttribute('data-r','1');this.src=this.src+'&_r=1';}"></script>
+
+
+<!--<script src="http://192.168.1.91:8080/target/target-script-min.js#solo"></script>-->
+
+<script type="text/javascript">
+// 桌面浏览器自适应：游戏按 960×768 设计，用 zoom 等比缩放铺满窗口。
+// 缩放比取 宽/高 两个方向的较小值（contain），保证 960×768 的设计画面
+// 在任何屏幕（含 2K/4K 大屏）都能完整显示，不会被裁掉底部菜单/弹窗。
+// 游戏代码大量用 window.innerHeight 定位菜单/弹窗，缩放后必须让它读到
+// "缩放后的"虚拟窗口尺寸，否则菜单位于可视区外、弹窗不居中。
+//
+// 手机端：常规浏览/iOS 主屏模式由 <head> 内脚本用 viewport 原生缩放（fit-height），
+// 不走 zoom（移动端 zoom 与 position:fixed 弹窗相互干扰）。唯一例外是
+// Fullscreen API 全屏（安卓）：全屏会无视 viewport meta 把布局重置为设备尺寸，
+// 此时动态切入 zoom 适配兜底，退出全屏再恢复原生 viewport 缩放。
+(function () {
+    window.HJ_IS_MOBILE = /Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent)
+        || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)); // iPadOS 桌面 UA
+
+    var DESIGN_W = 960;
+    var DESIGN_H = 768;
+    var realW = document.documentElement.clientWidth;
+    var realH = document.documentElement.clientHeight;
+    var z = 1;
+    var fitActive = false;
+    var timers = [];
+
+    // 虚拟窗口尺寸 = 真实值 / 缩放比（fit-height 铺满全宽，桌机和手机一致，
+    // 不再出现两侧黑框；游戏本就支持 >960 布局宽，原版 iPhone5/iPad 即 1136/1024）。
+    function virtualWidth() {
+        return realW / z;
+    }
+
+    function defineVirtualWindow() {
+        Object.defineProperty(window, 'innerWidth', {
+            get: function () { return virtualWidth(); }, configurable: true
+        });
+        Object.defineProperty(window, 'innerHeight', {
+            get: function () { return Math.floor(realH / z); }, configurable: true
+        });
+    }
+
+    function fit(notify) {
+        if (!fitActive) { return; }
+        realW = document.documentElement.clientWidth;
+        realH = document.documentElement.clientHeight;
+        if (!(realW > 0) || !(realH > 0)) { return; }
+
+        z = Math.min(realW / DESIGN_W, realH / DESIGN_H);
+        if (!(z > 0) || !isFinite(z)) { z = 1; }
+
+        var vw = virtualWidth(); // 设计坐标系中的视口宽（≥960）
+        var vh = realH / z;      // >= 768
+
+        var b = document.body;
+        b.style.zoom = z;
+        b.style.width = Math.floor(vw) + 'px';
+        b.style.maxHeight = 'none';
+        b.style.height = DESIGN_H + 'px';
+        b.style.marginLeft = '0';
+        b.style.marginTop = Math.floor((vh - DESIGN_H) / 2) + 'px';
+        b.style.marginRight = '0';
+        b.style.marginBottom = '0';
+
+        // 宽布局偏移量：主城/国家场景的 .building 按 960 设计宽绝对定位，
+        // 宽视口下用 margin-left 把建筑群水平居中（CSS 读取该变量）
+        document.documentElement.style.setProperty(
+            '--hj-offx', Math.floor((vw - DESIGN_W) / 2) + 'px');
+        // 布局视口宽（设计坐标系）：game.css 据此让聊天小框贴屏幕左侧
+        document.documentElement.style.setProperty('--hj-vw', Math.floor(vw) + 'px');
+
+        if (notify) {
+            try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+        }
+    }
+
+    function startFit() {
+        if (fitActive) { return; }
+        fitActive = true;
+        defineVirtualWindow();
+        // 画面外的留白区域用深色，避免大屏下四周出现白边
+        document.documentElement.style.background = '#000';
+        // 标记进入适配模式：供 game.css 豁免针对"无缩放矮屏"的媒体查询修正
+        document.documentElement.classList.add('hj-fit');
+        // 桌机/手机统一宽布局（fit-height 铺满全宽），背景 cover、场景内容居中
+        document.documentElement.classList.add('hj-wide');
+        // isTrusted=false 的合成 resize 不再二次广播，避免死循环
+        window.addEventListener('resize', fitResize);
+        window.addEventListener('orientationchange', fitOrient);
+        fit(false);
+        // 游戏资源异步加载完成后会自行布局，定时强制重排几次
+        timers.push(setTimeout(function () { fit(true); }, 600));
+        timers.push(setTimeout(function () { fit(true); }, 2000));
+        timers.push(setTimeout(function () { fit(true); }, 4000));
+    }
+
+    function stopFit() {
+        if (!fitActive) { return; }
+        fitActive = false;
+        timers.forEach(clearTimeout); timers = [];
+        window.removeEventListener('resize', fitResize);
+        window.removeEventListener('orientationchange', fitOrient);
+        var b = document.body;
+        b.style.removeProperty('zoom');
+        b.style.removeProperty('width');
+        b.style.removeProperty('height');
+        b.style.removeProperty('max-height');
+        b.style.removeProperty('margin-left');
+        b.style.removeProperty('margin-top');
+        b.style.removeProperty('margin-right');
+        b.style.removeProperty('margin-bottom');
+        // 手机宽布局(hj-wide)由 head 内脚本添加，zoom 停用后必须保留：
+        // 场景背景 cover/地图铺满都依赖它；清掉会导致横屏退出全屏后背景只盖 1024
+        if (!window.HJ_IS_MOBILE) {
+            document.documentElement.classList.remove('hj-fit');
+            document.documentElement.classList.remove('hj-wide');
+            document.documentElement.style.removeProperty('--hj-offx');
+        }
+        // 恢复 innerWidth/Height 不能用 delete：Chromium 里它们是 [Replaceable]
+        // 自有属性，delete 后变 undefined，方向判定(innerHeight>innerWidth)恒 false
+        // → 竖屏被判成横屏 → 反复 startFit/stopFit 死循环、遮罩失效、整屏黑
+        // （2026-10-19 R1 诊断实锤：delete 后 inner 变成 "undefinedxundefined"）
+        Object.defineProperty(window, 'innerWidth', {
+            get: function () { return document.documentElement.clientWidth; }, configurable: true
+        });
+        Object.defineProperty(window, 'innerHeight', {
+            get: function () { return document.documentElement.clientHeight; }, configurable: true
+        });
+        try { window.dispatchEvent(new Event('resize')); } catch (e) {}
+    }
+
+    function fitResize(ev) { fit(ev.isTrusted !== false); }
+    function fitOrient() { setTimeout(function () { fit(true); }, 300); }
+
+    if (!window.HJ_IS_MOBILE) {
+        startFit();
+    } else {
+        // 手机：viewport meta 在 Full screen API 全屏期间失效 → 用 zoom 兜底。
+        // 是否启用 zoom 由 syncFit 统一裁决，且必须在方向/视口变化时重评：
+        // 只挂在 fullscreenchange 上不够——全屏中转到竖屏不会触发该事件，
+        // zoom 持续生效会把 body(768 设计高) 压成屏幕中间一条、fixed 遮罩
+        // 也被 zoom 缩放盖不满 → 整屏黑（2026-10-19 玩家报"清缓存黑屏"）。
+        var syncFit = function () {
+            if (!window.HJ_IS_MOBILE) { return; } // 桌面固定走 zoom（下方 startFit）
+            var fsEl = document.fullscreenElement || document.webkitFullscreenElement;
+            var portrait = (window.innerHeight || 0) > (window.innerWidth || 0);
+            // 仅"全屏 + 横屏"启用 zoom；非全屏或竖屏一律回退 meta 布局（竖屏由
+            // "请横屏"遮罩 fixed 盖满整屏）
+            if (fsEl && !portrait) { startFit(); } else { stopFit(); }
+        };
+        // 旋转/缩放瞬间 innerHeight 还是旧值，立即判方向会误判成横屏（该停的 zoom
+        // 没停、画面被压成中间一条）→ 统一防抖延时重评（2026-10-19 线上矩阵复现）
+        var _syncTimer = null;
+        var syncFitLater = function () {
+            if (_syncTimer) { clearTimeout(_syncTimer); }
+            _syncTimer = setTimeout(function () { _syncTimer = null; syncFit(); }, 150);
+        };
+        document.addEventListener('fullscreenchange', syncFit);
+        document.addEventListener('webkitfullscreenchange', syncFit);
+        window.addEventListener('orientationchange', syncFitLater);
+        window.addEventListener('resize', syncFitLater);
+    }
+})();
+</script>
+
+</body>
+</html>
