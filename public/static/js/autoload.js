@@ -13,7 +13,7 @@ window.HJ_IS_MOBILE = window.HJ_IS_MOBILE || /Android|iPhone|iPad|iPod|IEMobile|
 /* 本地静态文件地址
  * 如果是PC/H5版本，资源已全部内置在 static/ 目录，无需外链
  */
-var staticUrl = 'https://kzh-1316691196.cos.ap-shanghai.myqcloud.com/static/'; /* 服务端注入：配置 cos_base_url 时为 COS 直连地址，否则 ./static/ */
+var staticUrl = 'static/'; /* 本地加载静态文件，无需外部依赖与跨域 */
 /* 地图资源版本号：由 cos_upload.py --texts 按 img/map 内容指纹自动注入
    （占位符 __HJ_MAP_VER__）。素材走 30 天长缓存，同名覆盖玩家看不到新图，
    加版本号后只要地图文件有改动，URL 就变、浏览器自动重下，无需玩家清缓存。
