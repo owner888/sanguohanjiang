@@ -102,22 +102,27 @@ final class MapHandler
         $level = (int)($ctx->input('l', 1));
         $stage = (int)($ctx->input('s', 1));
 
+        // 关卡据点敌人 (包含精准屏幕坐标与类型)
         $enemies = [
-            1 => ['name' => '黄巾前哨', 'head' => 1, 'color' => 1],
-            2 => ['name' => '黄巾精兵', 'head' => 2, 'color' => 1],
-            3 => ['name' => '程远志', 'head' => 3, 'color' => 2],
-            4 => ['name' => '邓茂', 'head' => 4, 'color' => 2],
-            5 => ['name' => '张梁', 'head' => 5, 'color' => 3],
+            1 => ['name' => '黄巾前哨', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
+            2 => ['name' => '黄巾精兵', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
+            3 => ['name' => '程远志',   'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
+            4 => ['name' => '邓茂',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
+            5 => ['name' => '张梁',     'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
         ];
 
         $list = [];
         $missionItems = [];
         foreach ($enemies as $mid => $cfg) {
             $item = [
+                'id' => $mid,
                 'missionid' => $mid,
                 'name' => $cfg['name'],
                 'head' => $cfg['head'],
                 'color' => $cfg['color'],
+                'type' => $cfg['type'],
+                'x' => $cfg['x'],
+                'y' => $cfg['y'],
                 'openstatus' => 1,
                 'status' => 0,
                 'maxtimes' => 5,

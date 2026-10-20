@@ -1003,40 +1003,47 @@
             nextGuanqia = null;
             var that = this;
             player.info.missionstage = parseInt(player.info.missionstage);
-            if (player.info.missionstage > 1) {
+            var shiliCfg = map_ini['shili'] && map_ini['shili'][player.info.missionlevel];
+            if (player.info.missionstage > 1 && shiliCfg) {
                 var k1 = player.info.missionstage - 1;
-                prevGuanqia = map_ini['shili'][player.info.missionlevel][k1];
+                prevGuanqia = shiliCfg[k1];
             }
-            var k2 = player.info.missionstage + 1;
-            nextGuanqia = map_ini['shili'][player.info.missionlevel][k2];
+            if (shiliCfg) {
+                var k2 = player.info.missionstage + 1;
+                nextGuanqia = shiliCfg[k2];
+            }
 
             if (prevGuanqia) {
+                var prevStage = prevGuanqia.stage;
+                var prevName = prevGuanqia.name;
                 $('#footer').find('#guanqia_prev').unbind('touchend').bind('touchend', function(e) {
-                    mapWorld.loadGuanqiaMap(player.info.missionlevel, prevGuanqia.stage);
-                    prevGuanqia = null;
+                    mapWorld.loadGuanqiaMap(player.info.missionlevel, prevStage);
                     e.preventDefault();
                     e.stopPropagation();
-                }).text(prevGuanqia.name).show();
+                }).text(prevName).show();
             }
             if (nextGuanqia) {
+                var nextStage = nextGuanqia.stage;
+                var nextName = nextGuanqia.name;
                 if (parseInt(next_status) == 0) {
-                    $('#footer').find('#guanqia_next').addClass('close').unbind('touchend').text(nextGuanqia.name).show();
+                    $('#footer').find('#guanqia_next').addClass('close').unbind('touchend').text(nextName).show();
                 } else {
  
                     $('#footer').find('#guanqia_next').removeClass('close').unbind('touchend').bind('touchend', function(e) {
-                        mapWorld.loadGuanqiaMap(player.info.missionlevel, nextGuanqia.stage);
-                        nextGuanqia = null;
+                        mapWorld.loadGuanqiaMap(player.info.missionlevel, nextStage);
                         e.preventDefault();
                         e.stopPropagation();
-                    }).text(nextGuanqia.name).show();
+                    }).text(nextName).show();
                 }
             } else {
 
                 $('#footer').find('#guanqia_next').removeClass('close').unbind('touchend').bind('touchend', function(e) {
                     mapWorld.loadShiliMap(player.info.missionlevel);
-                    nextGuanqia = null;
                     e.preventDefault();
                     e.stopPropagation();
+                }).text(lang('return_shili')).show();
+            }
+        },
                 }).text(lang('back')).show();
             }
         },
