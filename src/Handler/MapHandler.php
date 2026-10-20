@@ -209,10 +209,58 @@ final class MapHandler
         $member = DB::table('member')->where('uid', $uid)->first();
         $nickname = $member['nickname'] ?? '天命主公';
 
-        // 1. 构建我方出战英雄
-        $leftHeroes = [
-            new Hero(1, $nickname, Position::FrontMiddle, 1500, 1500, 320, 120, 150),
-        ];
+        // 1. 构建我方出战英雄 (支持真实武将与装备穿戴加成属性)
+        $generals = DB::table('general')->where('uid', $uid)->where('pos', '>', 0)->get();
+        if (empty($generals)) {
+            $generals = DB::table('general')->where('uid', $uid)->get();
+        }
+
+        $leftHeroes = [];
+        $leftTeamData = [];
+        $leftHeroImage = (string)($member['gender'] ?? 1);
+
+        foreach ($generals as $g) {
+            $gid = (int)$g['id'];
+            $posInt = (int)$g['pos'] > 0 ? (int)$g['pos'] : 2;
+            $pos = Position::tryFrom($posInt) ?? Position::FrontMiddle;
+
+            $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->get();
+            $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
+
+            $heroName = $g['name'] ?: $nickname;
+            $leftHeroes[] = new Hero($gid, $heroName, $pos, $stats['hp'], $stats['hp'], $stats['attack'], $stats['defense'], $stats['speed']);
+
+            $leftTeamData[$posInt] = [
+                'heroid' => (string)$gid,
+                'name' => $heroName,
+                'herotype' => '1',
+                'level' => (string)$stats['level'],
+                'allblood' => $stats['hp'],
+                'blood' => $stats['hp'],
+                'power' => 50,
+                'image' => (int)$g['generalid'] === 1 ? $leftHeroImage : (string)((int)$g['generalid'] % 20 + 10),
+                'star' => 1,
+                'talent' => '坚强',
+                'skill' => '会心一击',
+            ];
+        }
+
+        if (empty($leftHeroes)) {
+            $leftHeroes[] = new Hero(1, $nickname, Position::FrontMiddle, 1500, 1500, 320, 120, 150);
+            $leftTeamData[2] = [
+                'heroid' => '1',
+                'name' => $nickname,
+                'herotype' => '1',
+                'level' => (string)($member['level'] ?? 1),
+                'allblood' => 1500,
+                'blood' => 1500,
+                'power' => 50,
+                'image' => $leftHeroImage,
+                'star' => 1,
+                'talent' => '坚强',
+                'skill' => '会心一击',
+            ];
+        }
 
         // 2. 构建敌方据点守军
         $enemyHp = 800 + $missionId * 150;
@@ -226,24 +274,7 @@ final class MapHandler
         $simResult = $engine->simulate();
 
         // 4. 组装符合原版 battleworld.js 的战斗回放结构
-        $leftHeroImage = (string)($member['gender'] ?? 1);
         $rightHeroImage = '27'; // 经典武将形象编号
-
-        $leftTeamData = [
-            2 => [
-                'heroid' => '1',
-                'name' => $nickname,
-                'herotype' => '1',
-                'level' => (string)($member['level'] ?? 1),
-                'allblood' => 1500,
-                'blood' => 1500,
-                'power' => 50,
-                'image' => $leftHeroImage,
-                'star' => 1,
-                'talent' => '坚强',
-                'skill' => '会心一击',
-            ],
-        ];
 
         $rightTeamData = [
             2 => [

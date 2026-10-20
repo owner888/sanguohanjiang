@@ -169,5 +169,45 @@ final class RegisterHandler
             'race' => 0,
             'race_dateline' => 0,
         ]);
+
+        // 初始化主公将领
+        $genId = DB::table('general')->insert([
+            'uid' => $uid,
+            'generalid' => 1,
+            'name' => '新主公' . $uid,
+            'level' => 1,
+            'exp' => 0,
+            'pos' => 2,
+            'matrix_id' => 1,
+            'status' => 1,
+            'created_at' => $now,
+        ]);
+
+        // 初始化新手初始装备 (青铜剑, 青铜甲)
+        DB::table('equipment')->insert([
+            'uid' => $uid,
+            'equipid' => 101,
+            'name' => '青铜剑',
+            'type' => 1, // 武器
+            'quality' => 1,
+            'level' => 1,
+            'generalid' => 0,
+            'number' => 1,
+            'saleprice' => 50,
+            'created_at' => $now,
+        ]);
+
+        DB::table('equipment')->insert([
+            'uid' => $uid,
+            'equipid' => 201,
+            'name' => '青铜甲',
+            'type' => 2, // 铠甲
+            'quality' => 1,
+            'level' => 1,
+            'generalid' => 0,
+            'number' => 1,
+            'saleprice' => 50,
+            'created_at' => $now,
+        ]);
     }
 }

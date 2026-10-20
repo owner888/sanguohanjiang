@@ -161,7 +161,12 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Main city infrastructure & campaign chapter dispatch (`city`, `map`)
 - [x] End-to-end combat loop with deterministic battle report playback
 - [x] All 16 core game systems migrated to stateless Handlers
-- [x] PHPUnit end-to-end integration test suite (100% passing)
+- [x] Equipment equip/unequip system with real-time dynamic attribute calculation
+- [x] Blacksmith enhancement system (`strengthen`) with silver cost scaling & success rate
+- [x] Tavern warlord recruitment (`tavern`) with persistent silver deductions & anti-duplicate checks
+- [x] Martial practice grounds (`practice`) with idle time exp accumulation & rapid leap leveling
+- [x] Full combat integration linking dynamic hero stats and equipment bonuses into 9-grid simulation
+- [x] PHPUnit end-to-end integration test suite (18/18 100% passing)
 - [ ] Native WebSocket server for real-time world chat & guild broadcasts
 - [ ] Complete port of remaining legacy modules (`tower`, `pass_general`)
 

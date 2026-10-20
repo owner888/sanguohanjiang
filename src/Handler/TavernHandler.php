@@ -6,21 +6,91 @@ namespace Hanjiang\Handler;
 
 use Hanjiang\Context;
 use Hanjiang\Database\DB;
+use Hanjiang\Database\Redis;
 
 final class TavernHandler
 {
+    /**
+     * 酒馆常驻名将池配置
+     *
+     * @var array<int, array<string, mixed>>
+     */
+    public const array HERO_POOL = [
+        10 => [
+            'id' => 10,
+            'name' => '张飞',
+            'quality' => 3,
+            'cost_silver' => 5000,
+            'wuli' => 98,
+            'zhili' => 45,
+            'hp' => 1800,
+            'attack' => 360,
+            'defense' => 130,
+            'skill' => '万夫莫敌',
+        ],
+        11 => [
+            'id' => 11,
+            'name' => '关羽',
+            'quality' => 4,
+            'cost_silver' => 10000,
+            'wuli' => 96,
+            'zhili' => 75,
+            'hp' => 2000,
+            'attack' => 400,
+            'defense' => 150,
+            'skill' => '青龙斩',
+        ],
+        12 => [
+            'id' => 12,
+            'name' => '诸葛亮',
+            'quality' => 5,
+            'cost_silver' => 20000,
+            'wuli' => 55,
+            'zhili' => 100,
+            'hp' => 1600,
+            'attack' => 380,
+            'defense' => 140,
+            'skill' => '东风破',
+        ],
+        13 => [
+            'id' => 13,
+            'name' => '赵云',
+            'quality' => 4,
+            'cost_silver' => 15000,
+            'wuli' => 95,
+            'zhili' => 78,
+            'hp' => 1900,
+            'attack' => 390,
+            'defense' => 145,
+            'skill' => '一身是胆',
+        ],
+    ];
+
     /**
      * 酒馆主界面: c=tavern&m=index
      */
     public static function index(Context $ctx): array
     {
+        $uid = MemberHandler::resolveUid($ctx);
+        $ownedGenerals = DB::table('general')->where('uid', $uid)->get();
+        $ownedMap = [];
+        foreach ($ownedGenerals as $g) {
+            $ownedMap[(int)$g['generalid']] = true;
+        }
+
+        $list = [];
+        $idx = 1;
+        foreach (self::HERO_POOL as $hero) {
+            $gid = (int)$hero['id'];
+            $list[$idx] = array_merge($hero, [
+                'is_recruited' => isset($ownedMap[$gid]) ? 1 : 0,
+            ]);
+            $idx++;
+        }
+
         return [
             'status' => 1,
-            'list' => [
-                1 => ['id' => 10, 'name' => '张飞', 'quality' => 3, 'cost_silver' => 5000],
-                2 => ['id' => 11, 'name' => '关羽', 'quality' => 4, 'cost_silver' => 10000],
-                3 => ['id' => 12, 'name' => '诸葛亮', 'quality' => 5, 'cost_silver' => 20000],
-            ],
+            'list' => $list,
             'message' => 'ok',
         ];
     }
@@ -39,23 +109,68 @@ final class TavernHandler
     public static function buy(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $gid = (int)($ctx->input('id', 10));
+        $gid = (int)($ctx->input('id', $ctx->input('generalid', 10)));
 
-        DB::table('general')->insert([
+        if (!isset(self::HERO_POOL[$gid])) {
+            return [
+                'status' => 0,
+                'message' => '未找到该武将招募信息',
+            ];
+        }
+
+        $heroConfig = self::HERO_POOL[$gid];
+        $costSilver = (int)$heroConfig['cost_silver'];
+
+        // 检查是否已经拥有
+        $exist = DB::table('general')
+            ->where('uid', $uid)
+            ->where('generalid', $gid)
+            ->first();
+
+        if ($exist !== null) {
+            return [
+                'status' => 4,
+                'message' => '已拥有该武将，不可重复招募',
+            ];
+        }
+
+        // 检查银两
+        $member = DB::table('member')->where('uid', $uid)->first();
+        if ((int)$member['silver'] < $costSilver) {
+            return [
+                'status' => 3,
+                'message' => '银两不足，招募需要 ' . $costSilver . ' 银两',
+            ];
+        }
+
+        $remainSilver = (int)$member['silver'] - $costSilver;
+
+        // 扣除银两
+        DB::table('member')->where('uid', $uid)->update(['silver' => $remainSilver]);
+
+        // 插入武将
+        $newGenId = DB::table('general')->insert([
             'uid' => $uid,
             'generalid' => $gid,
-            'name' => '招募武将' . $gid,
+            'name' => $heroConfig['name'],
             'level' => 1,
             'exp' => 0,
-            'pos' => 0,
+            'pos' => 0, // 初始在后备营
             'matrix_id' => 1,
             'status' => 1,
             'created_at' => time(),
         ]);
 
+        Redis::del('player:' . $uid);
+
         return [
             'status' => 1,
-            'message' => '招募成功',
+            'message' => '成功招募名将【' . $heroConfig['name'] . '】！',
+            'id' => $newGenId,
+            'generalid' => $gid,
+            'name' => $heroConfig['name'],
+            'cost_silver' => $costSilver,
+            'silver' => $remainSilver,
         ];
     }
 
