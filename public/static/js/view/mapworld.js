@@ -79,19 +79,29 @@
 
                 var lastenemy = null;
                 var html = '';
-                //这个是势力，写死，暂时写死100个
-                for (var i = 0;i < 100;i ++) {
-                    if (res[i] != undefined) {
-                    if (res[i].status == 0) {
-                        continue;
-                    }
-                    lastenemy = res[i].id;
-                    if (map_ini['world'][i]) { //本地 
-                        html += '<div id="worldshili' + res[i].id + '" class="btn shili ' + (res[i].pass_status == 1 ? 'done': '') + '" style="left:' + getSLeft(map_ini['world'][i].x) + 'px;top:' + getSTop(map_ini['world'][i].y) + 'px" l="' + res[i].id + '"><p>' + map_ini['world'][i].name + '</p></div>';
-                    } else { //web
-                        html += '<div class="btn shili" style="left:' + getSLeft(res[i].x) + 'px;top:' + getSTop(res[i].y) + 'px" l="' + res[i].id + '"><p>' + res[i].name + '</p></div>';
+                // 现代化语义重构：优先读取 res.factions 集合，杜绝脆弱的 res[i] 数字下标探测
+                var factionList = res.factions || [];
+                if (factionList.length === 0) {
+                    for (var k = 1; k <= 50; k++) {
+                        if (res[k] && typeof res[k] === 'object' && res[k].id != null) {
+                            factionList.push(res[k]);
                         }
                     }
+                }
+
+                for (var f = 0; f < factionList.length; f++) {
+                    var faction = factionList[f];
+                    if (!faction || faction.status == 0) {
+                        continue;
+                    }
+                    var fid = faction.id;
+                    lastenemy = fid;
+                    var localCfg = map_ini['world'] && map_ini['world'][fid];
+                    var posX = localCfg ? localCfg.x : (faction.x || 0);
+                    var posY = localCfg ? localCfg.y : (faction.y || 0);
+                    var shiliName = localCfg ? localCfg.name : (faction.name || '');
+
+                    html += '<div id="worldshili' + fid + '" class="btn shili ' + (faction.pass_status == 1 ? 'done' : '') + '" style="left:' + getSLeft(posX) + 'px;top:' + getSTop(posY) + 'px" l="' + fid + '"><p>' + shiliName + '</p></div>';
                 }
                 dom_page.append(html);
 
@@ -366,28 +376,29 @@
                 var nowstage = {};
                 var style = '';
 
-                for (var i in res.list) {
-                    if (res.list[i].openstatus == 0) {
+                var stageList = res.stages || (res.list ? Object.values(res.list) : []);
+                for (var s = 0; s < stageList.length; s++) {
+                    var stageItem = stageList[s];
+                    if (!stageItem || stageItem.openstatus == 0) {
                         continue;
                     }
-                    lastenemy = res.list[i].stage;
-                    lastenemy_id = res.list[i].id;
+                    var stageIdx = stageItem.stage;
+                    lastenemy = stageIdx;
+                    lastenemy_id = stageItem.id;
                     //英雄集结和宋朝最后一个势力强制最后一个设置为null，为了没有箭头
-                    if ((i == 73 || i == 80) && res.list[i].status == 1) {
+                    if ((stageIdx == 73 || stageIdx == 80) && stageItem.status == 1) {
                         lastenemy = null;
                     }
-                    if (shili_map_ini && shili_map_ini[res.list[i].stage]) { //本地
-                        nowstage = shili_map_ini[res.list[i].stage];
+                    if (shili_map_ini && shili_map_ini[stageIdx]) { //本地
+                        nowstage = shili_map_ini[stageIdx];
                         html += '<div id="guanqia' + nowstage.stage + '" class="btn guanqia pictype' + nowstage.type + ' guanqia' + nowstage.stage + '" style="left:' + getSLeft(nowstage.x) + 'px;top:' + getSTop(nowstage.y) + 'px" s="' + nowstage.stage + '">';
                         html += '<div class="bg ' + (nowstage.reverse == 1 ? 'reverse': '') + '"></div>';
                         if (parseInt(player.info.missionlevel) <= 14) {
                             html += '<p style="background-image:url(' + that.getCityNameImage(player.info.missionlevel) + ');background-position-y:-' + ((nowstage.stage - 1) * 22) + 'px;"></p>';
                         }
-                        html += (res.list[i].status == 1 ? '<div class="win"></div>': '');
+                        html += (stageItem.status == 1 ? '<div class="win"></div>': '');
                         html += '</div>';
                     } else {
-                        /*todo 还未作处理*/
-                        
                         html += '';
                     }
                 }

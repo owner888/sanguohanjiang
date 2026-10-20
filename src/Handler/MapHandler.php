@@ -10,15 +10,19 @@ use Hanjiang\Battle\Position;
 use Hanjiang\Context;
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
+use Hanjiang\Enum\BattleAssess;
+use Hanjiang\Enum\Faction;
+use Hanjiang\Enum\FactionStatus;
 
 final class MapHandler
 {
     /**
      * 世界十三州大地图主信息: c=map&m=index
-     * 前端 mapworld.js 循环遍历 0..99，直接读取 res[i]，必须以势力 ID 为键
+     * 采用强类型 Faction / FactionStatus 领域枚举，同时输出语义化 factions 列表与向下兼容键
      */
     public static function index(Context $ctx): array
     {
+        $factions = [];
         $res = [
             'status' => 1,
             'open' => 1,
@@ -27,22 +31,31 @@ final class MapHandler
             'first_enter' => 0,
         ];
 
-        // 默认开放前 10 个三国主流势力 (黄巾、袁绍、公孙瓒、董卓、马腾、刘表、袁术、吕布、曹操、刘备)
-        for ($i = 1; $i <= 10; $i++) {
-            $res[(string)$i] = [
-                'id' => $i,
-                'status' => 1, // 1 为开启显示
-                'pass_status' => $i === 1 ? 0 : 0, // 1 为已通关全部关卡
+        // 默认开启前 10 个主流战役势力
+        foreach (array_slice(Faction::cases(), 0, 10) as $faction) {
+            $item = [
+                'id' => $faction->value,
+                'code' => $faction->code(),
+                'name' => $faction->label(),
+                'status' => FactionStatus::Active->value,
+                'status_name' => FactionStatus::Active->label(),
+                'pass_status' => 0,
                 'rewardnum' => 0,
             ];
+
+            $factions[] = $item;
+            // 保持对老版数字键的向后兼容支持
+            $res[(string)$faction->value] = $item;
         }
+
+        // 语义化标准输出
+        $res['factions'] = $factions;
 
         return $res;
     }
 
     /**
      * 战役势力场景关卡列表: c=map&m=get_scene_list
-     * 前端读取 res.list，按 stage 渲染关卡城池 (大兴山、青州城等)
      */
     public static function get_scene_list(Context $ctx): array
     {
@@ -53,32 +66,36 @@ final class MapHandler
 
         // 黄巾势力包含 4 个关卡 stage: 1大兴山 2青州 3广宗 4巨鹿
         $stages = [
-            1 => ['stage' => 1, 'name' => '大兴山', 'status' => 0],
-            2 => ['stage' => 2, 'name' => '青州', 'status' => 0],
-            3 => ['stage' => 3, 'name' => '广宗', 'status' => 0],
-            4 => ['stage' => 4, 'name' => '巨鹿', 'status' => 0],
+            1 => ['stage' => 1, 'name' => '大兴山', 'status' => FactionStatus::Active->value],
+            2 => ['stage' => 2, 'name' => '青州', 'status' => FactionStatus::Locked->value],
+            3 => ['stage' => 3, 'name' => '广宗', 'status' => FactionStatus::Locked->value],
+            4 => ['stage' => 4, 'name' => '巨鹿', 'status' => FactionStatus::Locked->value],
         ];
 
         $list = [];
+        $stageItems = [];
         foreach ($stages as $stgId => $stg) {
-            $list[(string)$stgId] = [
+            $item = [
                 'id' => $stgId,
                 'stage' => $stg['stage'],
+                'name' => $stg['name'],
                 'openstatus' => 1,
                 'status' => $stg['status'],
             ];
+            $list[(string)$stgId] = $item;
+            $stageItems[] = $item;
         }
 
         return [
             'status' => 1,
             'popo' => 0,
             'list' => $list,
+            'stages' => $stageItems, // 语义化关卡列表
         ];
     }
 
     /**
      * 关卡内怪物据点列表: c=map&m=get_mission_list
-     * 前端读取 res.list，渲染每个敌将 (点击敌将弹出布阵与进攻窗口)
      */
     public static function get_mission_list(Context $ctx): array
     {
@@ -94,8 +111,9 @@ final class MapHandler
         ];
 
         $list = [];
+        $missionItems = [];
         foreach ($enemies as $mid => $cfg) {
-            $list[(string)$mid] = [
+            $item = [
                 'missionid' => $mid,
                 'name' => $cfg['name'],
                 'head' => $cfg['head'],
@@ -106,6 +124,8 @@ final class MapHandler
                 'coin' => 0,
                 'power' => 100 * $mid,
             ];
+            $list[(string)$mid] = $item;
+            $missionItems[] = $item;
         }
 
         return [
@@ -113,6 +133,7 @@ final class MapHandler
             'popo' => 0,
             'next_status' => 0,
             'list' => $list,
+            'missions' => $missionItems, // 语义化据点列表
         ];
     }
 
@@ -170,7 +191,7 @@ final class MapHandler
                 ],
             ],
             'process' => self::buildBattleProcess($simResult['logs']),
-            'assess' => $simResult['win'] ? 3 : -1, // 3: 大胜
+            'assess' => $simResult['win'] ? BattleAssess::Perfect->value : BattleAssess::Defeat->value,
             'leftbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
             'rightbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
         ];
@@ -180,7 +201,6 @@ final class MapHandler
         if ($member !== null) {
             $newExp = (int)$member['exp'] + 100;
             $curLevel = (int)$member['level'];
-            // 经验达到升级
             if ($newExp >= (int)$member['maxexp']) {
                 $curLevel++;
                 $newExp = 0;
