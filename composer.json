@@ -1,6 +1,7 @@
 {
     "name": "owner888/sanguohanjiang",
     "description": "Modern high-performance Three Kingdoms game server built with Workerman 5 and modern PHP 8.4+",
+    "version": "1.1.0",
     "type": "project",
     "license": "MIT",
     "require": {
