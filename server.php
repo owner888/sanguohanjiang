@@ -6,8 +6,10 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
+use Hanjiang\Handler\CityHandler;
 use Hanjiang\Handler\IosHandler;
 use Hanjiang\Handler\LoginHandler;
+use Hanjiang\Handler\MapHandler;
 use Hanjiang\Handler\MemberHandler;
 use Hanjiang\Handler\RegisterHandler;
 use Hanjiang\Handler\UserHandler;
@@ -41,6 +43,8 @@ $router->use(new GameProtocolMiddleware([
     'user' => UserHandler::class,
     'register' => RegisterHandler::class,
     'member' => MemberHandler::class,
+    'city' => CityHandler::class,
+    'map' => MapHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

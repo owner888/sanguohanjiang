@@ -123,6 +123,11 @@
 - `c=member&m=index`：玩家主数据、体力军令、背包银两及主城状态
 - `c=member&m=select_role`：男女主公创角选角色与昵称绑定
 - `c=member&m=get_guidestep`：新手剧情与引导步数同步
+- `c=city&m=index`：主城建筑等级、征收次数与强征冷却
+- `c=map&m=index`：世界地图大章节开启状态
+- `c=map&m=get_scene_list`：战役势力关卡场景列表（如：大兴山）
+- `c=map&m=get_mission_list`：据点敌人阵容与关卡敌将数据
+- `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发
 
 ---
 
@@ -136,6 +141,8 @@
 - [x] 选角创角与开场新手剧情完整串联闭环
 - [x] 接入本地 Redis 高速缓存层 (`token`, `player`, `session`)
 - [x] 接入本地 MySQL 数据库持久化存储与表结构迁移 (`zc_sanguo`)
+- [x] 主城系统与征战关卡全线贯通 (`city`, `map`)
+- [x] 战报回放与纯内存推图战斗全闭环
 - [ ] 原生 WebSocket 实时通信服务（世界聊天、全服广播、实时战报下发）
 - [ ] 逐步移植核心玩法模块（竞技场 `arena`、试炼塔 `tower`、过关斩将 `pass_general`）
 

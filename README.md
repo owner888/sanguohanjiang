@@ -119,6 +119,11 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=member&m=index`: Player profile, attributes, stamina, and city states
 - `c=member&m=select_role`: Character creation and custom nickname binding
 - `c=member&m=get_guidestep`: Tutorial step synchronization
+- `c=city&m=index`: Main city building levels, levy limits, and cooling states
+- `c=map&m=index`: World map chapter states and unlock status
+- `c=map&m=get_scene_list`: Campaign scene list (e.g., Daxing Mountain)
+- `c=map&m=get_mission_list`: Enemy nodes and warlord defense lineups
+- `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation
 
 ---
 
@@ -132,6 +137,8 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - [x] Role creation and prologue story tutorial loop
 - [x] Redis high-speed caching layer (`token`, `player`, `session`)
 - [x] MySQL schema migration & persistent storage integration (`zc_sanguo`)
+- [x] Main city infrastructure & campaign chapter dispatch (`city`, `map`)
+- [x] End-to-end combat loop with deterministic battle report playback
 - [ ] Native WebSocket server for real-time world chat & guild broadcasts
 - [ ] Complete port of remaining legacy modules (`arena`, `tower`, `pass_general`)
 
