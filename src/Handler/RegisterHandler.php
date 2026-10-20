@@ -15,7 +15,7 @@ final class RegisterHandler
     public static function guest(Context $ctx): array
     {
         $serverBasePort = 18100;
-        $host = $ctx->request->host();
+        $host = $ctx->host();
         $hostname = explode(':', $host)[0];
         $channel = (int)($ctx->input('channel', 106));
         $mac = (string)($ctx->input('macaddr', $ctx->input('mac', '')));
@@ -97,7 +97,7 @@ final class RegisterHandler
         self::initMemberData($uid, $username, $channel);
 
         $serverBasePort = 18100;
-        $host = $ctx->request->host();
+        $host = $ctx->host();
         $hostname = explode(':', $host)[0];
 
         $serverList = [

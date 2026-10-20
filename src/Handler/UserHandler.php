@@ -43,7 +43,7 @@ final class UserHandler
         $member = DB::table('member')->where('uid', $uid)->first();
 
         $serverBasePort = 18100;
-        $host = $ctx->request->host();
+        $host = $ctx->host();
         $hostname = explode(':', $host)[0];
 
         $serverList = [

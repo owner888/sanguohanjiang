@@ -296,7 +296,7 @@ final class MapHandler
         return [
             'status' => 1,
             'info' => [
-                'win' => $simResult['win'] ? 3 : -3,
+                'win' => $simResult['win'] ? 1 : 0,
                 'exp' => 100,
                 'gexp' => 150,
                 'silver' => 500,

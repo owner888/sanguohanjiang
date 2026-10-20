@@ -38,17 +38,9 @@ final class Router
         // 2. 组装请求上下文 Context
         $ctx = new Context($connection, $request);
 
-        // 3. 构建中间件流水线 (Pipeline)
-        $pipeline = array_reduce(
-            array_reverse($this->middlewares),
-            static fn(callable $next, MiddlewareInterface $middleware): callable =>
-                static fn(Context $ctx): mixed => $middleware->handle($ctx, $next),
-            static fn(Context $ctx): mixed => self::executeHandler($ctx)
-        );
-
         try {
             /** @var mixed $result */
-            $result = $pipeline($ctx);
+            $result = $this->handleContext($ctx);
 
             if ($result instanceof WorkermanResponse) {
                 $connection->send($result);
@@ -69,6 +61,21 @@ final class Router
                 ], JSON_UNESCAPED_UNICODE)
             ));
         }
+    }
+
+    /**
+     * 纯内存流水线执行器 (供 HTTP Gateway 与毫秒级 PHPUnit 共享)
+     */
+    public function handleContext(Context $ctx): mixed
+    {
+        $pipeline = array_reduce(
+            array_reverse($this->middlewares),
+            static fn(callable $next, MiddlewareInterface $middleware): callable =>
+                static fn(Context $ctx): mixed => $middleware->handle($ctx, $next),
+            static fn(Context $ctx): mixed => self::executeHandler($ctx)
+        );
+
+        return $pipeline($ctx);
     }
 
     private static function executeHandler(Context $ctx): mixed

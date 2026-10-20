@@ -4,13 +4,70 @@ declare(strict_types=1);
 
 namespace Hanjiang\Tests\Feature;
 
+use Hanjiang\Context;
+use Hanjiang\Database\DB;
+use Hanjiang\Database\Redis;
+use Hanjiang\Handler\ArenaHandler;
+use Hanjiang\Handler\ChatHandler;
+use Hanjiang\Handler\CityHandler;
+use Hanjiang\Handler\GeneralHandler;
+use Hanjiang\Handler\IosHandler;
+use Hanjiang\Handler\LoginHandler;
+use Hanjiang\Handler\MainquestHandler;
+use Hanjiang\Handler\MapHandler;
+use Hanjiang\Handler\MatrixHandler;
+use Hanjiang\Handler\MemberHandler;
+use Hanjiang\Handler\PackHandler;
+use Hanjiang\Handler\PracticeHandler;
+use Hanjiang\Handler\RegisterHandler;
+use Hanjiang\Handler\ShopHandler;
+use Hanjiang\Handler\StrengthenHandler;
+use Hanjiang\Handler\TavernHandler;
+use Hanjiang\Handler\UserHandler;
+use Hanjiang\Http\Router;
+use Hanjiang\Middleware\CorsMiddleware;
+use Hanjiang\Middleware\GameProtocolMiddleware;
+use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
 use PHPUnit\Framework\TestCase;
+use Workerman\Protocols\Http\Response as WorkermanResponse;
 
 final class GameApiTest extends TestCase
 {
-    private string $baseUrl = 'http://127.0.0.1:18100/index.php';
+    private static Router $router;
     private static ?string $token = null;
     private static int $uid = 0;
+
+    public static function setUpBeforeClass(): void
+    {
+        $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
+        DB::init($dbConfig['mysql']);
+        Redis::init($dbConfig['redis']);
+
+        $router = new Router(dirname(__DIR__, 2) . '/public');
+        $router->use(new CorsMiddleware());
+        $router->use(new ResponseEnvelopeMiddleware());
+        $router->use(new GameProtocolMiddleware([
+            'ios' => IosHandler::class,
+            'login' => LoginHandler::class,
+            'user' => UserHandler::class,
+            'register' => RegisterHandler::class,
+            'member' => MemberHandler::class,
+            'city' => CityHandler::class,
+            'map' => MapHandler::class,
+            'general' => GeneralHandler::class,
+            'matrix' => MatrixHandler::class,
+            'pack' => PackHandler::class,
+            'strengthen' => StrengthenHandler::class,
+            'tavern' => TavernHandler::class,
+            'practice' => PracticeHandler::class,
+            'chat' => ChatHandler::class,
+            'mainquest' => MainquestHandler::class,
+            'shop' => ShopHandler::class,
+            'arena' => ArenaHandler::class,
+        ]));
+
+        self::$router = $router;
+    }
 
     /**
      * @param array<string, mixed> $params
@@ -18,20 +75,28 @@ final class GameApiTest extends TestCase
      */
     private function request(string $controller, string $method, array $params = []): array
     {
-        $query = array_merge([
+        $inputs = array_merge([
             'c' => $controller,
             'm' => $method,
             'token' => self::$token ?? '',
             'uid' => self::$uid > 0 ? self::$uid : '',
         ], $params);
 
-        $url = $this->baseUrl . '?' . http_build_query($query);
-        $res = file_get_contents($url);
-        $this->assertNotFalse($res, "Failed to connect to {$url}");
+        $ctx = Context::mock($inputs);
+        $res = self::$router->handleContext($ctx);
 
-        $json = json_decode($res, true);
-        $this->assertIsArray($json, "Response from {$controller}.{$method} is not valid JSON: {$res}");
-        return $json;
+        if ($res instanceof WorkermanResponse) {
+            $body = (string)$res->rawBody();
+            $json = json_decode($body, true);
+            $this->assertIsArray($json, "Response from {$controller}.{$method} is not valid JSON: {$body}");
+            return $json;
+        }
+
+        if (is_array($res)) {
+            return $res;
+        }
+
+        $this->fail("Unexpected response type from {$controller}.{$method}");
     }
 
     public function testIosHandshake(): void
