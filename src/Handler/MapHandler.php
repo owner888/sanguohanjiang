@@ -296,10 +296,11 @@ final class MapHandler
         return [
             'status' => 1,
             'info' => [
-                'win' => $simResult['win'] ? 1 : 0,
+                'win' => $simResult['win'] ? 1 : -1,
                 'exp' => 100,
                 'gexp' => 150,
                 'silver' => 500,
+                'gettype' => 3,
                 'background' => 1,
                 'openstatus' => 1,
                 'itemname' => '青铜铠甲',
