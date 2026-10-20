@@ -81,3 +81,31 @@ server.php               # Workerman entrypoint
 tests/                   # PHPUnit end-to-end integration test suites
 └── Feature/GameApiTest.php
 ```
+
+---
+
+## 3. Infrastructure & Legacy References
+
+1. **Local Native Services (Never use Docker for DB/Cache)**:
+   - **MySQL 8/9**: `127.0.0.1:3306`, user: `root`, password: `root`, database: `zc_sanguo`
+   - **Redis**: `127.0.0.1:6379`, no password, prefix: `hj:`
+   - Both managed via macOS native services (`brew services list`).
+
+2. **Legacy Codebase Reference**:
+   - Location: `../sanguohanjiang1/悍将三国文件/`
+   - `HJServer/wwwroot/s1/application/controllers/`: Original PHP 5.x controllers for gameplay logic.
+   - `HJServer/wwwroot/s1/application/models/`: Database query & formula references.
+   - `HJServer/wwwroot/battle/application/models/battle_model.php`: Reference for 9-grid combat mechanics.
+
+3. **Service Management**:
+   ```bash
+   php server.php start -d   # Start background daemon
+   php server.php restart -d # Hot reload / restart
+   php server.php stop       # Stop daemon
+   ```
+
+4. **Agent Workflow Baseline**:
+   - **Step 1**: Always run `./vendor/bin/phpunit` first. Ensure all existing tests pass in ~40ms before touching code.
+   - **Step 2**: Add tests to `tests/Feature/GameApiTest.php` for any new endpoints or bug fixes.
+   - **Step 3**: Implement stateless Handlers adhering to strict typing (`declare(strict_types=1)`).
+   - **Step 4**: Verify all tests pass in < 50ms, update both `README.md` and `README.zh-CN.md`, and commit.
