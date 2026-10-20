@@ -14,69 +14,77 @@ use Hanjiang\Database\Redis;
 final class MapHandler
 {
     /**
-     * 世界地图主信息: c=map&m=index
+     * 世界十三州大地图主信息: c=map&m=index
+     * 前端 mapworld.js 循环遍历 0..99，直接读取 res[i]，必须以势力 ID 为键
      */
     public static function index(Context $ctx): array
     {
-        return [
+        $res = [
             'status' => 1,
             'open' => 1,
             'enter_world' => 1,
             'next_status' => 0,
             'first_enter' => 0,
-            'list' => [
-                [
-                    'id' => 1,
-                    'name' => '黄巾起义',
-                    'status' => 1,
-                    'rewardnum' => 0,
-                ],
-                [
-                    'id' => 2,
-                    'name' => '董卓乱政',
-                    'status' => 0,
-                    'rewardnum' => 0,
-                ],
-            ],
         ];
+
+        // 默认开放前 10 个三国主流势力 (黄巾、袁绍、公孙瓒、董卓、马腾、刘表、袁术、吕布、曹操、刘备)
+        for ($i = 1; $i <= 10; $i++) {
+            $res[(string)$i] = [
+                'id' => $i,
+                'status' => 1, // 1 为开启显示
+                'pass_status' => $i === 1 ? 0 : 0, // 1 为已通关全部关卡
+                'rewardnum' => 0,
+            ];
+        }
+
+        return $res;
     }
 
     /**
-     * 势力场景列表: c=map&m=get_scene_list
+     * 战役势力场景关卡列表: c=map&m=get_scene_list
+     * 前端读取 res.list，按 stage 渲染关卡城池 (大兴山、青州城等)
      */
     public static function get_scene_list(Context $ctx): array
     {
         $level = (int)($ctx->input('l', 1));
+        if ($level <= 0) {
+            $level = 1;
+        }
+
+        // 黄巾势力包含 4 个关卡 stage: 1大兴山 2青州 3广宗 4巨鹿
+        $stages = [
+            1 => ['stage' => 1, 'name' => '大兴山', 'status' => 0],
+            2 => ['stage' => 2, 'name' => '青州', 'status' => 0],
+            3 => ['stage' => 3, 'name' => '广宗', 'status' => 0],
+            4 => ['stage' => 4, 'name' => '巨鹿', 'status' => 0],
+        ];
+
+        $list = [];
+        foreach ($stages as $stgId => $stg) {
+            $list[(string)$stgId] = [
+                'id' => $stgId,
+                'stage' => $stg['stage'],
+                'openstatus' => 1,
+                'status' => $stg['status'],
+            ];
+        }
 
         return [
             'status' => 1,
             'popo' => 0,
-            'info' => [
-                [
-                    'stage' => 1,
-                    'name' => '大兴山',
-                    'status' => 1,
-                    'openstatus' => 1,
-                ],
-                [
-                    'stage' => 2,
-                    'name' => '青州城',
-                    'status' => 0,
-                    'openstatus' => 0,
-                ],
-            ],
+            'list' => $list,
         ];
     }
 
     /**
-     * 场景据点敌人列表: c=map&m=get_mission_list
+     * 关卡内怪物据点列表: c=map&m=get_mission_list
+     * 前端读取 res.list，渲染每个敌将 (点击敌将弹出布阵与进攻窗口)
      */
     public static function get_mission_list(Context $ctx): array
     {
         $level = (int)($ctx->input('l', 1));
         $stage = (int)($ctx->input('s', 1));
 
-        // 默认第一关怪物配置 (黄巾前哨)
         $enemies = [
             1 => ['name' => '黄巾前哨', 'head' => 1, 'color' => 1],
             2 => ['name' => '黄巾精兵', 'head' => 2, 'color' => 1],
@@ -87,14 +95,14 @@ final class MapHandler
 
         $list = [];
         foreach ($enemies as $mid => $cfg) {
-            $list[$mid] = [
+            $list[(string)$mid] = [
                 'missionid' => $mid,
                 'name' => $cfg['name'],
                 'head' => $cfg['head'],
                 'color' => $cfg['color'],
                 'openstatus' => 1,
-                'status' => $mid === 1 ? 0 : 0,
-                'maxtimes' => 1,
+                'status' => 0,
+                'maxtimes' => 5,
                 'coin' => 0,
                 'power' => 100 * $mid,
             ];
@@ -130,7 +138,7 @@ final class MapHandler
         $enemyHp = 800 + $missionId * 150;
         $enemyAtk = 180 + $missionId * 30;
         $rightHeroes = [
-            new Hero(100 + $missionId, '黄巾敌将', Position::FrontMiddle, $enemyHp, $enemyHp, $enemyAtk, 80, 100),
+            new Hero(100 + $missionId, '黄巾守将', Position::FrontMiddle, $enemyHp, $enemyHp, $enemyAtk, 80, 100),
         ];
 
         // 3. 调用确定性纯内存九宫格推演引擎
@@ -153,7 +161,7 @@ final class MapHandler
             'rightteam' => [
                 2 => [
                     'id' => 100 + $missionId,
-                    'name' => '黄巾敌将',
+                    'name' => '黄巾守将',
                     'head' => 3,
                     'position' => 2,
                     'blood' => $enemyHp,
@@ -167,12 +175,23 @@ final class MapHandler
             'rightbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
         ];
 
-        // 5. 扣减 1 点军令体力，发放战后结算银两和经验
-        if ($member !== null && $member['act'] > 0) {
+        // 5. 战斗胜利升级与经验结算
+        $levelUp = 0;
+        if ($member !== null) {
+            $newExp = (int)$member['exp'] + 100;
+            $curLevel = (int)$member['level'];
+            // 经验达到升级
+            if ($newExp >= (int)$member['maxexp']) {
+                $curLevel++;
+                $newExp = 0;
+                $levelUp = 1;
+            }
+
             DB::table('member')->where('uid', $uid)->update([
                 'act' => max(0, (int)$member['act'] - 1),
                 'silver' => (int)$member['silver'] + 500,
-                'exp' => (int)$member['exp'] + 100,
+                'exp' => $newExp,
+                'level' => $curLevel,
                 'updated_at' => time(),
             ]);
             Redis::del('player:' . $uid);
@@ -187,8 +206,8 @@ final class MapHandler
                 'silver' => 500,
                 'background' => 1,
                 'openstatus' => 1,
-                'itemname' => '青铜剑',
-                'levelup' => 0,
+                'itemname' => '青铜铠甲',
+                'levelup' => $levelUp,
                 'report' => 0,
             ],
             'battle' => $battleReport,
