@@ -127,7 +127,28 @@
 - `c=map&m=index`：世界地图大章节开启状态
 - `c=map&m=get_scene_list`：战役势力关卡场景列表（如：大兴山）
 - `c=map&m=get_mission_list`：据点敌人阵容与关卡敌将数据
+- `c=map&m=mission`：战前敌将情报与布阵确认弹窗
 - `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发
+- `c=general&m=index`：玩家武将列表、穿戴装备与属性计算
+- `c=matrix&m=index`：九宫格战位阵法管理与上阵站位调换
+- `c=pack&m=index`：背包道具、消耗品与装备仓储
+- `c=strengthen&m=index`：铁匠铺装备强化升级与成功率计算
+- `c=tavern&m=index`：酒馆将领招募与会客商人
+- `c=practice&m=index`：校场武将挂机训练与突飞猛进
+- `c=chat&m=read|send`：世界与国家频道实时消息流
+- `c=mainquest&m=index`：主线任务进度与里程碑领奖
+- `c=shop&m=index`：商城道具与军令体力购买
+- `c=arena&m=index`：演武榜竞技场挑战与排名争夺
+
+---
+
+## 🧪 自动化测试套件
+
+所有 16 个核心业务接口与战斗推演闭环均由 PHPUnit 自动化集成测试全量覆盖：
+
+```bash
+./vendor/bin/phpunit
+```
 
 ---
 
@@ -143,8 +164,10 @@
 - [x] 接入本地 MySQL 数据库持久化存储与表结构迁移 (`zc_sanguo`)
 - [x] 主城系统与征战关卡全线贯通 (`city`, `map`)
 - [x] 战报回放与纯内存推图战斗全闭环
+- [x] 16 个核心游戏玩法全面迁移为无状态 Handler 架构
+- [x] 编写 PHPUnit 全链路自动化测试套件 (16/16 100% 绿灯全过)
 - [ ] 原生 WebSocket 实时通信服务（世界聊天、全服广播、实时战报下发）
-- [ ] 逐步移植核心玩法模块（竞技场 `arena`、试炼塔 `tower`、过关斩将 `pass_general`）
+- [ ] 逐步移植核心玩法模块（试炼塔 `tower`、过关斩将 `pass_general`）
 
 ---
 

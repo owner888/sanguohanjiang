@@ -226,31 +226,48 @@ final class MapHandler
         $simResult = $engine->simulate();
 
         // 4. 组装符合原版 battleworld.js 的战斗回放结构
+        $leftHeroImage = (string)($member['gender'] ?? 1);
+        $rightHeroImage = '27'; // 经典武将形象编号
+
+        $leftTeamData = [
+            2 => [
+                'heroid' => '1',
+                'name' => $nickname,
+                'herotype' => '1',
+                'level' => (string)($member['level'] ?? 1),
+                'allblood' => 1500,
+                'blood' => 1500,
+                'power' => 50,
+                'image' => $leftHeroImage,
+                'star' => 1,
+                'talent' => '坚强',
+                'skill' => '会心一击',
+            ],
+        ];
+
+        $rightTeamData = [
+            2 => [
+                'heroid' => (string)(100 + $missionId),
+                'name' => '黄巾守将',
+                'herotype' => '1',
+                'level' => '1',
+                'allblood' => $enemyHp,
+                'blood' => $enemyHp,
+                'power' => 0,
+                'image' => $rightHeroImage,
+                'star' => 1,
+                'talent' => '坚强',
+                'skill' => '会心一击',
+            ],
+        ];
+
         $battleReport = [
-            'leftteam' => [
-                2 => [
-                    'id' => 1,
-                    'name' => $nickname,
-                    'head' => (int)($member['gender'] ?? 1),
-                    'position' => 2,
-                    'blood' => 1500,
-                    'allblood' => 1500,
-                    'power' => 50,
-                ],
-            ],
-            'rightteam' => [
-                2 => [
-                    'id' => 100 + $missionId,
-                    'name' => '黄巾守将',
-                    'head' => 3,
-                    'position' => 2,
-                    'blood' => $enemyHp,
-                    'allblood' => $enemyHp,
-                    'power' => 0,
-                ],
-            ],
+            'leftteam' => $leftTeamData,
+            'rightteam' => $rightTeamData,
+            'leftresult' => $simResult['win'] ? $leftTeamData : [],
+            'rightresult' => $simResult['win'] ? [] : $rightTeamData,
             'process' => self::buildBattleProcess($simResult['logs']),
-            'assess' => $simResult['win'] ? BattleAssess::Perfect->value : BattleAssess::Defeat->value,
+            'assess' => $simResult['win'] ? 3 : -3,
             'leftbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
             'rightbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
         ];
@@ -279,7 +296,7 @@ final class MapHandler
         return [
             'status' => 1,
             'info' => [
-                'win' => $simResult['win'] ? 1 : 0,
+                'win' => $simResult['win'] ? 3 : -3,
                 'exp' => 100,
                 'gexp' => 150,
                 'silver' => 500,
@@ -300,18 +317,26 @@ final class MapHandler
     private static function buildBattleProcess(array $logs): array
     {
         $process = [];
-        foreach ($logs as $log) {
+        foreach ($logs as $index => $log) {
+            $isLeft = ($log['side'] === 'left');
             $process[] = [
-                'attackside' => $log['side'] === 'left' ? 1 : 2,
-                'attackposition' => $log['attacker_pos'],
-                'targetside' => $log['side'] === 'left' ? 2 : 1,
-                'targetposition' => $log['target_pos'],
-                'damage' => $log['damage'],
-                'crit' => $log['is_crit'] ? 1 : 0,
-                'blood' => $log['target_hp'],
+                'round' => (int)($index / 2) + 1,
+                'launch' => $isLeft ? 'left' : 'right',
+                'attackor' => (int)$log['attacker_pos'],
+                'attackpower' => 25,
                 'skill' => 0,
-                'dodge' => 0,
-                'block' => 0,
+                'hit' => $log['is_crit'] ? 1 : 0,
+                'attacktype' => 0,
+                'beattackors' => [(int)$log['target_pos']],
+                'hurt' => [
+                    [
+                        'pos' => (int)$log['target_pos'],
+                        'blood' => (int)$log['damage'],
+                        'power' => 25,
+                        'self' => 0,
+                        'faint' => 0,
+                    ],
+                ],
             ];
         }
         return $process;

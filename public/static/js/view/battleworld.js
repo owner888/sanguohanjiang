@@ -185,7 +185,7 @@ BattleLoader.prototype.load = function() {
                     if(res.battle.leftteam[i] == null) {
                         continue;
                     }
-                    var heroimageid = res.battle.leftteam[i].image;
+                    var heroimageid = (res.battle.leftteam[i].image || res.battle.leftteam[i].head || '1') + '';
                     var imgurl = xGame.hero(heroimageid, 2, false);
                     if(imgurl.indexOf('http') != -1) {
                         nativeimagelist.push(imgurl);
@@ -195,7 +195,7 @@ BattleLoader.prototype.load = function() {
                     if(res.battle.rightteam[i] == null) {
                         continue;
                     }
-                    var heroimageid = res.battle.rightteam[i].image;
+                    var heroimageid = (res.battle.rightteam[i].image || res.battle.rightteam[i].head || '27') + '';
                     if(heroimageid.indexOf('worldboss') != 0 && heroimageid.indexOf('countryboss') != 0 && heroimageid.indexOf('newyearboss') != 0) {
                         var imgurl = xGame.hero(heroimageid, 2, false);
                         if(imgurl.indexOf('http') != -1) {
@@ -349,7 +349,7 @@ BattleLoader.prototype.load = function() {
                 if(that.battledata.leftteam[i] == null) {
                     continue;
                 }
-                var heroimageid = that.battledata.leftteam[i].image;
+                var heroimageid = (that.battledata.leftteam[i].image || that.battledata.leftteam[i].head || '1') + '';
                 that.imagelist.push({//站立的图片
                     id: "herostand_" + heroimageid,
                     size: 300,
@@ -370,7 +370,7 @@ BattleLoader.prototype.load = function() {
                 if(that.battledata.rightteam[i] == null) {
                     continue;
                 }
-                var heroimageid = that.battledata.rightteam[i].image;
+                var heroimageid = (that.battledata.rightteam[i].image || that.battledata.rightteam[i].head || '27') + '';
                 
                 if (heroimageid.indexOf('worldboss') == 0) {
                     that.imagelist.push({
@@ -602,7 +602,7 @@ BattleLoader.prototype.load = function() {
                 if(that.battledata.leftteam[p] == null) {
                     continue;
                 }
-                var heroimageid = that.battledata.leftteam[p].image;
+                var heroimageid = (that.battledata.leftteam[p].image || that.battledata.leftteam[p].head || '1') + '';
                 var name = that.battledata.leftteam[p].name;
                 sprites['left'][p] = new Hero({
                     id: 'left' + p,
@@ -622,7 +622,7 @@ BattleLoader.prototype.load = function() {
                 if(that.battledata.rightteam[p] == null) {
                     continue;
                 }
-                var heroimageid = that.battledata.rightteam[p].image + '';
+                var heroimageid = (that.battledata.rightteam[p].image || that.battledata.rightteam[p].head || '27') + '';
                 if (heroimageid.indexOf('worldboss') == 0) {//boss
                     var name = that.battledata.rightteam[p].name;
                     sprites['right'][p] = new Boss({

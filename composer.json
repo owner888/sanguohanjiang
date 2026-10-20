@@ -1,7 +1,7 @@
 {
     "name": "owner888/sanguohanjiang",
     "description": "Modern high-performance Three Kingdoms game server built with Workerman 5 and modern PHP 8.4+",
-    "version": "1.2.0",
+    "version": "1.3.0",
     "type": "project",
     "license": "MIT",
     "require": {
@@ -12,5 +12,13 @@
         "psr-4": {
             "Hanjiang\\": "src/"
         }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Hanjiang\\Tests\\": "tests/"
+        }
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^13.4"
     }
 }

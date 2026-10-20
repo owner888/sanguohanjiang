@@ -123,7 +123,28 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=map&m=index`: World map chapter states and unlock status
 - `c=map&m=get_scene_list`: Campaign scene list (e.g., Daxing Mountain)
 - `c=map&m=get_mission_list`: Enemy nodes and warlord defense lineups
+- `c=map&m=mission`: Pre-battle enemy intelligence and lineup preparation dialog
 - `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation
+- `c=general&m=index`: Player hero inventory, equipment, and attribute calculations
+- `c=matrix&m=index`: 9-grid tactical battle formation & hero slot updates
+- `c=pack&m=index`: Bag items, consumables, and gear management
+- `c=strengthen&m=index`: Equipment blacksmith enhancement & rate checking
+- `c=tavern&m=index`: General recruitment tavern & guest trade
+- `c=practice&m=index`: Martial training grounds, slots, and rapid exp leaps
+- `c=chat&m=read|send`: World and country real-time messaging
+- `c=mainquest&m=index`: Main storyline quest milestones and rewards
+- `c=shop&m=index`: Item mall & stamina purchasing
+- `c=arena&m=index`: Military ranking arena & PVP challenges
+
+---
+
+## 🧪 Automated Testing
+
+All core API endpoints and combat simulation loops are covered by PHPUnit integration tests:
+
+```bash
+./vendor/bin/phpunit
+```
 
 ---
 
@@ -139,8 +160,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - [x] MySQL schema migration & persistent storage integration (`zc_sanguo`)
 - [x] Main city infrastructure & campaign chapter dispatch (`city`, `map`)
 - [x] End-to-end combat loop with deterministic battle report playback
+- [x] All 16 core game systems migrated to stateless Handlers
+- [x] PHPUnit end-to-end integration test suite (100% passing)
 - [ ] Native WebSocket server for real-time world chat & guild broadcasts
-- [ ] Complete port of remaining legacy modules (`arena`, `tower`, `pass_general`)
+- [ ] Complete port of remaining legacy modules (`tower`, `pass_general`)
 
 ---
 

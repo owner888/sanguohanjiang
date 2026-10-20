@@ -6,12 +6,22 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
+use Hanjiang\Handler\ArenaHandler;
+use Hanjiang\Handler\ChatHandler;
 use Hanjiang\Handler\CityHandler;
+use Hanjiang\Handler\GeneralHandler;
 use Hanjiang\Handler\IosHandler;
 use Hanjiang\Handler\LoginHandler;
+use Hanjiang\Handler\MainquestHandler;
 use Hanjiang\Handler\MapHandler;
+use Hanjiang\Handler\MatrixHandler;
 use Hanjiang\Handler\MemberHandler;
+use Hanjiang\Handler\PackHandler;
+use Hanjiang\Handler\PracticeHandler;
 use Hanjiang\Handler\RegisterHandler;
+use Hanjiang\Handler\ShopHandler;
+use Hanjiang\Handler\StrengthenHandler;
+use Hanjiang\Handler\TavernHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -45,6 +55,16 @@ $router->use(new GameProtocolMiddleware([
     'member' => MemberHandler::class,
     'city' => CityHandler::class,
     'map' => MapHandler::class,
+    'general' => GeneralHandler::class,
+    'matrix' => MatrixHandler::class,
+    'pack' => PackHandler::class,
+    'strengthen' => StrengthenHandler::class,
+    'tavern' => TavernHandler::class,
+    'practice' => PracticeHandler::class,
+    'chat' => ChatHandler::class,
+    'mainquest' => MainquestHandler::class,
+    'shop' => ShopHandler::class,
+    'arena' => ArenaHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

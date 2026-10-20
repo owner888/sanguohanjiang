@@ -53,9 +53,31 @@ src/
 │   ├── IosHandler.php        # Handshake & asset version verification
 │   ├── RegisterHandler.php   # Guest & member registration
 │   ├── UserHandler.php       # Authentication & server list selection
-│   └── MemberHandler.php     # Player profile, stamina, and city building state
+│   ├── LoginHandler.php      # Token issuance & session binding
+│   ├── MemberHandler.php     # Player profile, stamina, and city building state
+│   ├── CityHandler.php       # Main city buildings, levy, and imposition
+│   ├── MapHandler.php        # World map, campaign scenes, and battle trigger
+│   ├── GeneralHandler.php    # Hero recruitment, inventory, and stats
+│   ├── MatrixHandler.php     # 9-grid formation lineup management
+│   ├── PackHandler.php       # Bag items, consumables, and gear
+│   ├── StrengthenHandler.php # Equipment upgrade & refinement
+│   ├── TavernHandler.php     # General recruitment tavern
+│   ├── PracticeHandler.php   # Martial training field & leap exp
+│   ├── ChatHandler.php       # World/country real-time chat
+│   ├── MainquestHandler.php  # Main storyline quests & milestones
+│   ├── ShopHandler.php       # Mall, stamina pack purchases
+│   └── ArenaHandler.php      # PVP arena & military rankings
+├── Database/            # Persistent storage & caching
+│   ├── DB.php                # PDO fluid query builder with auto-reconnect
+│   └── Redis.php             # High-speed memory caching proxy
+├── Enum/                # Strong-typed domain enums
+│   ├── Faction.php           # 16 Three Kingdoms historical factions
+│   ├── FactionStatus.php     # Locked / Active / Cleared states
+│   └── BattleAssess.php      # Combat victory grading (-1, 1, 2, 3)
 └── Http/                # Workerman HTTP pipeline & router
     ├── Router.php
     └── Response.php
 server.php               # Workerman entrypoint
+tests/                   # PHPUnit end-to-end integration test suites
+└── Feature/GameApiTest.php
 ```
