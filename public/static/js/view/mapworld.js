@@ -1044,9 +1044,6 @@
                 }).text(lang('return_shili')).show();
             }
         },
-                }).text(lang('back')).show();
-            }
-        },
 
         displayShiliPage: function(next_status) {
 
