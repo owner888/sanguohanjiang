@@ -143,6 +143,60 @@ final class MapHandler
     }
 
     /**
+     * 据点敌人详细信息与出战确认: c=map&m=mission
+     */
+    public static function mission(Context $ctx): array
+    {
+        $level = (int)($ctx->input('l', 1));
+        $stage = (int)($ctx->input('s', 1));
+        $id = (int)($ctx->input('id', 1));
+
+        $names = [
+            1 => '黄巾前哨',
+            2 => '黄巾精兵',
+            3 => '程远志',
+            4 => '邓茂',
+            5 => '张梁',
+        ];
+
+        $enemyName = $names[$id] ?? ('黄巾据点' . $id);
+        $type = $id >= 3 ? 3 : 1; // 1: 小兵, 3: 大将
+
+        return [
+            'status' => 1,
+            'info' => [
+                'id' => $id,
+                'missionlevel' => $level,
+                'missionstage' => $stage,
+                'missionid' => $id,
+                'level' => max(1, $id * 2),
+                'name' => $enemyName,
+                'type' => $type,
+                'image' => 0, // 0表示使用通用敌将/Boss头像
+                'recruitrate' => 0,
+                'generalid' => 0,
+                'background' => 1,
+                'first' => 1,
+                'firstkillexp' => 150,
+                'exp' => 100,
+                'gfirstkillexp' => 200,
+                'gexp' => 150,
+                'maxtimes' => 5,
+                'nowmaxtimes' => 5,
+                'coin' => 0,
+                'gettype' => 1,
+                'getrate' => 100,
+                'getvalue' => 1,
+                'add_type' => 1,
+                'five_sub' => 0,
+                'ten_sub' => 0,
+                'fifty_sub' => 0,
+                'hundred_sub' => 0,
+            ],
+        ];
+    }
+
+    /**
      * 发起推图战斗: c=map&m=action
      */
     public static function action(Context $ctx): array
