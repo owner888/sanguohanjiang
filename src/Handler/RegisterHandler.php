@@ -209,5 +209,21 @@ final class RegisterHandler
             'saleprice' => 50,
             'created_at' => $now,
         ]);
+
+        // 初始化默认阵法 (鱼鳞阵, 主公放置在 2 号位)
+        DB::table('matrix')->insert([
+            'uid' => $uid,
+            'mid' => 1,
+            'level' => 1,
+            'position1' => 0,
+            'position2' => $genId,
+            'position3' => 0,
+            'position4' => 0,
+            'position5' => 0,
+            'position6' => 0,
+            'position7' => 0,
+            'position8' => 0,
+            'position9' => 0,
+        ]);
     }
 }

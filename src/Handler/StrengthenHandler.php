@@ -122,6 +122,9 @@ final class StrengthenHandler
 
         Redis::del('player:' . $uid);
 
+        $nickname = $member['nickname'] ?? ('主公' . $uid);
+        \Hanjiang\WebSocket\Broadcaster::notifyMarquee("神工现世！主公【{$nickname}】成功将【{$equip['name']}】强化至 +{$newLevel}！");
+
         $newBonus = GeneralHandler::calculateEquipBonus(array_merge($equip, ['level' => $newLevel]));
 
         return [

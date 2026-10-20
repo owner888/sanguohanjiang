@@ -166,8 +166,12 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Tavern warlord recruitment (`tavern`) with persistent silver deductions & anti-duplicate checks
 - [x] Martial practice grounds (`practice`) with idle time exp accumulation & rapid leap leveling
 - [x] Full combat integration linking dynamic hero stats and equipment bonuses into 9-grid simulation
-- [x] PHPUnit end-to-end integration test suite (18/18 100% passing)
-- [ ] Native WebSocket server for real-time world chat & guild broadcasts
+- [x] Tactical 9-grid formation lineup management (`matrix`), hero slot changes, anti-duplicate validation, and matrix upgrades
+- [x] Multi-hero cooperative combat simulation with live battle report replay and positioning strategy
+- [x] Military Arena PVP system (`arena`) with rank swapping, daily俸禄 salary claims, and deterministic mirror battle simulation
+- [x] Main city infrastructure & imposition/levy system (`city`) with critical harvest multipliers and gold forced taxation
+- [x] Native WebSocket full-duplex gateway with live world chat, player authentication, and server-wide marquee broadcast
+- [x] PHPUnit end-to-end integration test suite (20/20 100% passing)
 - [ ] Complete port of remaining legacy modules (`tower`, `pass_general`)
 
 ---

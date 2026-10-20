@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Hanjiang\Handler;
 
 use Hanjiang\Context;
+use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
+use Hanjiang\WebSocket\Broadcaster;
 
 final class ChatHandler
 {
@@ -20,6 +22,7 @@ final class ChatHandler
     public static function read(Context $ctx): array
     {
         $cached = Redis::getJson('chat_messages');
+        $marquee = Redis::getJson('broadcast_history') ?: [];
 
         return [
             'status' => 1,
@@ -31,6 +34,7 @@ final class ChatHandler
                     'time' => time(),
                 ],
             ],
+            'marquee' => array_slice($marquee, -5),
             'message' => 'ok',
         ];
     }
@@ -43,21 +47,37 @@ final class ChatHandler
         $uid = MemberHandler::resolveUid($ctx);
         $msg = trim((string)$ctx->input('message', ''));
 
-        $messages = Redis::getJson('chat_messages') ?: [];
-        $messages[] = [
+        if ($msg === '') {
+            return [
+                'status' => 0,
+                'message' => '聊天内容不能为空',
+            ];
+        }
+
+        $member = DB::table('member')->where('uid', $uid)->first();
+        $senderName = $member['nickname'] ?? ('主公' . $uid);
+
+        $newMsg = [
             'uid' => $uid,
-            'name' => '主公' . $uid,
+            'name' => $senderName,
             'message' => htmlspecialchars($msg),
             'time' => time(),
         ];
+
+        $messages = Redis::getJson('chat_messages') ?: [];
+        $messages[] = $newMsg;
         if (count($messages) > 30) {
             $messages = array_slice($messages, -30);
         }
         Redis::setJson('chat_messages', $messages, 86400);
 
+        // 原生 WebSocket 实时广播给所有在线全双工客户端
+        Broadcaster::broadcast('chat_message', $newMsg);
+
         return [
             'status' => 1,
             'message' => '发送成功',
+            'data' => $newMsg,
         ];
     }
 }

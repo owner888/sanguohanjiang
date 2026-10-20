@@ -163,6 +163,9 @@ final class TavernHandler
 
         Redis::del('player:' . $uid);
 
+        $nickname = $member['nickname'] ?? ('主公' . $uid);
+        \Hanjiang\WebSocket\Broadcaster::notifyMarquee("恭喜主公【{$nickname}】在酒馆成功招募名将【{$heroConfig['name']}】！");
+
         return [
             'status' => 1,
             'message' => '成功招募名将【' . $heroConfig['name'] . '】！',

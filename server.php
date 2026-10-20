@@ -71,6 +71,17 @@ $httpWorker->onMessage = static function (TcpConnection $connection, Request $re
     $router->dispatch($connection, $request);
 };
 
-echo "Starting {$config['name']} on {$config['http']['listen']}...\n";
+// 2. 挂载原生全双工 WebSocket 服务
+if (!empty($config['ws']['listen'])) {
+    $wsWorker = new Worker($config['ws']['listen']);
+    $wsWorker->count = $config['ws']['count'] ?? 1;
+    $wsWorker->name = 'Hanjiang-WebSocket-Gateway';
+
+    $wsWorker->onConnect = [Hanjiang\WebSocket\WebSocketHandler::class, 'onConnect'];
+    $wsWorker->onClose = [Hanjiang\WebSocket\WebSocketHandler::class, 'onClose'];
+    $wsWorker->onMessage = [Hanjiang\WebSocket\WebSocketHandler::class, 'onMessage'];
+}
+
+echo "Starting {$config['name']} on {$config['http']['listen']} and {$config['ws']['listen']}...\n";
 
 Worker::runAll();

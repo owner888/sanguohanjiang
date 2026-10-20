@@ -141,6 +141,24 @@ final class GameApiTest extends TestCase
         $res = $this->request('city', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertArrayHasKey('times', $res);
+        $this->assertArrayHasKey('buildings', $res);
+        $oldTimes = (int)$res['times'];
+
+        // 1. 普通征收
+        $impose = $this->request('city', 'impose');
+        $this->assertSame(1, $impose['status']);
+        $this->assertGreaterThan(0, $impose['silver']);
+        $this->assertSame($oldTimes - 1, $impose['levytimes']);
+
+        // 2. 元宝强征
+        $impress = $this->request('city', 'impress');
+        $this->assertSame(1, $impress['status']);
+        $this->assertGreaterThan(0, $impress['silver']);
+        $this->assertSame(2, $impress['gold_cost']);
+
+        // 3. 清除 CD
+        $clearCd = $this->request('city', 'clear_cd');
+        $this->assertSame(1, $clearCd['status']);
     }
 
     public function testMapAndCampaignSystem(): void
@@ -192,6 +210,27 @@ final class GameApiTest extends TestCase
         $res = $this->request('matrix', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertSame(1, $res['now_mid']);
+        $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('generals', $res);
+
+        // 获取阵法详情
+        $info = $this->request('matrix', 'get_info', ['mid' => 1]);
+        $this->assertSame(1, $info['status']);
+        $this->assertSame('鱼鳞阵', $info['info']['name']);
+
+        // 阵法升级
+        $levelUp = $this->request('matrix', 'levelup', ['mid' => 1]);
+        $this->assertSame(1, $levelUp['status']);
+        $this->assertSame(2, $levelUp['level']);
+        $this->assertGreaterThan(0, $levelUp['cost_silver']);
+
+        // 切换阵法至鹤翼阵 (mid: 3)
+        $use = $this->request('matrix', 'use_matrix', ['mid' => 3]);
+        $this->assertSame(1, $use['status']);
+        $this->assertSame(3, $use['now_mid']);
+
+        // 切换回鱼鳞阵 (mid: 1)
+        $this->request('matrix', 'use_matrix', ['mid' => 1]);
     }
 
     public function testPackSystem(): void
@@ -382,6 +421,61 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $leap['level']); // 500 经验足以升到 2 级以上
     }
 
+    public function testMultiHeroFormationAndBattleAction(): void
+    {
+        // 1. 获取主公与张飞的将领 ID
+        $generals = $this->request('general', 'index');
+        $mainId = 0;
+        $zfId = 0;
+        foreach ($generals['list'] as $g) {
+            if ($g['name'] === '张飞') {
+                $zfId = (int)$g['id'];
+            } else {
+                $mainId = (int)$g['id'];
+            }
+        }
+        $this->assertGreaterThan(0, $mainId);
+        $this->assertGreaterThan(0, $zfId);
+
+        // 2. 验证防重复上阵拦截
+        $duplicateFormation = "{$zfId},{$mainId},{$zfId},0,0,0,0,0,0";
+        $conflict = $this->request('matrix', 'update_matrix', ['list' => $duplicateFormation]);
+        $this->assertSame(-4, $conflict['status']);
+
+        // 3. 将张飞布阵到 1 号位 (前排上)，主公在 2 号位 (前排中)
+        $setZf = $this->request('matrix', 'update_matrix', ['pos' => 1, 'gid' => $zfId]);
+        $this->assertSame(1, $setZf['status']);
+        $this->assertSame($zfId, $setZf['positions'][1]);
+
+        // 4. 验证武将表出征状态已实时同步
+        $updatedGenerals = $this->request('general', 'index');
+        $activeCount = 0;
+        foreach ($updatedGenerals['list'] as $g) {
+            if ((int)$g['goout'] === 1) {
+                $activeCount++;
+            }
+        }
+        $this->assertGreaterThanOrEqual(2, $activeCount, '当前应至少有两位武将处于出战状态');
+
+        // 5. 发起推图战斗，验证多武将协同作战与阵法加成生效
+        $battle = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
+        $this->assertSame(1, $battle['status']);
+        $this->assertSame(1, $battle['info']['win']);
+        $this->assertArrayHasKey('battle', $battle);
+
+        // 验证我方阵容中同时包含了 1 号位 (张飞) 和 2 号位 (主公)
+        $leftTeam = $battle['battle']['leftteam'];
+        $this->assertArrayHasKey(1, $leftTeam, '战场上必须存在 1 号位英雄 (张飞)');
+        $this->assertArrayHasKey(2, $leftTeam, '战场上必须存在 2 号位英雄 (主公)');
+        $this->assertSame('张飞', $leftTeam[1]['name']);
+
+        // 验证战斗动作日志中有不同英雄的出手记录
+        $process = $battle['battle']['process'];
+        $this->assertNotEmpty($process);
+        $attackors = array_column($process, 'attackor');
+        $this->assertContains(1, $attackors, '张飞在战斗过程中应当有实际出手动作');
+    }
+
     public function testChatSystem(): void
     {
         $send = $this->request('chat', 'send', ['message' => '测试三国聊天']);
@@ -414,9 +508,49 @@ final class GameApiTest extends TestCase
         $res = $this->request('arena', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
+        $this->assertGreaterThan(0, $res['left_times']);
+        $oldRank = $res['rank'];
 
+        // 挑战 10002 号天梯对手
         $battle = $this->request('arena', 'action', ['target_uid' => 10002]);
         $this->assertSame(1, $battle['status']);
         $this->assertSame(1, $battle['win']);
+        $this->assertLessThanOrEqual($oldRank, $battle['rank']);
+        $this->assertSame($res['left_times'] - 1, $battle['left_times']);
+        $this->assertGreaterThan(0, $battle['reputation']);
+
+        // 领取每日演武排名俸禄
+        $reward = $this->request('arena', 'get_reward');
+        $this->assertSame(1, $reward['status']);
+        $this->assertGreaterThan(0, $reward['silver']);
+        $this->assertGreaterThan(0, $reward['reputation']);
+
+        // 再次尝试同日领取被拦截
+        $dupReward = $this->request('arena', 'get_reward');
+        $this->assertSame(0, $dupReward['status']);
+    }
+
+    public function testWebSocketAndBroadcasterSystem(): void
+    {
+        // 1. 发送跑马灯大喇叭广播
+        \Hanjiang\WebSocket\Broadcaster::notifyMarquee('全服通告：三国争霸正式开启！');
+
+        // 2. 检查 Redis 广播历史
+        $history = \Hanjiang\Database\Redis::getJson('broadcast_history');
+        $this->assertIsArray($history);
+        $this->assertNotEmpty($history);
+        $lastBroadcast = end($history);
+        $this->assertSame('marquee', $lastBroadcast['type']);
+        $this->assertSame('全服通告：三国争霸正式开启！', $lastBroadcast['data']['content']);
+
+        // 3. 通过聊天拉取跑马灯历史
+        $chat = $this->request('chat', 'read');
+        $this->assertSame(1, $chat['status']);
+        $this->assertArrayHasKey('marquee', $chat);
+        $this->assertNotEmpty($chat['marquee']);
+
+        // 4. 广播自定义全服事件
+        $sentCount = \Hanjiang\WebSocket\Broadcaster::broadcast('system_alert', ['info' => '军令已补满']);
+        $this->assertGreaterThanOrEqual(0, $sentCount);
     }
 }

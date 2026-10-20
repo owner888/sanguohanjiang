@@ -209,7 +209,12 @@ final class MapHandler
         $member = DB::table('member')->where('uid', $uid)->first();
         $nickname = $member['nickname'] ?? '天命主公';
 
-        // 1. 构建我方出战英雄 (支持真实武将与装备穿戴加成属性)
+        // 1. 构建我方出战英雄 (支持多武将战位、装备穿戴加成与阵法加成)
+        $matrix = DB::table('matrix')->where('uid', $uid)->first();
+        $matrixMid = (int)($matrix['mid'] ?? 1);
+        $matrixLevel = max(1, (int)($matrix['level'] ?? 1));
+        $matrixAddition = 1.0 + 0.05 + ($matrixLevel - 1) * 0.01;
+
         $generals = DB::table('general')->where('uid', $uid)->where('pos', '>', 0)->get();
         if (empty($generals)) {
             $generals = DB::table('general')->where('uid', $uid)->get();
@@ -227,8 +232,12 @@ final class MapHandler
             $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->get();
             $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
 
+            // 应用阵法加成
+            $finalAtk = ($matrixMid === 1) ? (int)round($stats['attack'] * $matrixAddition) : $stats['attack'];
+            $finalDef = ($matrixMid === 3) ? (int)round($stats['defense'] * $matrixAddition) : $stats['defense'];
+
             $heroName = $g['name'] ?: $nickname;
-            $leftHeroes[] = new Hero($gid, $heroName, $pos, $stats['hp'], $stats['hp'], $stats['attack'], $stats['defense'], $stats['speed']);
+            $leftHeroes[] = new Hero($gid, $heroName, $pos, $stats['hp'], $stats['hp'], $finalAtk, $finalDef, $stats['speed']);
 
             $leftTeamData[$posInt] = [
                 'heroid' => (string)$gid,
