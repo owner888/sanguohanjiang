@@ -27,6 +27,11 @@ use Hanjiang\Handler\PassGeneralHandler;
 use Hanjiang\Handler\SoulHandler;
 use Hanjiang\Handler\CountryHandler;
 use Hanjiang\Handler\CultivateHandler;
+use Hanjiang\Handler\DailySignHandler;
+use Hanjiang\Handler\FriendHandler;
+use Hanjiang\Handler\MessageHandler;
+use Hanjiang\Handler\MineHandler;
+use Hanjiang\Handler\VipHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -75,6 +80,11 @@ $router->use(new GameProtocolMiddleware([
     'soul' => SoulHandler::class,
     'country' => CountryHandler::class,
     'cultivate' => CultivateHandler::class,
+    'dailysign' => DailySignHandler::class,
+    'vip' => VipHandler::class,
+    'message' => MessageHandler::class,
+    'friend' => FriendHandler::class,
+    'mine' => MineHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

@@ -28,6 +28,11 @@ use Hanjiang\Handler\PassGeneralHandler;
 use Hanjiang\Handler\SoulHandler;
 use Hanjiang\Handler\CountryHandler;
 use Hanjiang\Handler\CultivateHandler;
+use Hanjiang\Handler\DailySignHandler;
+use Hanjiang\Handler\FriendHandler;
+use Hanjiang\Handler\MessageHandler;
+use Hanjiang\Handler\MineHandler;
+use Hanjiang\Handler\VipHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -74,6 +79,11 @@ final class GameApiTest extends TestCase
             'soul' => SoulHandler::class,
             'country' => CountryHandler::class,
             'cultivate' => CultivateHandler::class,
+            'dailysign' => DailySignHandler::class,
+            'vip' => VipHandler::class,
+            'message' => MessageHandler::class,
+            'friend' => FriendHandler::class,
+            'mine' => MineHandler::class,
         ]));
 
         self::$router = $router;
@@ -759,5 +769,115 @@ final class GameApiTest extends TestCase
         $save = $this->request('cultivate', 'save', ['gid' => $mainGid]);
         $this->assertSame(1, $save['status']);
         $this->assertArrayHasKey('wuliup', $save);
+    }
+
+    public function testDailySignSystem(): void
+    {
+        // 1. 查看签到面板
+        $res = $this->request('dailysign', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 执行今日签到
+        $sign = $this->request('dailysign', 'sign');
+        $this->assertSame(1, $sign['status']);
+        $this->assertGreaterThan(0, $sign['silver']);
+        $this->assertGreaterThan(0, $sign['gold']);
+        $this->assertGreaterThan(0, $sign['act']);
+
+        // 3. 今日重复签到拦截
+        $dup = $this->request('dailysign', 'sign');
+        $this->assertSame(-1, $dup['status']);
+    }
+
+    public function testVipSystem(): void
+    {
+        // 1. 查看 VIP 面板
+        $res = $this->request('vip', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThanOrEqual(1, $res['level']);
+        $this->assertArrayHasKey('privileges', $res);
+
+        // 2. 领取 VIP 每日俸禄
+        $salary = $this->request('vip', 'get_vip_reward');
+        $this->assertSame(1, $salary['status']);
+        $this->assertGreaterThan(0, $salary['silver']);
+
+        // 3. 领取 VIP1 专属晋级礼包
+        $gift = $this->request('vip', 'get_gift', ['level' => 1]);
+        $this->assertSame(1, $gift['status']);
+        $this->assertSame(1, $gift['level']);
+        $this->assertGreaterThan(0, $gift['silver']);
+
+        // 4. 重复领取礼包被拦截
+        $dupGift = $this->request('vip', 'get_gift', ['level' => 1]);
+        $this->assertSame(0, $dupGift['status']);
+    }
+
+    public function testMessageSystem(): void
+    {
+        // 1. 查看收件箱
+        $res = $this->request('message', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 读取第一封邮件并自动标为已读
+        $detail = $this->request('message', 'get_message', ['id' => 1]);
+        $this->assertSame(1, $detail['status']);
+        $this->assertSame(1, $detail['info']['read']);
+
+        // 3. 给好友发送私信
+        $send = $this->request('message', 'send_message', [
+            'target_uid' => 10002,
+            'title' => '讨伐董卓檄文',
+            'content' => '请将军速速整备三军，共襄义举！',
+        ]);
+        $this->assertSame(1, $send['status']);
+
+        // 4. 删除邮件
+        $del = $this->request('message', 'del_message', ['id' => 1]);
+        $this->assertSame(1, $del['status']);
+    }
+
+    public function testFriendSystem(): void
+    {
+        // 1. 查看好友列表
+        $res = $this->request('friend', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 添加新好友
+        $add = $this->request('friend', 'add_friend', ['target_uid' => 10005]);
+        $this->assertSame(1, $add['status']);
+
+        // 3. 重复添加好友拦截
+        $dup = $this->request('friend', 'add_friend', ['target_uid' => 10005]);
+        $this->assertSame(0, $dup['status']);
+
+        // 4. 删除好友
+        $del = $this->request('friend', 'del_friend', ['target_uid' => 10005]);
+        $this->assertSame(1, $del['status']);
+    }
+
+    public function testMineSystem(): void
+    {
+        // 1. 查看矿区列表
+        $res = $this->request('mine', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['mines']);
+
+        // 2. 占领大型富饶银矿 (id: 3)
+        $claim = $this->request('mine', 'caikuang', ['id' => 3]);
+        $this->assertSame(1, $claim['status']);
+        $this->assertSame(3, $claim['mine_id']);
+
+        // 3. 提取开采累积银两
+        $harvest = $this->request('mine', 'get_silver');
+        $this->assertSame(1, $harvest['status']);
+        $this->assertGreaterThan(0, $harvest['silver']);
+
+        // 4. 放弃矿位
+        $giveUp = $this->request('mine', 'give_up');
+        $this->assertSame(1, $giveUp['status']);
     }
 }
