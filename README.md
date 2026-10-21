@@ -151,6 +151,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=worldboss&m=index|powerup|battle|reward`: Server-wide Dong Zhuo World Boss crusade, morale cheers, DPS rankings, and spoils chests
 - `c=siege&m=index|battle_prepare|action|get_reward`: City siege warfare, territory conquest (Luoyang, Chang'an, Puyang), and daily fief tributes
 - `c=gvg&m=index|betting|sync_info`: Guild vs Guild (GVG) cross-server tournament brackets, championship betting, and victory dividends
+- `c=general_inherit&m=index|preview|go_inherit`: Martial inheritance, experience & cultivate stat transfers (Normal 80% & Flawless 100%)
+- `c=blackmarket&m=index|buy|lock|refresh`: Western exotic black market, rare artifact locks, and shelf refreshes
+- `c=first_recharge&m=index|get_reward`: First-recharge celebration, god-tier Zhao Yun, silver spear, and VIP perks
+- `c=overseastrade&m=index|goout|trade`: Maritime silk road, fleet sailings, exotic spices, and merchant profit claims
 
 ---
 
@@ -199,7 +203,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and server-wide Dong Zhuo World Boss crusade (`worldboss`)
 - [x] Legion territorial siege warfare (`siege`), GVG cross-server championship tournament betting (`gvg`), and 16-chapter campaign static master repository (`GameMasterData`)
 - [x] Built-in golden flowing marquee banner UI renderer in `ws_client.js` with hardware-accelerated broadcast animations
-- [x] PHPUnit end-to-end integration test suite (41/41 100% passing, 625 assertions)
+- [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge celebration (`first_recharge`), and maritime silk road (`overseastrade`)
+- [x] PHPUnit end-to-end integration test suite (45/45 100% passing, 682 assertions)
 
 ---
 

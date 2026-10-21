@@ -40,6 +40,10 @@ use Hanjiang\Handler\HeavenHandler;
 use Hanjiang\Handler\WorldBossHandler;
 use Hanjiang\Handler\SiegeHandler;
 use Hanjiang\Handler\GvgHandler;
+use Hanjiang\Handler\GeneralInheritHandler;
+use Hanjiang\Handler\BlackmarketHandler;
+use Hanjiang\Handler\FirstRechargeHandler;
+use Hanjiang\Handler\OverseasTradeHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -99,6 +103,10 @@ final class GameApiTest extends TestCase
             'worldboss' => WorldBossHandler::class,
             'siege' => SiegeHandler::class,
             'gvg' => GvgHandler::class,
+            'general_inherit' => GeneralInheritHandler::class,
+            'blackmarket' => BlackmarketHandler::class,
+            'first_recharge' => FirstRechargeHandler::class,
+            'overseastrade' => OverseasTradeHandler::class,
         ]));
 
         self::$router = $router;
@@ -1021,10 +1029,10 @@ final class GameApiTest extends TestCase
     public function testProtocolSmartFallbackAndLoggerWarning(): void
     {
         // 访问尚未移植的冷门或老旧接口，验证智能平滑降级信封与 OmniPHP Logger 告警追踪 (方案 B)
-        $res = $this->request('blackmarket', 'index');
+        $res = $this->request('studfarm', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertSame(1, $res['is_fallback']);
-        $this->assertSame('blackmarket', $res['c']);
+        $this->assertSame('studfarm', $res['c']);
         $this->assertSame('index', $res['m']);
         $this->assertStringContainsString('筹备中', $res['message']);
         $this->assertIsArray($res['list']);
@@ -1123,5 +1131,84 @@ final class GameApiTest extends TestCase
         // 验证原版神兵利器名剑宝甲
         $this->assertArrayHasKey(101, \Hanjiang\Battle\GameMasterData::ARTIFACTS);
         $this->assertSame('青龙偃月刀', \Hanjiang\Battle\GameMasterData::ARTIFACTS[101]['name']);
+    }
+
+    public function testGeneralInheritSystem(): void
+    {
+        // 1. 获取主公与张飞将领 ID
+        $generals = $this->request('general', 'index');
+        $this->assertGreaterThanOrEqual(2, count($generals['list']));
+        $g1 = (int)$generals['list'][1]['id'];
+        $g2 = (int)$generals['list'][2]['id'];
+
+        // 2. 查看传承面板
+        $res = $this->request('general_inherit', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 3. 预览传承属性
+        $preview = $this->request('general_inherit', 'preview', ['from_gid' => $g1, 'to_gid' => $g2, 'type' => 2]);
+        $this->assertSame(1, $preview['status']);
+        $this->assertEquals(1.0, $preview['inherit_rate']);
+
+        // 4. 执行传承
+        $inherit = $this->request('general_inherit', 'go_inherit', ['from_gid' => $g1, 'to_gid' => $g2, 'type' => 1]);
+        $this->assertSame(1, $inherit['status']);
+        $this->assertSame($g2, $inherit['to_gid']);
+    }
+
+    public function testBlackmarketSystem(): void
+    {
+        // 1. 查看黑市货架
+        $res = $this->request('blackmarket', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 锁定商品 1
+        $lock = $this->request('blackmarket', 'lock', ['id' => 1]);
+        $this->assertSame(1, $lock['status']);
+        $this->assertSame(1, $lock['locked']);
+
+        // 3. 购买商品 1
+        $buy = $this->request('blackmarket', 'buy', ['id' => 1]);
+        $this->assertSame(1, $buy['status']);
+        $this->assertSame(1, $buy['id']);
+
+        // 4. 刷新货架
+        $refresh = $this->request('blackmarket', 'refresh');
+        $this->assertSame(1, $refresh['status']);
+        $this->assertNotEmpty($refresh['list']);
+    }
+
+    public function testFirstRechargeSystem(): void
+    {
+        // 1. 查看首充面板
+        $res = $this->request('first_recharge', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertArrayHasKey('reward_preview', $res);
+
+        // 2. 领取首充豪礼
+        $reward = $this->request('first_recharge', 'get_reward');
+        $this->assertSame(1, $reward['status']);
+        $this->assertSame('赵云', $reward['general']);
+        $this->assertSame('龙胆亮银枪', $reward['weapon']);
+        $this->assertSame(2, $reward['vip']);
+
+        // 3. 再次领取被拦截
+        $dup = $this->request('first_recharge', 'get_reward');
+        $this->assertSame(0, $dup['status']);
+    }
+
+    public function testOverseasTradeSystem(): void
+    {
+        // 1. 查看商贸主界面
+        $res = $this->request('overseastrade', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['fleets']);
+
+        // 2. 派遣快行小帆船启航出海 (fleet: 1)
+        $go = $this->request('overseastrade', 'goout', ['fleet_id' => 1]);
+        $this->assertSame(1, $go['status']);
+        $this->assertSame(1, $go['fleet_id']);
     }
 }

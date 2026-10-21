@@ -155,6 +155,10 @@
 - `c=worldboss&m=index|powerup|battle|reward`：全服世界 BOSS 极·魔王董卓集结讨伐战、士气鼓舞伤害加成、全服伤害榜与功勋宝箱领奖
 - `c=siege&m=index|battle_prepare|action|get_reward`：攻城掠地天下名城占领（洛阳/长安/建业/成都/襄阳/濮阳）、城池决战与每日封邑岁贡分红
 - `c=gvg&m=index|betting|sync_info`：军团跨服 GVG 巅峰争霸赛对阵树、冠军押注竞猜与胜利分红结算
+- `c=general_inherit&m=index|preview|go_inherit`：武将功法传承、经验与洗髓三围属性无损转移（普通传承 80% 与至尊完璧 100% 传承）
+- `c=blackmarket&m=index|buy|lock|refresh`：西域神秘黑市商人、稀世奇珍锁定保底与货架刷新
+- `c=first_recharge&m=index|get_reward`：开服首充狂欢至尊大礼包、神将赵云、龙胆亮银枪与 VIP 直升
+- `c=overseastrade&m=index|goout|trade`：海上丝绸之路远洋商贸、商队启航与满载珍宝凯旋利润结算
 
 ---
 
@@ -203,7 +207,8 @@
 - [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、天命观星突破 (`heaven`)、全服世界 BOSS 董卓战 (`worldboss`)
 - [x] 军团攻城掠地城池战 (`siege`)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)、十六历史战役全景数值大字典 (`GameMasterData`)
 - [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
-- [x] 编写 PHPUnit 全链路自动化测试套件 (41/41 100% 绿灯全过，625 个断言)
+- [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充至尊神礼 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (45/45 100% 绿灯全过，682 个断言)
 
 ---
 

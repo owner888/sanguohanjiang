@@ -41,6 +41,10 @@ use Hanjiang\Handler\HeavenHandler;
 use Hanjiang\Handler\WorldBossHandler;
 use Hanjiang\Handler\SiegeHandler;
 use Hanjiang\Handler\GvgHandler;
+use Hanjiang\Handler\GeneralInheritHandler;
+use Hanjiang\Handler\BlackmarketHandler;
+use Hanjiang\Handler\FirstRechargeHandler;
+use Hanjiang\Handler\OverseasTradeHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -101,6 +105,10 @@ $router->use(new GameProtocolMiddleware([
     'worldboss' => WorldBossHandler::class,
     'siege' => SiegeHandler::class,
     'gvg' => GvgHandler::class,
+    'general_inherit' => GeneralInheritHandler::class,
+    'blackmarket' => BlackmarketHandler::class,
+    'first_recharge' => FirstRechargeHandler::class,
+    'overseastrade' => OverseasTradeHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {
