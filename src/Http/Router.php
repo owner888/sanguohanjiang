@@ -4,8 +4,9 @@ declare(strict_types=1);
 
 namespace Hanjiang\Http;
 
-use OmniPHP\Http\Context;
 use Hanjiang\Middleware\MiddlewareInterface;
+use OmniPHP\Http\Context;
+use OmniPHP\Http\StaticServer;
 use Workerman\Connection\TcpConnection;
 use Workerman\Protocols\Http\Request;
 use Workerman\Protocols\Http\Response as WorkermanResponse;
@@ -30,8 +31,20 @@ final class Router
     {
         $path = $request->path();
 
-        // 1. 静态文件直出
-        if ($this->serveStatic($connection, $path, $request)) {
+        // 1. 静态文件直出 (autoload 动态注入端口兼容，其余统一走 OmniPHP 官方 StaticServer)
+        if (str_ends_with($path, 'autoload.js')) {
+            $realFile = realpath($this->publicPath . $path);
+            if ($realFile !== false && is_file($realFile)) {
+                $content = (string)file_get_contents($realFile);
+                $connection->send(new WorkermanResponse(200, [
+                    'Content-Type' => 'application/javascript; charset=utf-8',
+                    'Cache-Control' => 'no-cache',
+                ], $content));
+                return;
+            }
+        }
+
+        if (StaticServer::serve($connection, $request, '', $this->publicPath, ['index' => 'index.html', 'spaFallback' => true])) {
             return;
         }
 
@@ -90,49 +103,5 @@ final class Router
             'status' => 0,
             'message' => '未定义执行动作',
         ];
-    }
-
-    private function serveStatic(TcpConnection $connection, string $path, Request $request): bool
-    {
-        if ($path === '/' || $path === '') {
-            $path = '/index.html';
-        }
-
-        $realFile = realpath($this->publicPath . $path);
-        if ($realFile === false || !str_starts_with($realFile, $this->publicPath) || !is_file($realFile)) {
-            return false;
-        }
-
-        // 动态注入服务端端口，保持与 autoload.js 兼容
-        if (str_ends_with($path, 'autoload.js')) {
-            $content = (string)file_get_contents($realFile);
-            $connection->send(new WorkermanResponse(200, [
-                'Content-Type' => 'application/javascript; charset=utf-8',
-                'Cache-Control' => 'no-cache',
-            ], $content));
-            return true;
-        }
-
-        $mime = $this->getMimeType($realFile);
-        $content = (string)file_get_contents($realFile);
-        $connection->send(new WorkermanResponse(200, ['Content-Type' => $mime], $content));
-        return true;
-    }
-
-    private function getMimeType(string $file): string
-    {
-        return match (pathinfo($file, PATHINFO_EXTENSION)) {
-            'html', 'htm' => 'text/html; charset=utf-8',
-            'js' => 'application/javascript; charset=utf-8',
-            'css' => 'text/css; charset=utf-8',
-            'json' => 'application/json; charset=utf-8',
-            'png' => 'image/png',
-            'jpg', 'jpeg' => 'image/jpeg',
-            'gif' => 'image/gif',
-            'svg' => 'image/svg+xml',
-            'mp3' => 'audio/mpeg',
-            'wav' => 'audio/wav',
-            default => 'application/octet-stream',
-        };
     }
 }

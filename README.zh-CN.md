@@ -177,6 +177,8 @@
 - [x] 完全对齐 `smart-book` 标准的纯粹 RFC 6455 协议级心跳机制（0x9/0xA 控制帧 ping/pong，杜绝应用层冗余载荷开销）
 - [x] 全面废除冗余的业务中间继承层，全站业务 Handler 与中间件直接原生消费 `OmniPHP\Http\Context`（完全对齐 Go Gin 标准）
 - [x] 直接使用框架原生 `OmniPHP\WebSocket\Context` 与 `Broadcaster` 接管全双工事件载荷、用户会话与纯内存极速测试
+- [x] 彻底删除业务端自建的 `src/Database/`，全站直连框架官方高可靠 `OmniPHP\Database\DB` 与 `OmniPHP\Cache\Redis`
+- [x] 框架级引入 `OmniPHP\ArchitectureGuard` 架构铁律守卫，杜绝新老项目重复造轮子与私造基础设施
 - [x] 前端网络层指数退避断线重连（Exponential Backoff with Jitter）与服务端超时僵尸连接自动回收扫描（`sweep`）
 - [x] 编写 PHPUnit 全链路自动化测试套件 (20/20 100% 绿灯全过，225 个断言)
 - [ ] 逐步移植核心玩法模块（试炼塔 `tower`、过关斩将 `pass_general`）

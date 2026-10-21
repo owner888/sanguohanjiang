@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Hanjiang\Tests\Feature;
 
 use OmniPHP\Http\Context;
-use Hanjiang\Database\DB;
-use Hanjiang\Database\Redis;
+use OmniPHP\Database\DB;
+use OmniPHP\Cache\Redis;
 use Hanjiang\Handler\ArenaHandler;
 use Hanjiang\Handler\ChatHandler;
 use Hanjiang\Handler\CityHandler;
@@ -539,7 +539,7 @@ final class GameApiTest extends TestCase
         ]);
 
         // 2. 检查 Redis 广播历史
-        $history = \Hanjiang\Database\Redis::getJson('broadcast_history');
+        $history = \OmniPHP\Cache\Redis::getJson('broadcast_history');
         $this->assertIsArray($history);
 
         // 3. 通过聊天拉取跑马灯历史

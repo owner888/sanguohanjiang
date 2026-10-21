@@ -4,20 +4,20 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "6c64ce7ac4cb4b6cfc138004b1a64c2e",
+    "content-hash": "9f09cb376e2286bbf04dd3cafad0248c",
     "packages": [
         {
             "name": "omniphp/framework",
-            "version": "v0.4.2",
+            "version": "v0.5.4",
             "source": {
                 "type": "git",
                 "url": "https://github.com/owner888/omniphp.git",
-                "reference": "7ed6c554bd6adcabc8651ab36c57d50ffeee0ff0"
+                "reference": "1690fe8a25ba9314bd4bcf07854541bd391ba652"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/owner888/omniphp/zipball/7ed6c554bd6adcabc8651ab36c57d50ffeee0ff0",
-                "reference": "7ed6c554bd6adcabc8651ab36c57d50ffeee0ff0",
+                "url": "https://api.github.com/repos/owner888/omniphp/zipball/1690fe8a25ba9314bd4bcf07854541bd391ba652",
+                "reference": "1690fe8a25ba9314bd4bcf07854541bd391ba652",
                 "shasum": ""
             },
             "require": {
@@ -76,7 +76,7 @@
                 "issues": "https://github.com/owner888/omniphp/issues",
                 "source": "https://github.com/owner888/omniphp"
             },
-            "time": "2026-10-21T07:28:15+00:00"
+            "time": "2026-10-21T08:20:19+00:00"
         },
         {
             "name": "workerman/coroutine",
@@ -2117,9 +2117,7 @@
     ],
     "aliases": [],
     "minimum-stability": "stable",
-    "stability-flags": {
-        "omniphp/framework": 20
-    },
+    "stability-flags": {},
     "prefer-stable": false,
     "prefer-lowest": false,
     "platform": {

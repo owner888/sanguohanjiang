@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Hanjiang\WebSocket;
 
-use Hanjiang\Database\DB;
-use Hanjiang\Database\Redis;
+use OmniPHP\Database\DB;
+use OmniPHP\Cache\Redis;
 use OmniPHP\WebSocket\Broadcaster;
 use OmniPHP\WebSocket\Context;
 use Workerman\Connection\TcpConnection;

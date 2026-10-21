@@ -5,8 +5,8 @@ declare(strict_types=1);
 namespace Hanjiang\Handler;
 
 use OmniPHP\Http\Context;
-use Hanjiang\Database\DB;
-use Hanjiang\Database\Redis;
+use OmniPHP\Database\DB;
+use OmniPHP\Cache\Redis;
 
 final class MatrixHandler
 {

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler;
 
 use OmniPHP\Http\Context;
-use Hanjiang\Database\DB;
+use OmniPHP\Database\DB;
 
 final class RegisterHandler
 {

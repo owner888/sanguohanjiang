@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/vendor/autoload.php';
 
-use Hanjiang\Database\DB;
-use Hanjiang\Database\Redis;
+use OmniPHP\Database\DB;
+use OmniPHP\Cache\Redis;
 use Hanjiang\Handler\ArenaHandler;
 use Hanjiang\Handler\ChatHandler;
 use Hanjiang\Handler\CityHandler;
