@@ -148,6 +148,11 @@
 - `c=message&m=index|get_message|send_message|del_message`：系统信箱与邮件流、飞鸽传书玩家私信交互与战报记录
 - `c=friend&m=index|add_friend|del_friend`：高朋满座好友社交系统、结交盟友与防重好友管理
 - `c=mine&m=index|caikuang|zhanling|get_silver|give_up`：富饶银矿与赤金矿脉占领、离线挂机采矿收益累积与定时收缴提取
+- `c=beauty&m=index|give_flower|gift`：铜雀台绝色美人后宫宠幸（貂蝉/大乔/小乔/甄姬/孙尚香）、亲密度提升与全军属性光环
+- `c=mount&m=index|fit_on|take_down|levelup`：三国神品名驹坐骑（赤兔/的卢/绝影/爪黄飞电）、战马乘骑与进阶驯化
+- `c=gem&m=index|adron|pick_off|merge_gem`：神装宝石孔位镶嵌、宝石安全拆卸与4合1宝石熔炼进阶升级
+- `c=heaven&m=index|pk|mop_up`：天命观星二十八星宿点亮、星盘守护神决战与一键观星扫荡
+- `c=worldboss&m=index|powerup|battle|reward`：全服世界 BOSS 极·魔王董卓集结讨伐战、士气鼓舞伤害加成、全服伤害榜与功勋宝箱领奖
 
 ---
 
@@ -193,7 +198,8 @@
 - [x] 全面移植并贯通原版核心进阶玩法：试炼塔爬塔闯关与一键扫荡 (`tower`)、过关斩将斩杀六大名将 (`pass_general`)、主线任务动态里程碑 (`mainquest`)
 - [x] 原版经典深度养成与宏观格局重现：三国国家阵营格局 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
 - [x] 全面打通前端全量高频日常交互系统：每日签到福利 (`dailysign`)、VIP 特权俸禄与晋级礼包 (`vip`)、系统信箱与飞鸽传书 (`message`)、好友社交系统 (`friend`)、银矿占领挂机采矿 (`mine`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (30/30 100% 绿灯全过，362 个断言)
+- [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、天命观星突破 (`heaven`)、全服世界 BOSS 董卓战 (`worldboss`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (35/35 100% 绿灯全过，423 个断言)
 
 ---
 

@@ -33,6 +33,11 @@ use Hanjiang\Handler\FriendHandler;
 use Hanjiang\Handler\MessageHandler;
 use Hanjiang\Handler\MineHandler;
 use Hanjiang\Handler\VipHandler;
+use Hanjiang\Handler\BeautyHandler;
+use Hanjiang\Handler\MountHandler;
+use Hanjiang\Handler\GemHandler;
+use Hanjiang\Handler\HeavenHandler;
+use Hanjiang\Handler\WorldBossHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -84,6 +89,11 @@ final class GameApiTest extends TestCase
             'message' => MessageHandler::class,
             'friend' => FriendHandler::class,
             'mine' => MineHandler::class,
+            'beauty' => BeautyHandler::class,
+            'mount' => MountHandler::class,
+            'gem' => GemHandler::class,
+            'heaven' => HeavenHandler::class,
+            'worldboss' => WorldBossHandler::class,
         ]));
 
         self::$router = $router;
@@ -879,5 +889,122 @@ final class GameApiTest extends TestCase
         // 4. 放弃矿位
         $giveUp = $this->request('mine', 'give_up');
         $this->assertSame(1, $giveUp['status']);
+    }
+
+    public function testBeautySystem(): void
+    {
+        // 1. 查看绝色美人列表
+        $res = $this->request('beauty', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 赠送鲜花给貂蝉 (id: 1)
+        $flower = $this->request('beauty', 'give_flower', ['id' => 1]);
+        $this->assertSame(1, $flower['status']);
+        $this->assertSame(1, $flower['bid']);
+        $this->assertGreaterThan(0, $flower['intimacy']);
+
+        // 3. 赏赐珠宝美玉
+        $gift = $this->request('beauty', 'gift', ['id' => 1]);
+        $this->assertSame(1, $gift['status']);
+        $this->assertSame(1, $gift['bid']);
+        $this->assertGreaterThanOrEqual(1, $gift['level']);
+    }
+
+    public function testMountSystem(): void
+    {
+        // 1. 获取主公 ID
+        $generals = $this->request('general', 'index');
+        $mainGid = (int)$generals['list'][1]['id'];
+
+        // 2. 查看战马马厩
+        $res = $this->request('mount', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 3. 乘骑赤兔马 (id: 1)
+        $fit = $this->request('mount', 'fit_on', ['id' => 1, 'gid' => $mainGid]);
+        $this->assertSame(1, $fit['status']);
+        $this->assertSame(1, $fit['mount_id']);
+
+        // 4. 驯化进阶战马
+        $up = $this->request('mount', 'levelup', ['id' => 1]);
+        $this->assertSame(1, $up['status']);
+        $this->assertSame(2, $up['level']);
+
+        // 5. 卸下战马
+        $down = $this->request('mount', 'take_down', ['id' => 1]);
+        $this->assertSame(1, $down['status']);
+    }
+
+    public function testGemSystem(): void
+    {
+        // 1. 查看宝石背包
+        $res = $this->request('gem', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 获取一件装备 ID
+        $pack = $this->request('pack', 'index');
+        $eid = (int)$pack['list'][1]['id'];
+
+        // 2. 镶嵌红宝石 (id: 1)
+        $adron = $this->request('gem', 'adron', ['gem_id' => 1, 'equip_id' => $eid]);
+        $this->assertSame(1, $adron['status']);
+
+        // 3. 拆卸宝石
+        $pickOff = $this->request('gem', 'pick_off', ['equip_id' => $eid]);
+        $this->assertSame(1, $pickOff['status']);
+
+        // 4. 4合1宝石熔炼升级
+        $merge = $this->request('gem', 'merge_gem', ['gem_id' => 1]);
+        $this->assertSame(1, $merge['status']);
+        $this->assertSame(2, $merge['level']);
+    }
+
+    public function testHeavenSystem(): void
+    {
+        // 1. 查看观星主界面
+        $res = $this->request('heaven', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['stars']);
+
+        // 2. 挑战星宿守护神 (星宿 1)
+        $pk = $this->request('heaven', 'pk', ['id' => 1]);
+        $this->assertSame(1, $pk['status']);
+        $this->assertSame(1, $pk['win']);
+        $this->assertSame(2, $pk['next_star']);
+        $this->assertGreaterThan(0, $pk['silver']);
+
+        // 3. 一键观星扫荡
+        $sweep = $this->request('heaven', 'mop_up');
+        $this->assertSame(1, $sweep['status']);
+        $this->assertGreaterThan(0, $sweep['cleared_stars']);
+    }
+
+    public function testWorldBossSystem(): void
+    {
+        // 1. 查看世界 BOSS
+        $res = $this->request('worldboss', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertSame('极·魔王董卓', $res['boss_name']);
+        $this->assertSame(1, $res['is_alive']);
+
+        // 2. 鼓舞士气
+        $buff = $this->request('worldboss', 'powerup');
+        $this->assertSame(1, $buff['status']);
+        $this->assertSame(20, $buff['buff_percent']);
+
+        // 3. 发起讨伐战斗
+        $battle = $this->request('worldboss', 'battle');
+        $this->assertSame(1, $battle['status']);
+        $this->assertGreaterThan(0, $battle['damage_dealt']);
+        $this->assertGreaterThan(0, $battle['reward_silver']);
+
+        // 4. 领取世界 BOSS 功勋宝箱
+        $reward = $this->request('worldboss', 'reward');
+        $this->assertSame(1, $reward['status']);
+        $this->assertGreaterThan(0, $reward['silver']);
+        $this->assertGreaterThan(0, $reward['gold']);
     }
 }

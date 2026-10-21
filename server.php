@@ -32,6 +32,11 @@ use Hanjiang\Handler\FriendHandler;
 use Hanjiang\Handler\MessageHandler;
 use Hanjiang\Handler\MineHandler;
 use Hanjiang\Handler\VipHandler;
+use Hanjiang\Handler\BeautyHandler;
+use Hanjiang\Handler\MountHandler;
+use Hanjiang\Handler\GemHandler;
+use Hanjiang\Handler\HeavenHandler;
+use Hanjiang\Handler\WorldBossHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -85,6 +90,11 @@ $router->use(new GameProtocolMiddleware([
     'message' => MessageHandler::class,
     'friend' => FriendHandler::class,
     'mine' => MineHandler::class,
+    'beauty' => BeautyHandler::class,
+    'mount' => MountHandler::class,
+    'gem' => GemHandler::class,
+    'heaven' => HeavenHandler::class,
+    'worldboss' => WorldBossHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

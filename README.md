@@ -144,6 +144,11 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=message&m=index|get_message|send_message|del_message`: Mailbox system, secret pigeon correspondence, and battle reports
 - `c=friend&m=index|add_friend|del_friend`: Social brotherhood system, friend additions, duplicate blocks, and relations
 - `c=mine&m=index|caikuang|zhanling|get_silver|give_up`: Silver mine occupations, idle yield accumulation, and resource harvests
+- `c=beauty&m=index|give_flower|gift`: Bronze Sparrow harem beauties (Diaochan, Qiao sisters, Zhenji), intimacy, and army aura buffs
+- `c=mount&m=index|fit_on|take_down|levelup`: Legendary steeds (Red Hare, Dilu, Jueying), steed riding, and mount stat training
+- `c=gem&m=index|adron|pick_off|merge_gem`: Divine gear gem socketing, unsocketing, and 4-to-1 gem synthesis fusion
+- `c=heaven&m=index|pk|mop_up`: Constellation stargazing, celestial guardian boss battles, and stargazing sweeps
+- `c=worldboss&m=index|powerup|battle|reward`: Server-wide Dong Zhuo World Boss crusade, morale cheers, DPS rankings, and spoils chests
 
 ---
 
@@ -189,7 +194,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Complete port of legacy core modules: Trial Soul Tower (`tower`), Six-Stage Pass General campaign (`pass_general`), and dynamic storyline quests (`mainquest`)
 - [x] Three Kingdoms nation faction system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
-- [x] PHPUnit end-to-end integration test suite (30/30 100% passing, 362 assertions)
+- [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and server-wide Dong Zhuo World Boss crusade (`worldboss`)
+- [x] PHPUnit end-to-end integration test suite (35/35 100% passing, 423 assertions)
 
 ---
 
