@@ -80,6 +80,8 @@ if (!empty($config['ws']['listen'])) {
     $wsWorker->onConnect = [Hanjiang\WebSocket\WebSocketHandler::class, 'onConnect'];
     $wsWorker->onClose = [Hanjiang\WebSocket\WebSocketHandler::class, 'onClose'];
     $wsWorker->onMessage = [Hanjiang\WebSocket\WebSocketHandler::class, 'onMessage'];
+    // 对齐 smart-book 规范：注册协议级 ping (Opcode 0x9) 回调，自动回 pong 帧并刷新连接活跃时间
+    $wsWorker->onWebSocketPing = [Hanjiang\WebSocket\WebSocketHandler::class, 'onWebSocketPing'];
 }
 
 echo "Starting {$config['name']} on {$config['http']['listen']} and {$config['ws']['listen']}...\n";

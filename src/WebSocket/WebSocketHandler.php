@@ -10,8 +10,28 @@ use Workerman\Connection\TcpConnection;
 
 final class WebSocketHandler
 {
+    /**
+     * 刷新连接最后心跳活跃时间戳
+     */
+    public static function touch(TcpConnection $connection): void
+    {
+        $connection->lastActiveTime = time();
+    }
+
+    /**
+     * WebSocket RFC 6455 协议级 ping（操作码 0x9）：
+     * 对齐 smart-book 标准，注册此回调后 Workerman 将 $connection->websocketType 置为 pong 帧（\x8a），
+     * 由 handler 刷新活跃时间戳并原样将 $pingData 作为 pong 响应载荷发回客户端。
+     */
+    public static function onWebSocketPing(TcpConnection $connection, string $pingData): void
+    {
+        self::touch($connection);
+        $connection->send($pingData);
+    }
+
     public static function onConnect(TcpConnection $connection): void
     {
+        self::touch($connection);
         Broadcaster::register($connection);
         $connection->send(json_encode([
             'type' => 'connected',
@@ -27,6 +47,8 @@ final class WebSocketHandler
 
     public static function onMessage(TcpConnection $connection, string $data): void
     {
+        self::touch($connection);
+
         $payload = json_decode($data, true);
         if (!is_array($payload)) {
             $connection->send(json_encode([
@@ -39,6 +61,7 @@ final class WebSocketHandler
         $action = (string)($payload['action'] ?? $payload['type'] ?? 'ping');
 
         match ($action) {
+            // 应用层 JSON 心跳
             'ping' => $connection->send(json_encode([
                 'action' => 'pong',
                 'time' => time(),

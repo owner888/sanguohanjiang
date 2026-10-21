@@ -552,5 +552,26 @@ final class GameApiTest extends TestCase
         // 4. 广播自定义全服事件
         $sentCount = \Hanjiang\WebSocket\Broadcaster::broadcast('system_alert', ['info' => '军令已补满']);
         $this->assertGreaterThanOrEqual(0, $sentCount);
+
+        // 5. 对齐 smart-book 标准: 验证 RFC 6455 协议级 ping (0x9) 与应用级 ping/pong 双轨机制
+        $pingData = "protocol_ping_payload";
+        $mockConn = $this->createMock(\Workerman\Connection\TcpConnection::class);
+        $mockConn->expects($this->once())
+            ->method('send')
+            ->with($pingData);
+
+        \Hanjiang\WebSocket\WebSocketHandler::onWebSocketPing($mockConn, $pingData);
+        $this->assertGreaterThan(0, $mockConn->lastActiveTime ?? 0, '必须刷新连接最后活跃时间戳');
+
+        // 验证应用层 JSON Ping: 兼容不支持原生控制帧的 H5/小程序客户端
+        $mockAppConn = $this->createMock(\Workerman\Connection\TcpConnection::class);
+        $mockAppConn->expects($this->once())
+            ->method('send')
+            ->with($this->callback(function (string $json): bool {
+                $arr = json_decode($json, true);
+                return is_array($arr) && ($arr['action'] ?? null) === 'pong';
+            }));
+
+        \Hanjiang\WebSocket\WebSocketHandler::onMessage($mockAppConn, (string)json_encode(['action' => 'ping']));
     }
 }
