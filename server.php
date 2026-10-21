@@ -22,6 +22,8 @@ use Hanjiang\Handler\RegisterHandler;
 use Hanjiang\Handler\ShopHandler;
 use Hanjiang\Handler\StrengthenHandler;
 use Hanjiang\Handler\TavernHandler;
+use Hanjiang\Handler\TowerHandler;
+use Hanjiang\Handler\PassGeneralHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -65,6 +67,8 @@ $router->use(new GameProtocolMiddleware([
     'mainquest' => MainquestHandler::class,
     'shop' => ShopHandler::class,
     'arena' => ArenaHandler::class,
+    'tower' => TowerHandler::class,
+    'pass_general' => PassGeneralHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

@@ -23,6 +23,8 @@ use Hanjiang\Handler\RegisterHandler;
 use Hanjiang\Handler\ShopHandler;
 use Hanjiang\Handler\StrengthenHandler;
 use Hanjiang\Handler\TavernHandler;
+use Hanjiang\Handler\TowerHandler;
+use Hanjiang\Handler\PassGeneralHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -64,6 +66,8 @@ final class GameApiTest extends TestCase
             'mainquest' => MainquestHandler::class,
             'shop' => ShopHandler::class,
             'arena' => ArenaHandler::class,
+            'tower' => TowerHandler::class,
+            'pass_general' => PassGeneralHandler::class,
         ]));
 
         self::$router = $router;
@@ -491,6 +495,68 @@ final class GameApiTest extends TestCase
         $res = $this->request('mainquest', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertSame('初出茅庐', $res['task']['name']);
+        $this->assertSame(1, $res['task']['status']);
+
+        // 领取第 1 个任务奖励，并自动解锁下一主线任务
+        $reward = $this->request('mainquest', 'get_task_reward');
+        $this->assertSame(1, $reward['status']);
+        $this->assertSame(1, $reward['reward_task_id']);
+        $this->assertGreaterThan(0, $reward['silver']);
+        $this->assertGreaterThan(0, $reward['gold']);
+        $this->assertNotNull($reward['next_task']);
+
+        // 验证主线任务进度已进入下一阶段
+        $nextRes = $this->request('mainquest', 'index');
+        $this->assertSame(1, $nextRes['status']);
+        $this->assertGreaterThanOrEqual(2, $nextRes['task']['id']);
+    }
+
+    public function testTowerSystem(): void
+    {
+        $res = $this->request('tower', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1, $res['floor']);
+        $this->assertNotEmpty($res['boss_name']);
+
+        // 挑战试炼塔第 1 层
+        $action = $this->request('tower', 'action');
+        $this->assertSame(1, $action['status']);
+        $this->assertSame(1, $action['win']);
+        $this->assertSame(1, $action['cleared_floor']);
+        $this->assertSame(2, $action['next_floor']);
+        $this->assertGreaterThan(0, $action['silver']);
+        $this->assertGreaterThan(0, $action['soul']);
+
+        // 扫荡已通关层数
+        $sweep = $this->request('tower', 'sweep');
+        $this->assertSame(1, $sweep['status']);
+        $this->assertSame(1, $sweep['cleared_layers']);
+        $this->assertGreaterThan(0, $sweep['silver']);
+    }
+
+    public function testPassGeneralSystem(): void
+    {
+        $res = $this->request('pass_general', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1, $res['current_pass']);
+        $this->assertCount(6, $res['list']);
+
+        // 1. 发起挑战第 1 关【华雄】
+        $battle = $this->request('pass_general', 'action', ['pass_id' => 1]);
+        $this->assertSame(1, $battle['status']);
+        $this->assertSame(1, $battle['win']);
+        $this->assertSame('华雄', $battle['boss_name']);
+        $this->assertSame(2, $battle['next_pass']);
+        $this->assertGreaterThan(0, $battle['silver']);
+
+        // 2. 尝试越级挑战第 3 关【文丑】被拦截
+        $skip = $this->request('pass_general', 'action', ['pass_id' => 3]);
+        $this->assertSame(0, $skip['status']);
+
+        // 3. 每日重置
+        $reset = $this->request('pass_general', 'reset');
+        $this->assertSame(1, $reset['status']);
+        $this->assertSame(1, $reset['current_pass']);
     }
 
     public function testShopSystem(): void

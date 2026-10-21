@@ -138,6 +138,8 @@
 - `c=mainquest&m=index`：主线任务进度与里程碑领奖
 - `c=shop&m=index`：商城道具与军令体力购买
 - `c=arena&m=index`：演武榜竞技场挑战与排名争夺
+- `c=tower&m=index|action|sweep`：将魂星路试炼塔爬塔闯关、守关神兽决战、一键扫荡与将魂结算
+- `c=pass_general&m=index|action|reset`：经典过关斩将单挑六大名将（华雄/颜良/文丑/庞德/典韦/吕布）与通关宝箱开启
 
 ---
 
@@ -180,8 +182,8 @@
 - [x] 彻底删除业务端自建的 `src/Database/`，全站直连框架官方高可靠 `OmniPHP\Database\DB` 与 `OmniPHP\Cache\Redis`
 - [x] 框架级引入 `OmniPHP\ArchitectureGuard` 架构铁律守卫，杜绝新老项目重复造轮子与私造基础设施
 - [x] 前端网络层指数退避断线重连（Exponential Backoff with Jitter）与服务端超时僵尸连接自动回收扫描（`sweep`）
-- [x] 编写 PHPUnit 全链路自动化测试套件 (20/20 100% 绿灯全过，225 个断言)
-- [ ] 逐步移植核心玩法模块（试炼塔 `tower`、过关斩将 `pass_general`）
+- [x] 全面移植并贯通原版核心进阶玩法：试炼塔爬塔闯关与一键扫荡 (`tower`)、过关斩将斩杀六大名将 (`pass_general`)、主线任务动态里程碑 (`mainquest`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (22/22 100% 绿灯全过，266 个断言)
 
 ---
 

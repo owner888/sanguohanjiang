@@ -134,6 +134,8 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=mainquest&m=index`: Main storyline quest milestones and rewards
 - `c=shop&m=index`: Item mall & stamina purchasing
 - `c=arena&m=index`: Military ranking arena & PVP challenges
+- `c=tower&m=index|action|sweep`: Trial Soul Tower climbing, boss encounters, floor sweeps, and soul rewards
+- `c=pass_general&m=index|action|reset`: Six-Stage Pass General campaign, legendary warlord duels, and milestone chests
 
 ---
 
@@ -176,8 +178,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Eliminate redundant `src/Database/` wrappers; directly consume native `OmniPHP\Database\DB` and `OmniPHP\Cache\Redis`
 - [x] Integrated `OmniPHP\ArchitectureGuard` to enforce clean architecture and prevent custom infrastructure re-wrapping
 - [x] Client network layer with exponential backoff auto-reconnect, jitter, and zombie connection sweeping (`sweep`)
-- [x] PHPUnit end-to-end integration test suite (20/20 100% passing, 225 assertions)
-- [ ] Complete port of remaining legacy modules (`tower`, `pass_general`)
+- [x] Complete port of legacy core modules: Trial Soul Tower (`tower`), Six-Stage Pass General campaign (`pass_general`), and dynamic storyline quests (`mainquest`)
+- [x] PHPUnit end-to-end integration test suite (22/22 100% passing, 266 assertions)
 
 ---
 
