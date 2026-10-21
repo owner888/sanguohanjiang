@@ -1020,4 +1020,32 @@ final class GameApiTest extends TestCase
         $this->assertIsArray($res['list']);
         $this->assertIsArray($res['info']);
     }
+
+    public function testHandlerStatelessArchitectureLaw(): void
+    {
+        // 架构铁律 1 深度反射自检: 杜绝任何 Handler 拥有实例属性 ($this->xxx)，彻底杜绝长常驻内存中的跨请求会话污染
+        $handlerFiles = glob(dirname(__DIR__, 2) . '/src/Handler/*Handler.php');
+        $this->assertNotEmpty($handlerFiles);
+
+        foreach ($handlerFiles as $file) {
+            $className = 'Hanjiang\\Handler\\' . basename($file, '.php');
+            $ref = new \ReflectionClass($className);
+
+            // 1. 严禁拥有非静态实例变量
+            $instanceProps = array_filter($ref->getProperties(), fn($p) => !$p->isStatic());
+            $this->assertEmpty(
+                $instanceProps,
+                "架构铁律违规: Handler [{$className}] 不得拥有任何非静态实例变量，严防 Workerman 长进程会话污染！"
+            );
+
+            // 2. 所有公开业务 Action 必须是静态方法 (public static)
+            foreach ($ref->getMethods(\ReflectionMethod::IS_PUBLIC) as $m) {
+                if ($m->getName() === '__construct') continue;
+                $this->assertTrue(
+                    $m->isStatic(),
+                    "架构铁律违规: Handler [{$className}::{$m->getName()}] 必须是静态方法 (public static function)！"
+                );
+            }
+        }
+    }
 }
