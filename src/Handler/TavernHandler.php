@@ -157,7 +157,6 @@ final class TavernHandler
             'pos' => 0, // 初始在后备营
             'matrix_id' => 1,
             'status' => 1,
-            'created_at' => time(),
         ]);
 
         Redis::del('player:' . $uid);

@@ -31,7 +31,6 @@ final class RegisterHandler
             'channel' => $channel,
             'is_guest' => 1,
             'mac' => $mac,
-            'created_at' => $now,
         ]);
 
         // 初始化玩家数据
@@ -91,7 +90,6 @@ final class RegisterHandler
             'channel' => $channel,
             'is_guest' => 0,
             'mac' => $mac,
-            'created_at' => $now,
         ]);
 
         self::initMemberData($uid, $username, $channel);
@@ -150,8 +148,6 @@ final class RegisterHandler
             'missionlevel' => 1,
             'missionstage' => 1,
             'missionid' => 1,
-            'created_at' => $now,
-            'updated_at' => $now,
         ]);
 
         DB::table('member_field')->insert([
@@ -180,7 +176,6 @@ final class RegisterHandler
             'pos' => 2,
             'matrix_id' => 1,
             'status' => 1,
-            'created_at' => $now,
         ]);
 
         // 初始化新手初始装备 (青铜剑, 青铜甲)
@@ -194,7 +189,6 @@ final class RegisterHandler
             'generalid' => 0,
             'number' => 1,
             'saleprice' => 50,
-            'created_at' => $now,
         ]);
 
         DB::table('equipment')->insert([
@@ -207,7 +201,6 @@ final class RegisterHandler
             'generalid' => 0,
             'number' => 1,
             'saleprice' => 50,
-            'created_at' => $now,
         ]);
 
         // 初始化默认阵法 (鱼鳞阵, 主公放置在 2 号位)

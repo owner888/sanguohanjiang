@@ -16,11 +16,10 @@ final class PackHandler
     public static function index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $member = DB::table('member')->where('uid', $uid)->first();
-        $items = DB::table('equipment')->where('uid', $uid)->get();
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $items = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
 
         if (empty($items)) {
-            $now = time();
             DB::table('equipment')->insert([
                 'uid' => $uid,
                 'equipid' => 101,
@@ -31,7 +30,6 @@ final class PackHandler
                 'generalid' => 0,
                 'number' => 1,
                 'saleprice' => 50,
-                'created_at' => $now,
             ]);
 
             DB::table('equipment')->insert([
@@ -44,10 +42,9 @@ final class PackHandler
                 'generalid' => 0,
                 'number' => 1,
                 'saleprice' => 50,
-                'created_at' => $now,
             ]);
 
-            $items = DB::table('equipment')->where('uid', $uid)->get();
+            $items = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
         }
 
         $list = [];
@@ -109,7 +106,12 @@ final class PackHandler
             ];
         }
 
-        $item = DB::table('equipment')->where('uid', $uid)->where('id', $eid)->first();
+        $item = DB::table('equipment')
+            ->where('uid', $uid)
+            ->where('id', $eid)
+            ->whereNull('deleted_at')
+            ->first();
+
         if ($item === null) {
             return [
                 'status' => -1,
@@ -124,13 +126,13 @@ final class PackHandler
             ];
         }
 
-        $member = DB::table('member')->where('uid', $uid)->first();
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
         $salePrice = max(10, (int)$item['saleprice']) * max(1, (int)$item['level']);
         $newSilver = (int)$member['silver'] + $salePrice;
 
-        // 增加玩家银两并删除装备
+        // 增加玩家银两并软删除装备 (deleted_at 记录删除时间)
         DB::table('member')->where('uid', $uid)->update(['silver' => $newSilver]);
-        DB::table('equipment')->where('id', $eid)->delete();
+        DB::table('equipment')->where('id', $eid)->update(['deleted_at' => date('Y-m-d H:i:s')]);
 
         Redis::del('player:' . $uid);
 

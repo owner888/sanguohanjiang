@@ -50,8 +50,6 @@ final class SoulHandler
             'slot6' => 0,
             'slot7' => 0,
             'slot8' => 0,
-            'created_at' => $now,
-            'updated_at' => $now,
         ]);
 
         return DB::table('general_soul')->where('uid', $uid)->where('gid', $gid)->first() ?? [];
@@ -185,7 +183,6 @@ final class SoulHandler
         DB::table('member')->where('uid', $uid)->update(['soul' => $remainSoul]);
         DB::table('general_soul')->where('id', (int)$soulRecord['id'])->update([
             'slot' . $slot => $newLevel,
-            'updated_at' => time(),
         ]);
 
         Redis::del('player:' . $uid);

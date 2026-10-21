@@ -16,11 +16,10 @@ final class StrengthenHandler
     public static function index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $equips = DB::table('equipment')->where('uid', $uid)->get();
+        $equips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
 
         if (empty($equips)) {
             // 自动补齐初始装备
-            $now = time();
             DB::table('equipment')->insert([
                 'uid' => $uid,
                 'equipid' => 101,
@@ -31,13 +30,12 @@ final class StrengthenHandler
                 'generalid' => 0,
                 'number' => 1,
                 'saleprice' => 50,
-                'created_at' => $now,
             ]);
-            $equips = DB::table('equipment')->where('uid', $uid)->get();
+            $equips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
         }
 
         // 查询武将字典
-        $generals = DB::table('general')->where('uid', $uid)->get();
+        $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
         $generalMap = [];
         foreach ($generals as $g) {
             $generalMap[(int)$g['id']] = $g['name'];

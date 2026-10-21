@@ -355,11 +355,16 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThan(0, $sale['sale_price']);
         $this->assertArrayHasKey('silver', $sale);
 
-        // 4. 再次查询背包，确认已删除
+        // 4. 再次查询背包，确认已删除 (底层数据库 deleted_at 软删除留存)
         $newPack = $this->request('pack', 'index');
         foreach ($newPack['list'] as $item) {
             $this->assertNotSame($armorId, (int)$item['id'], '已出售装备不应继续出现在背包中');
         }
+
+        // 验证数据库底层软删除字段生效
+        $rawItem = \OmniPHP\Database\DB::table('equipment')->where('id', $armorId)->first();
+        $this->assertNotNull($rawItem);
+        $this->assertNotNull($rawItem['deleted_at'], '软删除字段 deleted_at 必须被正确填充为删除时间戳');
     }
 
     public function testStrengthenSystem(): void

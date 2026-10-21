@@ -129,7 +129,7 @@ final class GeneralHandler
         $nickname = $member['nickname'] ?? '天命主公';
 
         // 查询已有武将
-        $generals = DB::table('general')->where('uid', $uid)->get();
+        $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
         if (empty($generals)) {
             // 初始化初始主公将领
             DB::table('general')->insert([
@@ -141,13 +141,12 @@ final class GeneralHandler
                 'pos' => 2,
                 'matrix_id' => 1,
                 'status' => 1,
-                'created_at' => time(),
             ]);
-            $generals = DB::table('general')->where('uid', $uid)->get();
+            $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
         }
 
-        // 查询该玩家所有已穿戴装备
-        $allEquips = DB::table('equipment')->where('uid', $uid)->get();
+        // 查询该玩家所有已穿戴装备 (过滤软删除)
+        $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
         $equipsByGeneral = [];
         foreach ($allEquips as $eq) {
             $gid = (int)$eq['generalid'];
@@ -235,11 +234,11 @@ final class GeneralHandler
     {
         $uid = MemberHandler::resolveUid($ctx);
         $gid = (int)($ctx->input('gid', 1));
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->first();
+        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
 
         if ($general === null) {
             // 若指定 gid 不存在，回退到该用户拥有的首位武将
-            $general = DB::table('general')->where('uid', $uid)->first();
+            $general = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->first();
         }
 
         if ($general === null) {
@@ -250,7 +249,7 @@ final class GeneralHandler
         }
 
         $realGid = (int)$general['id'];
-        $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $realGid)->get();
+        $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $realGid)->whereNull('deleted_at')->get();
         $stats = self::calculateGeneralStats($general, $equipped);
 
         $equipSlots = [];

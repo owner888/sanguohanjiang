@@ -81,8 +81,6 @@ final class MemberHandler
                 'missionlevel' => 1,
                 'missionstage' => 1,
                 'missionid' => 1,
-                'created_at' => $now,
-                'updated_at' => $now,
             ]);
             $member = DB::table('member')->where('uid', $uid)->first();
         }
@@ -180,7 +178,6 @@ final class MemberHandler
             'gender' => $sex > 0 ? $sex : 1,
             'sex' => $sex > 0 ? $sex : 1,
             'nickname' => $nickname,
-            'updated_at' => time(),
         ]);
 
         // 删除旧 Redis 缓存，强制下次刷新
@@ -220,7 +217,6 @@ final class MemberHandler
 
         DB::table('member')->where('uid', $uid)->update([
             'guidestep' => $step,
-            'updated_at' => time(),
         ]);
 
         // 同步清理 Redis 缓存

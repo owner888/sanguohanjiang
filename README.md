@@ -196,7 +196,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
 - [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and server-wide Dong Zhuo World Boss crusade (`worldboss`)
 - [x] Smart protocol graceful fallback engine with `OmniPHP\Logger::warning` real-time missing-endpoint telemetry (zero client crashes or white screens)
-- [x] PHPUnit end-to-end integration test suite (36/36 100% passing, 431 assertions)
+- [x] Database-level automatic timestamps (`created_at`, `updated_at` ON UPDATE CURRENT_TIMESTAMP) and soft deletes (`deleted_at`) across all tables without manual app-layer intervention
+- [x] PHPUnit end-to-end integration test suite (38/38 100% passing, 593 assertions)
 
 ---
 

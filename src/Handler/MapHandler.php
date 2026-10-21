@@ -328,7 +328,6 @@ final class MapHandler
                 'silver' => (int)$member['silver'] + 500,
                 'exp' => $newExp,
                 'level' => $curLevel,
-                'updated_at' => time(),
             ]);
             Redis::del('player:' . $uid);
         }
