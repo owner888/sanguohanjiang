@@ -77,6 +77,10 @@ if (!empty($config['ws']['listen'])) {
     $wsWorker->count = $config['ws']['count'] ?? 1;
     $wsWorker->name = 'Hanjiang-WebSocket-Gateway';
 
+    $wsWorker->onWorkerStart = static function (): void {
+        \Hanjiang\WebSocket\WebSocketHandler::init();
+    };
+
     $wsWorker->onConnect = [Hanjiang\WebSocket\WebSocketHandler::class, 'onConnect'];
     $wsWorker->onClose = [Hanjiang\WebSocket\WebSocketHandler::class, 'onClose'];
     $wsWorker->onMessage = [Hanjiang\WebSocket\WebSocketHandler::class, 'onMessage'];

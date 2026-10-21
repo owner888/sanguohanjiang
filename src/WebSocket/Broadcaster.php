@@ -9,6 +9,8 @@ use Workerman\Connection\TcpConnection;
 
 final class Broadcaster
 {
+    public const int HEARTBEAT_TIMEOUT = 60; // 60秒无心跳认定为超时僵尸连接
+
     /** @var array<int, TcpConnection> connection_id => connection */
     private static array $connections = [];
 
@@ -21,6 +23,7 @@ final class Broadcaster
     public static function register(TcpConnection $connection, ?int $uid = null): void
     {
         $connId = $connection->id;
+        $connection->lastActiveTime = time();
         self::$connections[$connId] = $connection;
         if ($uid !== null && $uid > 0) {
             self::$uidToConnId[$uid] = $connId;
@@ -33,6 +36,7 @@ final class Broadcaster
     public static function bindUid(TcpConnection $connection, int $uid): void
     {
         $connId = $connection->id;
+        $connection->lastActiveTime = time();
         self::$connections[$connId] = $connection;
         self::$uidToConnId[$uid] = $connId;
     }
@@ -51,6 +55,14 @@ final class Broadcaster
                 break;
             }
         }
+    }
+
+    /**
+     * 刷新连接活跃时间
+     */
+    public static function touch(TcpConnection $connection): void
+    {
+        $connection->lastActiveTime = time();
     }
 
     /**
@@ -121,10 +133,45 @@ final class Broadcaster
     }
 
     /**
+     * 扫描并主动清理超时无心跳的僵尸连接 (对齐 smart-book 标准)
+     *
+     * @return int 成功清理的连接数
+     */
+    public static function sweep(int $timeout = self::HEARTBEAT_TIMEOUT): int
+    {
+        $now = time();
+        $victims = [];
+
+        foreach (self::$connections as $connId => $conn) {
+            $last = (int)($conn->lastActiveTime ?? 0);
+            if ($last > 0 && ($now - $last) > $timeout) {
+                $victims[] = $conn;
+            }
+        }
+
+        foreach ($victims as $conn) {
+            self::unregister($conn);
+            $conn->close();
+        }
+
+        return count($victims);
+    }
+
+    /**
      * 获取当前 Worker 进程内在线连接总数
      */
     public static function count(): int
     {
         return count(self::$connections);
+    }
+
+    /**
+     * 获取全部在线连接 (供测试与运维自省)
+     *
+     * @return array<int, TcpConnection>
+     */
+    public static function allConnections(): array
+    {
+        return self::$connections;
     }
 }

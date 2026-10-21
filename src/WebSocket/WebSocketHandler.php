@@ -7,15 +7,36 @@ namespace Hanjiang\WebSocket;
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
 use Workerman\Connection\TcpConnection;
+use Workerman\Timer;
 
 final class WebSocketHandler
 {
+    private static ?int $sweepTimerId = null;
+
+    /**
+     * 初始化定时器任务：定时清理超时僵尸连接 (对齐 smart-book 标准)
+     */
+    public static function init(int $sweepInterval = 15): void
+    {
+        if (self::$sweepTimerId !== null) {
+            Timer::del(self::$sweepTimerId);
+            self::$sweepTimerId = null;
+        }
+
+        // 仅在常驻守护环境下挂载 Timer
+        if (class_exists(Timer::class)) {
+            self::$sweepTimerId = Timer::add($sweepInterval, static function (): void {
+                Broadcaster::sweep();
+            });
+        }
+    }
+
     /**
      * 刷新连接最后心跳活跃时间戳
      */
     public static function touch(TcpConnection $connection): void
     {
-        $connection->lastActiveTime = time();
+        Broadcaster::touch($connection);
     }
 
     /**

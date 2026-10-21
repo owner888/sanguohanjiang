@@ -573,5 +573,23 @@ final class GameApiTest extends TestCase
             }));
 
         \Hanjiang\WebSocket\WebSocketHandler::onMessage($mockAppConn, (string)json_encode(['action' => 'ping']));
+
+        // 6. 对齐 smart-book 标准: 验证超时无心跳僵尸连接回收清理 (sweep)
+        $zombieConn = $this->createMock(\Workerman\Connection\TcpConnection::class);
+        $zombieConn->id = 88888;
+        $zombieConn->expects($this->once())->method('close');
+
+        \Hanjiang\WebSocket\Broadcaster::register($zombieConn, 9999);
+        $zombieConn->lastActiveTime = time() - 100; // 模拟 100 秒前最后活跃
+
+        $swept = \Hanjiang\WebSocket\Broadcaster::sweep(60);
+        $this->assertGreaterThanOrEqual(1, $swept, '超时僵尸连接应被自动识别并清理');
+
+        // 7. 验证前端 WebSocket 客户端脚本就绪
+        $clientScript = dirname(__DIR__, 2) . '/public/static/js/network/ws_client.js';
+        $this->assertFileExists($clientScript);
+        $content = (string)file_get_contents($clientScript);
+        $this->assertStringContainsString('startHeartbeat', $content);
+        $this->assertStringContainsString('scheduleReconnect', $content);
     }
 }
