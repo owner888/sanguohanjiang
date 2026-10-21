@@ -48,6 +48,10 @@ use Hanjiang\Handler\StudfarmHandler;
 use Hanjiang\Handler\JadegambleHandler;
 use Hanjiang\Handler\TreasuremapHandler;
 use Hanjiang\Handler\WorkshopHandler;
+use Hanjiang\Handler\SanctumHandler;
+use Hanjiang\Handler\CompeteHandler;
+use Hanjiang\Handler\CountrySacrificeHandler;
+use Hanjiang\Handler\ExpostulationHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -115,6 +119,10 @@ final class GameApiTest extends TestCase
             'jadegamble' => JadegambleHandler::class,
             'treasuremap' => TreasuremapHandler::class,
             'workshop' => WorkshopHandler::class,
+            'sanctum' => SanctumHandler::class,
+            'compete' => CompeteHandler::class,
+            'countrysacrifice' => CountrySacrificeHandler::class,
+            'expostulation' => ExpostulationHandler::class,
         ]));
 
         self::$router = $router;
@@ -1037,10 +1045,10 @@ final class GameApiTest extends TestCase
     public function testProtocolSmartFallbackAndLoggerWarning(): void
     {
         // 访问尚未移植的冷门或老旧接口，验证智能平滑降级信封与 OmniPHP Logger 告警追踪 (方案 B)
-        $res = $this->request('countrysacrifice', 'index');
+        $res = $this->request('act_halloween', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertSame(1, $res['is_fallback']);
-        $this->assertSame('countrysacrifice', $res['c']);
+        $this->assertSame('act_halloween', $res['c']);
         $this->assertSame('index', $res['m']);
         $this->assertStringContainsString('筹备中', $res['message']);
         $this->assertIsArray($res['list']);
@@ -1287,5 +1295,70 @@ final class GameApiTest extends TestCase
         $up = $this->request('workshop', 'levelup');
         $this->assertSame(1, $up['status']);
         $this->assertSame(2, $up['level']);
+    }
+
+    public function testSanctumSystem(): void
+    {
+        // 1. 查看四象圣域
+        $res = $this->request('sanctum', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(4, $res['list']);
+
+        // 2. 挑战青龙圣域 (realm: 1)
+        $action = $this->request('sanctum', 'action', ['id' => 1]);
+        $this->assertSame(1, $action['status']);
+        $this->assertSame(1, $action['win']);
+        $this->assertGreaterThan(0, $action['silver']);
+        $this->assertGreaterThan(0, $action['gold']);
+    }
+
+    public function testCompeteSystem(): void
+    {
+        // 1. 查看跨服论剑比武
+        $res = $this->request('compete', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['opponents']);
+
+        // 2. 发起比武单挑 (对手 1)
+        $pk = $this->request('compete', 'action', ['id' => 1]);
+        $this->assertSame(1, $pk['status']);
+        $this->assertSame(1, $pk['win']);
+        $this->assertSame(50, $pk['add_score']);
+
+        // 3. 领取每日比武段位俸禄
+        $reward = $this->request('compete', 'get_reward');
+        $this->assertSame(1, $reward['status']);
+        $this->assertGreaterThan(0, $reward['silver']);
+    }
+
+    public function testCountrySacrificeSystem(): void
+    {
+        // 1. 查看宗庙祈福
+        $res = $this->request('countrysacrifice', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(3, $res['list']);
+
+        // 2. 执行白马平祭 (type: 1)
+        $action = $this->request('countrysacrifice', 'action', ['type' => 1]);
+        $this->assertSame(1, $action['status']);
+        $this->assertGreaterThan(0, $action['add_reputation']);
+    }
+
+    public function testExpostulationSystem(): void
+    {
+        // 1. 查看朝堂谏言奏折
+        $res = $this->request('expostulation', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 御笔批阅采纳屯田兴农疏 (id: 1)
+        $adopt = $this->request('expostulation', 'adopt', ['id' => 1]);
+        $this->assertSame(1, $adopt['status']);
+        $this->assertGreaterThan(0, $adopt['silver']);
+        $this->assertGreaterThan(0, $adopt['merit']);
+
+        // 3. 重复采纳同一奏折拦截
+        $dup = $this->request('expostulation', 'adopt', ['id' => 1]);
+        $this->assertSame(0, $dup['status']);
     }
 }

@@ -163,6 +163,10 @@
 - `c=jadegamble&m=index|mining|gambling|harvest`：翡翠原石赌石坊、选石开采、一刀切石与满色帝王绿玉石折现
 - `c=treasuremap&m=index|refresh|sale`：摸金校尉古墓寻宝、罗盘寻龙分金升星与皇室地宫秘宝发掘
 - `c=workshop&m=index|get_reward|levelup`：官府军械工坊流水线、精铁破甲箭生产、流水线扩建与军工收益折现银两
+- `c=sanctum&m=index|action|get_reward`：四象圣域神尊决战（青龙/白虎/朱雀/玄武）、九宫格推演与终极大成神礼
+- `c=compete&m=index|action|get_reward`：跨服群雄逐鹿比武大会、排位段位积分与每日论剑俸禄
+- `c=countrysacrifice&m=index|action`：国家宗庙九鼎太牢祭天大典、全国内阁攻击防御光环与声望庇护
+- `c=expostulation&m=index|adopt`：群臣治国诤言进谏（富国策/精兵策/安民策）、御笔朱批与治国功绩政绩折现银两
 
 ---
 
@@ -213,7 +217,8 @@
 - [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
 - [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充至尊神礼 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
 - [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (49/49 100% 绿灯全过，735 个断言)
+- [x] 战神殿与朝堂宏图系统打通：四象圣域神尊决战 (`sanctum`)、跨服群雄论剑 (`compete`)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (53/53 100% 绿灯全过，782 个断言)
 
 ---
 

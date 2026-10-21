@@ -159,6 +159,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=jadegamble&m=index|mining|gambling|harvest`: Rough jade ore mining, high-stakes stone cutting, and imperial emerald harvests
 - `c=treasuremap&m=index|refresh|sale`: Tomb raiding compass geomancy, star-tier treasure maps, and royal mausoleum excavation
 - `c=workshop&m=index|get_reward|levelup`: Official siege weaponry workshop, arrow manufacturing, and military tribute yields
+- `c=sanctum&m=index|action|get_reward`: Four Divine Beast Sanctums (Azure Dragon, White Tiger, Vermilion Bird, Black Tortoise)
+- `c=compete&m=index|action|get_reward`: Cross-server martial tournaments, tier promotions, and daily honor rewards
+- `c=countrysacrifice&m=index|action`: National ancestral altar sacrifices, nationwide buffs, and reputation blessings
+- `c=expostulation&m=index|adopt`: Court minister policy expostulations, imperial adoptions, and governance merits
 
 ---
 
@@ -209,7 +213,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Built-in golden flowing marquee banner UI renderer in `ws_client.js` with hardware-accelerated broadcast animations
 - [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge celebration (`first_recharge`), and maritime silk road (`overseastrade`)
 - [x] High-tier diversion mechanics: Bole stud farm (`studfarm`), rough jade gambling (`jadegamble`), tomb raiding maps (`treasuremap`), and weaponry workshop (`workshop`)
-- [x] PHPUnit end-to-end integration test suite (49/49 100% passing, 735 assertions)
+- [x] Four Divine Beast Sanctums (`sanctum`), cross-server martial tournaments (`compete`), national altar sacrifices (`countrysacrifice`), and imperial court expostulations (`expostulation`)
+- [x] PHPUnit end-to-end integration test suite (53/53 100% passing, 782 assertions)
 
 ---
 
