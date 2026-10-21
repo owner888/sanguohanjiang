@@ -2,7 +2,7 @@
  * 悍将三国 (Modern Workerman Edition) - 全双工 WebSocket 实时网络客户端
  * 
  * 核心特性 (完全对齐 smart-book 标准):
- * 1. 协议级 & 应用级双轨心跳保活 (Ping/Pong 智能检测与假死熔断)
+ * 1. 严格遵循 RFC 6455 协议级底层心跳机制（零冗余应用层心跳）
  * 2. 指数退避智能断线重连 (Exponential Backoff with Random Jitter)
  * 3. 掉线重连后无感 Token 重新鉴权 (Auto Re-Auth)
  * 4. 全服跑马灯大喇叭与实时世界聊天事件分发器
@@ -19,12 +19,6 @@
             this.uid = 0;
             this.isConnected = false;
             this.isManualClosed = false;
-
-            // 心跳保活配置 (对齐 smart-book 标准)
-            this.pingInterval = 15000; // 15秒发送一次心跳
-            this.pongTimeout = 6000;   // 6秒无响应判定为死链接
-            this.pingTimer = null;
-            this.pongTimer = null;
 
             // 指数退避断线重连配置
             this.reconnectAttempts = 0;
@@ -75,9 +69,6 @@
                 this.reconnectAttempts = 0;
                 console.log('[GameWS] 连接成功:', this.url);
 
-                // 启动心跳保活
-                this.startHeartbeat();
-
                 // 登录鉴权
                 if (this.token || this.uid) {
                     this.send({
@@ -91,15 +82,8 @@
             };
 
             this.ws.onmessage = (event) => {
-                this.resetPongTimeout();
-
                 try {
                     const msg = JSON.parse(event.data);
-
-                    // 处理心跳响应
-                    if (msg.action === 'pong') {
-                        return;
-                    }
 
                     // 事件分发
                     if (msg.type) {
@@ -120,7 +104,6 @@
 
             this.ws.onclose = (event) => {
                 this.isConnected = false;
-                this.stopHeartbeat();
                 console.warn(`[GameWS] 连接断开 (code: ${event.code})`);
                 this.emit('close', event);
 
@@ -128,43 +111,6 @@
                     this.scheduleReconnect();
                 }
             };
-        }
-
-        /**
-         * 启动 Ping/Pong 心跳检测
-         */
-        startHeartbeat() {
-            this.stopHeartbeat();
-
-            this.pingTimer = setInterval(() => {
-                if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
-                    // 发送应用层 ping 报文 (底层浏览器会自动发送 0x9 ping)
-                    this.send({ action: 'ping', time: Date.now() });
-
-                    // 设置 pong 超时断线检测
-                    this.pongTimer = setTimeout(() => {
-                        console.warn('[GameWS] 心跳响应超时，连接假死，触发熔断重连');
-                        if (this.ws) {
-                            this.ws.close();
-                        }
-                    }, this.pongTimeout);
-                }
-            }, this.pingInterval);
-        }
-
-        resetPongTimeout() {
-            if (this.pongTimer) {
-                clearTimeout(this.pongTimer);
-                this.pongTimer = null;
-            }
-        }
-
-        stopHeartbeat() {
-            if (this.pingTimer) {
-                clearInterval(this.pingTimer);
-                this.pingTimer = null;
-            }
-            this.resetPongTimeout();
         }
 
         /**
@@ -218,7 +164,6 @@
          */
         close() {
             this.isManualClosed = true;
-            this.stopHeartbeat();
             if (this.reconnectTimer) {
                 clearTimeout(this.reconnectTimer);
                 this.reconnectTimer = null;

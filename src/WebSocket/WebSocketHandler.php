@@ -79,15 +79,9 @@ final class WebSocketHandler
             return;
         }
 
-        $action = (string)($payload['action'] ?? $payload['type'] ?? 'ping');
+        $action = (string)($payload['action'] ?? $payload['type'] ?? '');
 
         match ($action) {
-            // 应用层 JSON 心跳
-            'ping' => $connection->send(json_encode([
-                'action' => 'pong',
-                'time' => time(),
-            ], JSON_UNESCAPED_UNICODE)),
-
             'auth' => self::handleAuth($connection, $payload),
 
             'chat' => self::handleChat($connection, $payload),

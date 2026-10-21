@@ -553,7 +553,7 @@ final class GameApiTest extends TestCase
         $sentCount = \Hanjiang\WebSocket\Broadcaster::broadcast('system_alert', ['info' => '军令已补满']);
         $this->assertGreaterThanOrEqual(0, $sentCount);
 
-        // 5. 对齐 smart-book 标准: 验证 RFC 6455 协议级 ping (0x9) 与应用级 ping/pong 双轨机制
+        // 5. 对齐 smart-book 标准: 严格验证 RFC 6455 协议级控制帧 ping (0x9) 与 pong 响应
         $pingData = "protocol_ping_payload";
         $mockConn = $this->createMock(\Workerman\Connection\TcpConnection::class);
         $mockConn->expects($this->once())
@@ -562,17 +562,6 @@ final class GameApiTest extends TestCase
 
         \Hanjiang\WebSocket\WebSocketHandler::onWebSocketPing($mockConn, $pingData);
         $this->assertGreaterThan(0, $mockConn->lastActiveTime ?? 0, '必须刷新连接最后活跃时间戳');
-
-        // 验证应用层 JSON Ping: 兼容不支持原生控制帧的 H5/小程序客户端
-        $mockAppConn = $this->createMock(\Workerman\Connection\TcpConnection::class);
-        $mockAppConn->expects($this->once())
-            ->method('send')
-            ->with($this->callback(function (string $json): bool {
-                $arr = json_decode($json, true);
-                return is_array($arr) && ($arr['action'] ?? null) === 'pong';
-            }));
-
-        \Hanjiang\WebSocket\WebSocketHandler::onMessage($mockAppConn, (string)json_encode(['action' => 'ping']));
 
         // 6. 对齐 smart-book 标准: 验证超时无心跳僵尸连接回收清理 (sweep)
         $zombieConn = $this->createMock(\Workerman\Connection\TcpConnection::class);
@@ -585,11 +574,11 @@ final class GameApiTest extends TestCase
         $swept = \Hanjiang\WebSocket\Broadcaster::sweep(60);
         $this->assertGreaterThanOrEqual(1, $swept, '超时僵尸连接应被自动识别并清理');
 
-        // 7. 验证前端 WebSocket 客户端脚本就绪
+        // 7. 验证前端 WebSocket 客户端脚本就绪 (纯粹协议级设计，包含指数退避重连机制)
         $clientScript = dirname(__DIR__, 2) . '/public/static/js/network/ws_client.js';
         $this->assertFileExists($clientScript);
         $content = (string)file_get_contents($clientScript);
-        $this->assertStringContainsString('startHeartbeat', $content);
         $this->assertStringContainsString('scheduleReconnect', $content);
+        $this->assertStringContainsString('RFC 6455', $content);
     }
 }
