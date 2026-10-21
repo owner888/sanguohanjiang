@@ -132,7 +132,7 @@ final class RegisterHandler
             'sex' => 1,
             'gender' => 0,
             'roleid' => 1,
-            'country' => 1,
+            'country' => 0,
             'level' => 1,
             'exp' => 0,
             'maxexp' => 100,

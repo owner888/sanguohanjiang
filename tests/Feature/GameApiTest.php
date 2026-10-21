@@ -25,6 +25,9 @@ use Hanjiang\Handler\StrengthenHandler;
 use Hanjiang\Handler\TavernHandler;
 use Hanjiang\Handler\TowerHandler;
 use Hanjiang\Handler\PassGeneralHandler;
+use Hanjiang\Handler\SoulHandler;
+use Hanjiang\Handler\CountryHandler;
+use Hanjiang\Handler\CultivateHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -68,6 +71,9 @@ final class GameApiTest extends TestCase
             'arena' => ArenaHandler::class,
             'tower' => TowerHandler::class,
             'pass_general' => PassGeneralHandler::class,
+            'soul' => SoulHandler::class,
+            'country' => CountryHandler::class,
+            'cultivate' => CultivateHandler::class,
         ]));
 
         self::$router = $router;
@@ -671,5 +677,87 @@ final class GameApiTest extends TestCase
         \Hanjiang\WebSocket\WebSocketHandler::dispatch($errCtx);
         $this->assertNotEmpty($errCtx->sentMessages);
         $this->assertStringContainsString('聊天内容不能为空', $errCtx->sentMessages[0]);
+    }
+
+    public function testSoulSystem(): void
+    {
+        // 1. 获取主公武将 ID
+        $generals = $this->request('general', 'index');
+        $mainGid = (int)$generals['list'][1]['id'];
+
+        // 2. 查看将魂星盘
+        $res = $this->request('soul', 'index', ['gid' => $mainGid]);
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['slots']);
+        $this->assertArrayHasKey('user_soul', $res);
+        $oldSoul = $res['user_soul'];
+
+        // 3. 升级 1 号位 (青龙生命魂)
+        $up = $this->request('soul', 'upgrade', ['gid' => $mainGid, 'slot' => 1]);
+        $this->assertSame(1, $up['status']);
+        $this->assertSame(2, $up['level']);
+        $this->assertLessThan($oldSoul, $up['user_soul']);
+
+        // 4. 验证武将详情中的将魂加成属性已生效
+        $info = $this->request('general', 'get_info', ['gid' => $mainGid]);
+        $this->assertSame(1, $info['status']);
+        $this->assertGreaterThan(0, $info['info']['hp']);
+    }
+
+    public function testCountrySystem(): void
+    {
+        // 1. 查看三国概况
+        $res = $this->request('country', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(3, $res['countries']);
+
+        // 2. 选择天命随机加入阵营 (获得天命封赏)
+        $join = $this->request('country', 'select_country', ['country' => 0]);
+        $this->assertSame(1, $join['status']);
+        $this->assertGreaterThan(0, $join['country']);
+        $this->assertSame(1, $join['is_random']);
+        $this->assertSame(100, $join['bonus_gold']);
+        $this->assertSame(10000, $join['bonus_silver']);
+
+        // 3. 再次尝试选国被拦截 (不可叛国)
+        $rejoin = $this->request('country', 'select_country', ['country' => 1]);
+        $this->assertSame(0, $rejoin['status']);
+
+        // 4. 国家军资捐献
+        $donate = $this->request('country', 'donate', ['type' => 1]);
+        $this->assertSame(1, $donate['status']);
+        $this->assertGreaterThan(0, $donate['reputation']);
+
+        // 5. 领取每日国家俸禄
+        $salary = $this->request('country', 'salary');
+        $this->assertSame(1, $salary['status']);
+        $this->assertGreaterThan(0, $salary['silver']);
+
+        // 6. 重复领取俸禄被拦截
+        $dupSalary = $this->request('country', 'salary');
+        $this->assertSame(0, $dupSalary['status']);
+    }
+
+    public function testCultivateSystem(): void
+    {
+        // 1. 获取主公武将 ID
+        $generals = $this->request('general', 'index');
+        $mainGid = (int)$generals['list'][1]['id'];
+
+        // 2. 查看洗髓面板
+        $res = $this->request('cultivate', 'index', ['gid' => $mainGid]);
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(4, $res['modes']);
+
+        // 3. 执行一次普通洗髓 (mode: 1)
+        $roll = $this->request('cultivate', 'roll', ['gid' => $mainGid, 'mode' => 1]);
+        $this->assertSame(1, $roll['status']);
+        $this->assertArrayHasKey('roll', $roll);
+        $this->assertArrayHasKey('wuli', $roll['roll']);
+
+        // 4. 确认保存洗髓属性
+        $save = $this->request('cultivate', 'save', ['gid' => $mainGid]);
+        $this->assertSame(1, $save['status']);
+        $this->assertArrayHasKey('wuliup', $save);
     }
 }

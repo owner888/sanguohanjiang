@@ -73,6 +73,24 @@ final class GeneralHandler
             $addHp += $bonus['hp'];
         }
 
+        // 叠加将魂星盘命格加成
+        $uid = (int)($general['uid'] ?? 0);
+        $gid = (int)($general['id'] ?? 0);
+        if ($uid > 0 && $gid > 0) {
+            $soulBonus = SoulHandler::calculateSoulBonus($uid, $gid);
+            $addHp += $soulBonus['hp'];
+            $addAtk += $soulBonus['attack'];
+            $addDef += $soulBonus['defense'];
+        }
+
+        // 叠加武将洗髓培养永久加成 (体力加生命，武力加攻击，智力加防御)
+        $wuliUp = (int)($general['wuliup'] ?? 0);
+        $zhiliUp = (int)($general['zhiliup'] ?? 0);
+        $tiliUp = (int)($general['tiliup'] ?? 0);
+        $addAtk += $wuliUp * 2;
+        $addDef += $zhiliUp * 2;
+        $addHp += $tiliUp * 10;
+
         $totalHp = $baseHp + $addHp;
         $totalAtk = $baseAtk + $addAtk;
         $totalDef = $baseDef + $addDef;

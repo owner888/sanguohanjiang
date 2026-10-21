@@ -136,6 +136,9 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=arena&m=index`: Military ranking arena & PVP challenges
 - `c=tower&m=index|action|sweep`: Trial Soul Tower climbing, boss encounters, floor sweeps, and soul rewards
 - `c=pass_general&m=index|action|reset`: Six-Stage Pass General campaign, legendary warlord duels, and milestone chests
+- `c=soul&m=index|upgrade`: Soul fate constellation slots, soul point upgrades, and permanent hero battle stat empowerment
+- `c=country&m=index|select_country|donate|salary`: Three Kingdoms nations (Wei, Shu, Wu), allegiance selection, military donations, and daily salaries
+- `c=cultivate&m=index|roll|save`: Warlord marrow cultivation & attribute cleansing (Strength, Intellect, Vitality)
 
 ---
 
@@ -179,7 +182,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Integrated `OmniPHP\ArchitectureGuard` to enforce clean architecture and prevent custom infrastructure re-wrapping
 - [x] Client network layer with exponential backoff auto-reconnect, jitter, and zombie connection sweeping (`sweep`)
 - [x] Complete port of legacy core modules: Trial Soul Tower (`tower`), Six-Stage Pass General campaign (`pass_general`), and dynamic storyline quests (`mainquest`)
-- [x] PHPUnit end-to-end integration test suite (22/22 100% passing, 266 assertions)
+- [x] Three Kingdoms nation faction system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
+- [x] PHPUnit end-to-end integration test suite (25/25 100% passing, 308 assertions)
 
 ---
 

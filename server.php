@@ -24,6 +24,9 @@ use Hanjiang\Handler\StrengthenHandler;
 use Hanjiang\Handler\TavernHandler;
 use Hanjiang\Handler\TowerHandler;
 use Hanjiang\Handler\PassGeneralHandler;
+use Hanjiang\Handler\SoulHandler;
+use Hanjiang\Handler\CountryHandler;
+use Hanjiang\Handler\CultivateHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -69,6 +72,9 @@ $router->use(new GameProtocolMiddleware([
     'arena' => ArenaHandler::class,
     'tower' => TowerHandler::class,
     'pass_general' => PassGeneralHandler::class,
+    'soul' => SoulHandler::class,
+    'country' => CountryHandler::class,
+    'cultivate' => CultivateHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

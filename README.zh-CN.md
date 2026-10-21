@@ -140,6 +140,9 @@
 - `c=arena&m=index`：演武榜竞技场挑战与排名争夺
 - `c=tower&m=index|action|sweep`：将魂星路试炼塔爬塔闯关、守关神兽决战、一键扫荡与将魂结算
 - `c=pass_general&m=index|action|reset`：经典过关斩将单挑六大名将（华雄/颜良/文丑/庞德/典韦/吕布）与通关宝箱开启
+- `c=soul&m=index|upgrade`：将魂星盘八大命格孔位激活、试炼塔将魂消耗升级与攻防血量永久加成
+- `c=country&m=index|select_country|donate|salary`：魏蜀吴三国势力格局、天命随机选国封赏、国家军资捐献与每日国家俸禄
+- `c=cultivate&m=index|roll|save`：武将洗髓培养系统，武力/智力/体力永久洗练与属性注入强化
 
 ---
 
@@ -183,7 +186,8 @@
 - [x] 框架级引入 `OmniPHP\ArchitectureGuard` 架构铁律守卫，杜绝新老项目重复造轮子与私造基础设施
 - [x] 前端网络层指数退避断线重连（Exponential Backoff with Jitter）与服务端超时僵尸连接自动回收扫描（`sweep`）
 - [x] 全面移植并贯通原版核心进阶玩法：试炼塔爬塔闯关与一键扫荡 (`tower`)、过关斩将斩杀六大名将 (`pass_general`)、主线任务动态里程碑 (`mainquest`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (22/22 100% 绿灯全过，266 个断言)
+- [x] 原版经典深度养成与宏观格局重现：三国国家阵营格局 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (25/25 100% 绿灯全过，308 个断言)
 
 ---
 
