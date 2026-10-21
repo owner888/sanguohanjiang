@@ -137,17 +137,15 @@ final class TavernHandler
 
         // 检查银两
         $member = DB::table('member')->where('uid', $uid)->first();
-        if ((int)$member['silver'] < $costSilver) {
+        // 原子扣除银两 (防并发超招)
+        if (!MemberHandler::deductCurrency($uid, silver: $costSilver)) {
             return [
                 'status' => 3,
                 'message' => '银两不足，招募需要 ' . $costSilver . ' 银两',
             ];
         }
 
-        $remainSilver = (int)$member['silver'] - $costSilver;
-
-        // 扣除银两
-        DB::table('member')->where('uid', $uid)->update(['silver' => $remainSilver]);
+        $remainSilver = max(0, (int)$member['silver'] - $costSilver);
 
         // 插入武将
         $newGenId = DB::table('general')->insert([

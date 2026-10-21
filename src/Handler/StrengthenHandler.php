@@ -107,7 +107,8 @@ final class StrengthenHandler
         $curLevel = max(1, (int)$equip['level']);
         $costSilver = $curLevel * 150;
 
-        if ((int)$member['silver'] < $costSilver) {
+        // 原子安全扣减银两
+        if (!MemberHandler::deductCurrency($uid, silver: $costSilver)) {
             return [
                 'status' => -4,
                 'message' => '银两不足，强化需要 ' . $costSilver . ' 银两',
@@ -115,10 +116,9 @@ final class StrengthenHandler
         }
 
         $newLevel = $curLevel + 1;
-        $remainSilver = (int)$member['silver'] - $costSilver;
+        $remainSilver = max(0, (int)$member['silver'] - $costSilver);
 
-        // 扣除银两并升级装备
-        DB::table('member')->where('uid', $uid)->update(['silver' => $remainSilver]);
+        // 升级装备
         DB::table('equipment')->where('id', $eid)->update(['level' => $newLevel]);
 
         Redis::del('player:' . $uid);

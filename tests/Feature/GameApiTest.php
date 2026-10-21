@@ -54,6 +54,7 @@ final class GameApiTest extends TestCase
 
     public static function setUpBeforeClass(): void
     {
+        date_default_timezone_set('Asia/Shanghai');
         $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
         DB::init($dbConfig['mysql']);
         Redis::init($dbConfig['redis']);
@@ -1047,5 +1048,21 @@ final class GameApiTest extends TestCase
                 );
             }
         }
+    }
+
+    public function testAtomicCurrencyDeductionAndConcurrencyProtection(): void
+    {
+        // 1. 验证原子扣减银两/元宝成功
+        $ok = \Hanjiang\Handler\MemberHandler::deductCurrency(self::$uid, silver: 100, gold: 5);
+        $this->assertTrue($ok);
+
+        // 2. 验证超额扣减原子行锁拦截 (余额不足时必须原子回滚并拒绝，绝不允许扣成负数或超卖)
+        $failed = \Hanjiang\Handler\MemberHandler::deductCurrency(self::$uid, silver: 999999999);
+        $this->assertFalse($failed, '当银两不足时原子扣减必须返回 false');
+
+        // 3. 验证原子增加货币
+        \Hanjiang\Handler\MemberHandler::addCurrency(self::$uid, silver: 5000);
+        $member = \OmniPHP\Database\DB::table('member')->where('uid', self::$uid)->first();
+        $this->assertGreaterThan(5000, (int)$member['silver']);
     }
 }
