@@ -31,6 +31,18 @@ A high-performance Three Kingdoms tactical card RPG game server reconstructed wi
    - The server must seamlessly drive the legacy H5/Cordova client by routing `index.php?c={controller}&m={method}` (both GET and POST) to `App\Handlers\{Controller}Handler::{method}()`.
    - Outgoing response envelopes must strictly preserve the expected legacy structure (`status`, `message`, `member`, `serverlist`, etc.).
 
+7. **Database Table Timestamps & Soft Deletes Law (三必备时间字段铁律)**:
+   - **All database tables must have three columns**:
+     - `created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP` (auto-filled by MySQL on INSERT)
+     - `updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP` (auto-updated by MySQL on UPDATE)
+     - `deleted_at DATETIME NULL DEFAULT NULL` (soft delete timestamp, NULL when active)
+   - **Strictly forbidden**: Never manually pass `'created_at'` or `'updated_at'` in application insert/update queries. MySQL handles them natively.
+   - **Required**: Business queries must filter active records with `->whereNull('deleted_at')`. Deletion must be soft delete: `update(['deleted_at' => date('Y-m-d H:i:s')])`.
+
+8. **Direct Use of OmniPHP Framework Facades (严禁私造基础设施包装)**:
+   - Directly consume `OmniPHP\Http\Context`, `OmniPHP\WebSocket\Context`, `OmniPHP\Database\DB`, and `OmniPHP\Cache\Redis`.
+   - Never write redundant standalone wrappers (`src/Context.php`, `src/Database/DB.php`). If domain extension is needed, legitimately extend the base class.
+
 ---
 
 ## 2. Directory Layout & Standards
@@ -43,7 +55,6 @@ src/
 │   ├── BattleEngine.php # Core simulation ported & typed from battle_model.php
 │   ├── Hero.php         # Immutable/state-controlled combat entity
 │   └── Position.php     # 9-grid tactical position enum (1-9)
-├── Context.php          # Request context (attributes, input, query, headers, auth)
 ├── Middleware/          # Middleware pipeline
 │   ├── MiddlewareInterface.php
 │   ├── CorsMiddleware.php
