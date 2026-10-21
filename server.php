@@ -45,6 +45,10 @@ use Hanjiang\Handler\GeneralInheritHandler;
 use Hanjiang\Handler\BlackmarketHandler;
 use Hanjiang\Handler\FirstRechargeHandler;
 use Hanjiang\Handler\OverseasTradeHandler;
+use Hanjiang\Handler\StudfarmHandler;
+use Hanjiang\Handler\JadegambleHandler;
+use Hanjiang\Handler\TreasuremapHandler;
+use Hanjiang\Handler\WorkshopHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -109,6 +113,10 @@ $router->use(new GameProtocolMiddleware([
     'blackmarket' => BlackmarketHandler::class,
     'first_recharge' => FirstRechargeHandler::class,
     'overseastrade' => OverseasTradeHandler::class,
+    'studfarm' => StudfarmHandler::class,
+    'jadegamble' => JadegambleHandler::class,
+    'treasuremap' => TreasuremapHandler::class,
+    'workshop' => WorkshopHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

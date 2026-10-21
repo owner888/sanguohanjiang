@@ -155,6 +155,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=blackmarket&m=index|buy|lock|refresh`: Western exotic black market, rare artifact locks, and shelf refreshes
 - `c=first_recharge&m=index|get_reward`: First-recharge celebration, god-tier Zhao Yun, silver spear, and VIP perks
 - `c=overseastrade&m=index|goout|trade`: Maritime silk road, fleet sailings, exotic spices, and merchant profit claims
+- `c=studfarm&m=index|action`: Bole stud farm, legendary steed appraisals, bloodline enhancements, and mount acquisitions
+- `c=jadegamble&m=index|mining|gambling|harvest`: Rough jade ore mining, high-stakes stone cutting, and imperial emerald harvests
+- `c=treasuremap&m=index|refresh|sale`: Tomb raiding compass geomancy, star-tier treasure maps, and royal mausoleum excavation
+- `c=workshop&m=index|get_reward|levelup`: Official siege weaponry workshop, arrow manufacturing, and military tribute yields
 
 ---
 
@@ -204,7 +208,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Legion territorial siege warfare (`siege`), GVG cross-server championship tournament betting (`gvg`), and 16-chapter campaign static master repository (`GameMasterData`)
 - [x] Built-in golden flowing marquee banner UI renderer in `ws_client.js` with hardware-accelerated broadcast animations
 - [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge celebration (`first_recharge`), and maritime silk road (`overseastrade`)
-- [x] PHPUnit end-to-end integration test suite (45/45 100% passing, 682 assertions)
+- [x] High-tier diversion mechanics: Bole stud farm (`studfarm`), rough jade gambling (`jadegamble`), tomb raiding maps (`treasuremap`), and weaponry workshop (`workshop`)
+- [x] PHPUnit end-to-end integration test suite (49/49 100% passing, 735 assertions)
 
 ---
 

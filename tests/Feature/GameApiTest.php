@@ -44,6 +44,10 @@ use Hanjiang\Handler\GeneralInheritHandler;
 use Hanjiang\Handler\BlackmarketHandler;
 use Hanjiang\Handler\FirstRechargeHandler;
 use Hanjiang\Handler\OverseasTradeHandler;
+use Hanjiang\Handler\StudfarmHandler;
+use Hanjiang\Handler\JadegambleHandler;
+use Hanjiang\Handler\TreasuremapHandler;
+use Hanjiang\Handler\WorkshopHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -107,6 +111,10 @@ final class GameApiTest extends TestCase
             'blackmarket' => BlackmarketHandler::class,
             'first_recharge' => FirstRechargeHandler::class,
             'overseastrade' => OverseasTradeHandler::class,
+            'studfarm' => StudfarmHandler::class,
+            'jadegamble' => JadegambleHandler::class,
+            'treasuremap' => TreasuremapHandler::class,
+            'workshop' => WorkshopHandler::class,
         ]));
 
         self::$router = $router;
@@ -1029,10 +1037,10 @@ final class GameApiTest extends TestCase
     public function testProtocolSmartFallbackAndLoggerWarning(): void
     {
         // 访问尚未移植的冷门或老旧接口，验证智能平滑降级信封与 OmniPHP Logger 告警追踪 (方案 B)
-        $res = $this->request('studfarm', 'index');
+        $res = $this->request('countrysacrifice', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertSame(1, $res['is_fallback']);
-        $this->assertSame('studfarm', $res['c']);
+        $this->assertSame('countrysacrifice', $res['c']);
         $this->assertSame('index', $res['m']);
         $this->assertStringContainsString('筹备中', $res['message']);
         $this->assertIsArray($res['list']);
@@ -1210,5 +1218,74 @@ final class GameApiTest extends TestCase
         $go = $this->request('overseastrade', 'goout', ['fleet_id' => 1]);
         $this->assertSame(1, $go['status']);
         $this->assertSame(1, $go['fleet_id']);
+    }
+
+    public function testStudfarmSystem(): void
+    {
+        // 1. 查看伯乐马场
+        $res = $this->request('studfarm', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 执行相马
+        $horse = $this->request('studfarm', 'action', ['id' => 1]);
+        $this->assertSame(1, $horse['status']);
+        $this->assertArrayHasKey('mount_name', $horse);
+    }
+
+    public function testJadegambleSystem(): void
+    {
+        // 1. 查看赌石坊
+        $res = $this->request('jadegamble', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 选购原石
+        $mine = $this->request('jadegamble', 'mining', ['id' => 1]);
+        $this->assertSame(1, $mine['status']);
+
+        // 3. 解石一刀切
+        $cut = $this->request('jadegamble', 'gambling');
+        $this->assertSame(1, $cut['status']);
+        $this->assertGreaterThan(0, $cut['final_value']);
+
+        // 4. 收取翡翠玉石
+        $harvest = $this->request('jadegamble', 'harvest');
+        $this->assertSame(1, $harvest['status']);
+        $this->assertGreaterThan(0, $harvest['silver']);
+    }
+
+    public function testTreasuremapSystem(): void
+    {
+        // 1. 查看藏宝图
+        $res = $this->request('treasuremap', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThanOrEqual(1, $res['star']);
+
+        // 2. 寻龙分金刷新宝图
+        $ref = $this->request('treasuremap', 'refresh');
+        $this->assertSame(1, $ref['status']);
+
+        // 3. 发掘挖宝
+        $sale = $this->request('treasuremap', 'sale');
+        $this->assertSame(1, $sale['status']);
+        $this->assertGreaterThan(0, $sale['silver']);
+    }
+
+    public function testWorkshopSystem(): void
+    {
+        // 1. 查看军械工坊
+        $res = $this->request('workshop', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThanOrEqual(1, $res['level']);
+
+        // 2. 收取军械折现
+        $reward = $this->request('workshop', 'get_reward');
+        $this->assertSame(1, $reward['status']);
+
+        // 3. 升级军械工坊
+        $up = $this->request('workshop', 'levelup');
+        $this->assertSame(1, $up['status']);
+        $this->assertSame(2, $up['level']);
     }
 }

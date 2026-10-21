@@ -159,6 +159,10 @@
 - `c=blackmarket&m=index|buy|lock|refresh`：西域神秘黑市商人、稀世奇珍锁定保底与货架刷新
 - `c=first_recharge&m=index|get_reward`：开服首充狂欢至尊大礼包、神将赵云、龙胆亮银枪与 VIP 直升
 - `c=overseastrade&m=index|goout|trade`：海上丝绸之路远洋商贸、商队启航与满载珍宝凯旋利润结算
+- `c=studfarm&m=index|action`：伯乐相马场、纯血神驹鉴赏寻觅、战马血统注入与战力跃升
+- `c=jadegamble&m=index|mining|gambling|harvest`：翡翠原石赌石坊、选石开采、一刀切石与满色帝王绿玉石折现
+- `c=treasuremap&m=index|refresh|sale`：摸金校尉古墓寻宝、罗盘寻龙分金升星与皇室地宫秘宝发掘
+- `c=workshop&m=index|get_reward|levelup`：官府军械工坊流水线、精铁破甲箭生产、流水线扩建与军工收益折现银两
 
 ---
 
@@ -208,7 +212,8 @@
 - [x] 军团攻城掠地城池战 (`siege`)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)、十六历史战役全景数值大字典 (`GameMasterData`)
 - [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
 - [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充至尊神礼 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (45/45 100% 绿灯全过，682 个断言)
+- [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (49/49 100% 绿灯全过，735 个断言)
 
 ---
 
