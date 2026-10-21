@@ -195,7 +195,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Three Kingdoms nation faction system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
 - [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and server-wide Dong Zhuo World Boss crusade (`worldboss`)
-- [x] PHPUnit end-to-end integration test suite (35/35 100% passing, 423 assertions)
+- [x] Smart protocol graceful fallback engine with `OmniPHP\Logger::warning` real-time missing-endpoint telemetry (zero client crashes or white screens)
+- [x] PHPUnit end-to-end integration test suite (36/36 100% passing, 431 assertions)
 
 ---
 

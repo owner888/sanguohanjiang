@@ -1007,4 +1007,17 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThan(0, $reward['silver']);
         $this->assertGreaterThan(0, $reward['gold']);
     }
+
+    public function testProtocolSmartFallbackAndLoggerWarning(): void
+    {
+        // 访问尚未移植的冷门或老旧接口，验证智能平滑降级信封与 OmniPHP Logger 告警追踪 (方案 B)
+        $res = $this->request('blackmarket', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1, $res['is_fallback']);
+        $this->assertSame('blackmarket', $res['c']);
+        $this->assertSame('index', $res['m']);
+        $this->assertStringContainsString('筹备中', $res['message']);
+        $this->assertIsArray($res['list']);
+        $this->assertIsArray($res['info']);
+    }
 }
