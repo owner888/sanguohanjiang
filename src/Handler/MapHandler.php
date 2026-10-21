@@ -307,7 +307,7 @@ final class MapHandler
             'leftresult' => $simResult['win'] ? $leftTeamData : [],
             'rightresult' => $simResult['win'] ? [] : $rightTeamData,
             'process' => self::buildBattleProcess($simResult['logs']),
-            'assess' => $simResult['win'] ? 3 : -3,
+            'assess' => (int)($simResult['assess'] ?? ($simResult['win'] ? 3 : -3)),
             'leftbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
             'rightbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
         ];

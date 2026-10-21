@@ -207,9 +207,9 @@ final class PracticeHandler
         $curExp = (int)$general['exp'] + $earnedExp;
         $curLevel = (int)$general['level'];
 
-        // 升级逻辑
-        while ($curExp >= $curLevel * 100) {
-            $curExp -= $curLevel * 100;
+        // 升级逻辑 (对齐原版 general_model.php 80 * 等级^2 经验曲线)
+        while ($curExp >= GeneralHandler::getLevelUpExp($curLevel)) {
+            $curExp -= GeneralHandler::getLevelUpExp($curLevel);
             $curLevel++;
         }
 
@@ -272,8 +272,8 @@ final class PracticeHandler
         $curExp = (int)$general['exp'] + $addExp;
         $curLevel = (int)$general['level'];
 
-        while ($curExp >= $curLevel * 100) {
-            $curExp -= $curLevel * 100;
+        while ($curExp >= GeneralHandler::getLevelUpExp($curLevel)) {
+            $curExp -= GeneralHandler::getLevelUpExp($curLevel);
             $curLevel++;
         }
 

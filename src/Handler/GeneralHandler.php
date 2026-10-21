@@ -112,6 +112,14 @@ final class GeneralHandler
     }
 
     /**
+     * 原版经典武将升级经验公式 (80 * 等级^2)
+     */
+    public static function getLevelUpExp(int $level): int
+    {
+        return max(80, 80 * $level * $level);
+    }
+
+    /**
      * 将领列表: c=general&m=index
      */
     public static function index(Context $ctx): array
@@ -177,7 +185,7 @@ final class GeneralHandler
                 'name' => $g['name'],
                 'level' => $stats['level'],
                 'exp' => (int)$g['exp'],
-                'levelupexp' => $stats['level'] * 100,
+                'levelupexp' => self::getLevelUpExp($stats['level']),
                 'wuli' => 85,
                 'zhili' => 70,
                 'tili' => 90,
@@ -252,7 +260,7 @@ final class GeneralHandler
                 'defense' => $stats['defense'],
                 'speed' => $stats['speed'],
                 'exp' => (int)$general['exp'],
-                'levelupexp' => $stats['level'] * 100,
+                'levelupexp' => self::getLevelUpExp($stats['level']),
                 'equip' => $equipSlots,
                 'stats' => $stats,
             ],

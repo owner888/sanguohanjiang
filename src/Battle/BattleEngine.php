@@ -50,9 +50,32 @@ final class BattleEngine
 
         $leftWin = $this->isTeamAlive($this->leftTeam) && !$this->isTeamAlive($this->rightTeam);
 
+        // 原版经典战斗评级算法 (_battle_assess)
+        $leftInitialHp = array_sum(array_map(fn($h) => $h->maxHp, $this->leftTeam));
+        $leftRemainHp = array_sum(array_map(fn($h) => max(0, $h->currentHp), $this->leftTeam));
+        $rightInitialHp = array_sum(array_map(fn($h) => $h->maxHp, $this->rightTeam));
+        $rightRemainHp = array_sum(array_map(fn($h) => max(0, $h->currentHp), $this->rightTeam));
+
+        if ($leftWin) {
+            $ratio = $leftRemainHp / max(1, $leftInitialHp);
+            $assess = match (true) {
+                $ratio >= 0.7 => 3, // 三星完胜
+                $ratio >= 0.4 => 2, // 二星大胜
+                default       => 1, // 一星小胜
+            };
+        } else {
+            $ratio = $rightRemainHp / max(1, $rightInitialHp);
+            $assess = match (true) {
+                $ratio >= 0.7 => -3, // 完败
+                $ratio >= 0.4 => -2, // 大败
+                default       => -1, // 惜败
+            };
+        }
+
         return [
             'win' => $leftWin,
             'rounds' => $round - 1,
+            'assess' => $assess,
             'logs' => $this->combatLog,
         ];
     }
