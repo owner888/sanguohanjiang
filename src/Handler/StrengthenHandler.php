@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler;
 
-use Hanjiang\Context;
+use OmniPHP\Http\Context;
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
 
@@ -123,7 +123,10 @@ final class StrengthenHandler
         Redis::del('player:' . $uid);
 
         $nickname = $member['nickname'] ?? ('主公' . $uid);
-        \Hanjiang\WebSocket\Broadcaster::notifyMarquee("神工现世！主公【{$nickname}】成功将【{$equip['name']}】强化至 +{$newLevel}！");
+        \OmniPHP\WebSocket\Broadcaster::broadcast('marquee', [
+            'content' => "神工现世！主公【{$nickname}】成功将【{$equip['name']}】强化至 +{$newLevel}！",
+            'type' => 'system_broadcast',
+        ]);
 
         $newBonus = GeneralHandler::calculateEquipBonus(array_merge($equip, ['level' => $newLevel]));
 

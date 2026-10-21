@@ -6,6 +6,8 @@ namespace Hanjiang\WebSocket;
 
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
+use OmniPHP\WebSocket\Broadcaster;
+use OmniPHP\WebSocket\Context;
 use Workerman\Connection\TcpConnection;
 use Workerman\Timer;
 
@@ -69,14 +71,14 @@ final class WebSocketHandler
     {
         self::touch($connection);
 
-        $ctx = new WsContext($connection, $data);
+        $ctx = new Context($connection, $data);
         self::dispatch($ctx);
     }
 
     /**
-     * 基于 WsContext 的全双工事件分发流水线 (完全对齐 Handler + Context 架构)
+     * 基于 OmniPHP 官方 WebSocket Context 的事件分发流水线
      */
-    public static function dispatch(WsContext $ctx): void
+    public static function dispatch(Context $ctx): void
     {
         $action = $ctx->action();
         if ($action === '') {
@@ -92,7 +94,7 @@ final class WebSocketHandler
         };
     }
 
-    public static function handleAuth(WsContext $ctx): void
+    public static function handleAuth(Context $ctx): void
     {
         $token = (string)$ctx->input('token', '');
         $uid = (int)$ctx->input('uid', 0);
@@ -113,7 +115,7 @@ final class WebSocketHandler
 
         $ctx->bindUid($uid);
 
-        $member = $ctx->member();
+        $member = DB::table('member')->where('uid', $uid)->first();
         $nickname = $member['nickname'] ?? ('主公' . $uid);
 
         $ctx->emit('auth_success', [
@@ -123,12 +125,13 @@ final class WebSocketHandler
         ]);
     }
 
-    public static function handleChat(WsContext $ctx): void
+    public static function handleChat(Context $ctx): void
     {
         $uid = $ctx->uid() ?? (int)$ctx->input('uid', 0);
         $name = (string)$ctx->input('name', '');
-        if ($name === '' && $ctx->member() !== null) {
-            $name = (string)($ctx->member()['nickname'] ?? ('主公' . $uid));
+        if ($name === '' && $uid > 0) {
+            $member = DB::table('member')->where('uid', $uid)->first();
+            $name = (string)($member['nickname'] ?? ('主公' . $uid));
         }
         if ($name === '') {
             $name = '无名主公';
@@ -140,19 +143,36 @@ final class WebSocketHandler
             return;
         }
 
-        $ctx->broadcast('chat_message', [
+        $chatMsg = [
             'uid' => $uid,
             'name' => $name,
             'message' => htmlspecialchars($msg),
             'time' => time(),
-        ]);
+        ];
+
+        $ctx->broadcast('chat_message', $chatMsg);
     }
 
-    public static function handleMarquee(WsContext $ctx): void
+    public static function handleMarquee(Context $ctx): void
     {
         $content = trim((string)$ctx->input('content', $ctx->input('message', '')));
         if ($content !== '') {
-            Broadcaster::notifyMarquee($content);
+            Broadcaster::broadcast('marquee', [
+                'content' => $content,
+                'type' => 'system_broadcast',
+            ]);
+
+            // 存储历史
+            $history = Redis::getJson('broadcast_history') ?: [];
+            $history[] = [
+                'type' => 'marquee',
+                'data' => ['content' => $content],
+                'time' => time(),
+            ];
+            if (count($history) > 50) {
+                $history = array_slice($history, -50);
+            }
+            Redis::setJson('broadcast_history', $history, 86400);
         }
     }
 }

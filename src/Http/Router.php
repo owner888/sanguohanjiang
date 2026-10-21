@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Http;
 
-use Hanjiang\Context;
+use OmniPHP\Http\Context;
 use Hanjiang\Middleware\MiddlewareInterface;
 use Workerman\Connection\TcpConnection;
 use Workerman\Protocols\Http\Request;

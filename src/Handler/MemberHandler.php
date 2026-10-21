@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler;
 
-use Hanjiang\Context;
+use OmniPHP\Http\Context;
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
 

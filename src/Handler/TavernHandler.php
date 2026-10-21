@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler;
 
-use Hanjiang\Context;
+use OmniPHP\Http\Context;
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
 
@@ -164,7 +164,10 @@ final class TavernHandler
         Redis::del('player:' . $uid);
 
         $nickname = $member['nickname'] ?? ('主公' . $uid);
-        \Hanjiang\WebSocket\Broadcaster::notifyMarquee("恭喜主公【{$nickname}】在酒馆成功招募名将【{$heroConfig['name']}】！");
+        \OmniPHP\WebSocket\Broadcaster::broadcast('marquee', [
+            'content' => "恭喜主公【{$nickname}】在酒馆成功招募名将【{$heroConfig['name']}】！",
+            'type' => 'system_broadcast',
+        ]);
 
         return [
             'status' => 1,

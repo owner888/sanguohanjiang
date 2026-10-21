@@ -7,7 +7,7 @@ namespace Hanjiang\Handler;
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
-use Hanjiang\Context;
+use OmniPHP\Http\Context;
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
 use Hanjiang\Enum\BattleAssess;

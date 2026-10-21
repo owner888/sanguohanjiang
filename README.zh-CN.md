@@ -46,7 +46,6 @@
 │   │   ├── BattleEngine.php # 核心战斗推演逻辑 (源自 battle_model.php 重构)
 │   │   ├── Hero.php         # 战斗英雄实体模型
 │   │   └── Position.php     # 九宫格战位 (1-9号位) 枚举
-│   ├── Context.php          # 请求上下文封装 (属性注入、输入、Query、Header)
 │   ├── Middleware/          # 中间件流水线 (完全对齐 smart-book 架构)
 │   │   ├── MiddlewareInterface.php
 │   │   ├── CorsMiddleware.php             # 跨域与 OPTIONS 预检处理
@@ -176,10 +175,10 @@
 - [x] 主城征收与强征系统 (`city`)，支持丰收暴击银两倍数与元宝强征加倍收益
 - [x] 原生 WebSocket 全双工长连接网关，支持鉴权、实时世界聊天与全服跑马灯大喇叭广播
 - [x] 完全对齐 `smart-book` 标准的纯粹 RFC 6455 协议级心跳机制（0x9/0xA 控制帧 ping/pong，杜绝应用层冗余载荷开销）
-- [x] 正式引入并继承 `omniphp/framework` 官方核心 HTTP `Context`（完全对齐 Go Gin 设计模式），统一请求上下文生命周期与属性封装
-- [x] 构建 WebSocket 全双工专属 `WsContext` 上下文模型，内聚报文载荷、玩家会话、错误回发与全服广播，提供免建立真实 Socket 的纯内存毫秒级测试能力
+- [x] 全面废除冗余的业务中间继承层，全站业务 Handler 与中间件直接原生消费 `OmniPHP\Http\Context`（完全对齐 Go Gin 标准）
+- [x] 直接使用框架原生 `OmniPHP\WebSocket\Context` 与 `Broadcaster` 接管全双工事件载荷、用户会话与纯内存极速测试
 - [x] 前端网络层指数退避断线重连（Exponential Backoff with Jitter）与服务端超时僵尸连接自动回收扫描（`sweep`）
-- [x] 编写 PHPUnit 全链路自动化测试套件 (20/20 100% 绿灯全过，229 个断言)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (20/20 100% 绿灯全过，225 个断言)
 - [ ] 逐步移植核心玩法模块（试炼塔 `tower`、过关斩将 `pass_general`）
 
 ---

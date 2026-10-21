@@ -46,7 +46,6 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   │   ├── BattleEngine.php # Core simulation logic (ported from battle_model.php)
 │   │   ├── Hero.php         # Combat entity model
 │   │   └── Position.php     # 9-grid tactical positions (1-9) enum
-│   ├── Context.php          # Request context (attributes, input, query, headers)
 │   ├── Middleware/          # Middleware pipeline (aligned with smart-book)
 │   │   ├── MiddlewareInterface.php
 │   │   ├── CorsMiddleware.php             # Cross-origin and OPTIONS preflight
@@ -172,10 +171,10 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Main city infrastructure & imposition/levy system (`city`) with critical harvest multipliers and gold forced taxation
 - [x] Native WebSocket full-duplex gateway with live world chat, player authentication, and server-wide marquee broadcast
 - [x] Pure RFC 6455 opcode 0x9/0xA protocol-level ping/pong heartbeat standard aligned with `smart-book` (zero application payload overhead)
-- [x] Full alignment with `omniphp/framework` core HTTP `Context` (modeled after Go Gin) for request lifecycles & attributes
-- [x] Full-duplex `WsContext` model unifying WebSocket event lifecycles, player sessions, payload parsing, and headless unit testing
+- [x] Directly consume native `OmniPHP\Http\Context` (modeled after Go Gin) across all Handlers and Middlewares without redundant subclassing
+- [x] Directly consume native `OmniPHP\WebSocket\Context` and `Broadcaster` for full-duplex events, sessions, and headless unit testing
 - [x] Client network layer with exponential backoff auto-reconnect, jitter, and zombie connection sweeping (`sweep`)
-- [x] PHPUnit end-to-end integration test suite (20/20 100% passing, 229 assertions)
+- [x] PHPUnit end-to-end integration test suite (20/20 100% passing, 225 assertions)
 - [ ] Complete port of remaining legacy modules (`tower`, `pass_general`)
 
 ---

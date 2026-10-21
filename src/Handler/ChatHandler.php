@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler;
 
-use Hanjiang\Context;
+use OmniPHP\Http\Context;
 use Hanjiang\Database\DB;
 use Hanjiang\Database\Redis;
-use Hanjiang\WebSocket\Broadcaster;
+use OmniPHP\WebSocket\Broadcaster;
 
 final class ChatHandler
 {

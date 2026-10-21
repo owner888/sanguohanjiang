@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Middleware;
 
-use Hanjiang\Context;
+use OmniPHP\Http\Context;
 
 interface MiddlewareInterface
 {

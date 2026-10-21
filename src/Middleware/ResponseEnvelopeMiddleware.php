@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Middleware;
 
-use Hanjiang\Context;
+use OmniPHP\Http\Context;
 use Workerman\Protocols\Http\Response as WorkermanResponse;
 
 final class ResponseEnvelopeMiddleware implements MiddlewareInterface
