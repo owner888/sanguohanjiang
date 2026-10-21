@@ -52,6 +52,10 @@ use Hanjiang\Handler\SanctumHandler;
 use Hanjiang\Handler\CompeteHandler;
 use Hanjiang\Handler\CountrySacrificeHandler;
 use Hanjiang\Handler\ExpostulationHandler;
+use Hanjiang\Handler\BanquetHandler;
+use Hanjiang\Handler\DrinkHandler;
+use Hanjiang\Handler\DiceHandler;
+use Hanjiang\Handler\SacredtreeHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -123,6 +127,10 @@ final class GameApiTest extends TestCase
             'compete' => CompeteHandler::class,
             'countrysacrifice' => CountrySacrificeHandler::class,
             'expostulation' => ExpostulationHandler::class,
+            'banquet' => BanquetHandler::class,
+            'drink' => DrinkHandler::class,
+            'dice' => DiceHandler::class,
+            'sacredtree' => SacredtreeHandler::class,
         ]));
 
         self::$router = $router;
@@ -1360,5 +1368,60 @@ final class GameApiTest extends TestCase
         // 3. 重复采纳同一奏折拦截
         $dup = $this->request('expostulation', 'adopt', ['id' => 1]);
         $this->assertSame(0, $dup['status']);
+    }
+
+    public function testBanquetSystem(): void
+    {
+        // 1. 查看夜宴大厅
+        $res = $this->request('banquet', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['types']);
+
+        // 2. 举办主公家宴 (type: 1)
+        $action = $this->request('banquet', 'action', ['type' => 1]);
+        $this->assertSame(1, $action['status']);
+        $this->assertSame('主公家宴', $action['name']);
+        $this->assertGreaterThan(0, $action['add_act']);
+    }
+
+    public function testDrinkSystem(): void
+    {
+        // 1. 查看青梅煮酒
+        $res = $this->request('drink', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['wines']);
+
+        // 2. 畅饮陈年竹叶青 (type: 1)
+        $drink = $this->request('drink', 'go_drink', ['type' => 1]);
+        $this->assertSame(1, $drink['status']);
+        $this->assertSame('陈年竹叶青', $drink['wine_name']);
+        $this->assertGreaterThan(0, $drink['silver']);
+    }
+
+    public function testDiceSystem(): void
+    {
+        // 1. 查看神骰主界面
+        $res = $this->request('dice', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThanOrEqual(1, $res['left_times']);
+
+        // 2. 投掷骰子
+        $shake = $this->request('dice', 'shake_dice');
+        $this->assertSame(1, $shake['status']);
+        $this->assertCount(3, $shake['dices']);
+        $this->assertGreaterThan(0, $shake['silver']);
+    }
+
+    public function testSacredtreeSystem(): void
+    {
+        // 1. 查看聚宝神树
+        $res = $this->request('sacredtree', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThanOrEqual(1, $res['level']);
+
+        // 2. 给神树浇水摇钱
+        $water = $this->request('sacredtree', 'watering');
+        $this->assertSame(1, $water['status']);
+        $this->assertGreaterThan(0, $water['silver']);
     }
 }

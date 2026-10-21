@@ -163,6 +163,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=compete&m=index|action|get_reward`: Cross-server martial tournaments, tier promotions, and daily honor rewards
 - `c=countrysacrifice&m=index|action`: National ancestral altar sacrifices, nationwide buffs, and reputation blessings
 - `c=expostulation&m=index|adopt`: Court minister policy expostulations, imperial adoptions, and governance merits
+- `c=banquet&m=index|create_team|action`: Heroic nocturnal banquets, feast gatherings, stamina refills, and banquet announcements
+- `c=drink&m=index|go_drink`: Green plum wine hero deliberations, Dukang wine toasts, and soul fortunes
+- `c=dice&m=index|shake_dice`: Fortunate god dice shaking, triple leopard jackpots, and silver/gold rewards
+- `c=sacredtree&m=index|watering`: Money-growing sacred tree cultivation, canopy watering, and gold/silver harvests
 
 ---
 
@@ -214,7 +218,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge celebration (`first_recharge`), and maritime silk road (`overseastrade`)
 - [x] High-tier diversion mechanics: Bole stud farm (`studfarm`), rough jade gambling (`jadegamble`), tomb raiding maps (`treasuremap`), and weaponry workshop (`workshop`)
 - [x] Four Divine Beast Sanctums (`sanctum`), cross-server martial tournaments (`compete`), national altar sacrifices (`countrysacrifice`), and imperial court expostulations (`expostulation`)
-- [x] PHPUnit end-to-end integration test suite (53/53 100% passing, 782 assertions)
+- [x] Leisure & social festivity systems: Heroic banquets (`banquet`), plum wine deliberations (`drink`), celestial dice shaking (`dice`), and money sacred tree (`sacredtree`)
+- [x] PHPUnit end-to-end integration test suite (57/57 100% passing, 824 assertions)
 
 ---
 

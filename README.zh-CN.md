@@ -167,6 +167,10 @@
 - `c=compete&m=index|action|get_reward`：跨服群雄逐鹿比武大会、排位段位积分与每日论剑俸禄
 - `c=countrysacrifice&m=index|action`：国家宗庙九鼎太牢祭天大典、全国内阁攻击防御光环与声望庇护
 - `c=expostulation&m=index|adopt`：群臣治国诤言进谏（富国策/精兵策/安民策）、御笔朱批与治国功绩政绩折现银两
+- `c=banquet&m=index|create_team|action`：群英夜宴大摆筵席（主公家宴/诸侯豪宴/万寿盛宴）、宾主尽欢与巨额军令体力赠予
+- `c=drink&m=index|go_drink`：青梅煮酒论英雄、杜康千年佳酿畅饮对饮与将魂银两祥瑞
+- `c=dice&m=index|shake_dice`：逍遥神骰行大运、至尊豹子大顺子摇骰与金银暴击瓜分
+- `c=sacredtree&m=index|watering`：聚宝通天摇钱神树、灵泉灌溉浇水成长与金叶玉果元宝银饷掉落收割
 
 ---
 
@@ -218,7 +222,8 @@
 - [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充至尊神礼 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
 - [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)
 - [x] 战神殿与朝堂宏图系统打通：四象圣域神尊决战 (`sanctum`)、跨服群雄论剑 (`compete`)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (53/53 100% 绿灯全过，782 个断言)
+- [x] 休闲社交与交互狂欢系统全面贯通：群英夜宴大摆豪门宴席 (`banquet`)、青梅煮酒论英雄 (`drink`)、逍遥神骰行大运 (`dice`)、聚宝摇钱神树浇水摇金 (`sacredtree`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (57/57 100% 绿灯全过，824 个断言)
 
 ---
 

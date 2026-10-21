@@ -53,6 +53,10 @@ use Hanjiang\Handler\SanctumHandler;
 use Hanjiang\Handler\CompeteHandler;
 use Hanjiang\Handler\CountrySacrificeHandler;
 use Hanjiang\Handler\ExpostulationHandler;
+use Hanjiang\Handler\BanquetHandler;
+use Hanjiang\Handler\DrinkHandler;
+use Hanjiang\Handler\DiceHandler;
+use Hanjiang\Handler\SacredtreeHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -125,6 +129,10 @@ $router->use(new GameProtocolMiddleware([
     'compete' => CompeteHandler::class,
     'countrysacrifice' => CountrySacrificeHandler::class,
     'expostulation' => ExpostulationHandler::class,
+    'banquet' => BanquetHandler::class,
+    'drink' => DrinkHandler::class,
+    'dice' => DiceHandler::class,
+    'sacredtree' => SacredtreeHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {
