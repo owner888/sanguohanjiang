@@ -54,6 +54,7 @@ final class PackHandler
         $idx = 1;
         foreach ($items as $it) {
             $bonus = GeneralHandler::calculateEquipBonus($it);
+            $powerup = $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']);
             $list[$idx] = [
                 'id' => (int)$it['id'],
                 'equipid' => (int)$it['equipid'],
@@ -61,8 +62,12 @@ final class PackHandler
                 'type' => (int)$it['type'],
                 'level' => (int)$it['level'],
                 'quality' => (int)$it['quality'],
+                'needlevel' => 1,
+                'powerup' => $powerup,
+                'description' => "品质 {$it['quality']} 阶装备，增强战力 {$powerup}",
                 'saleprice' => (int)$it['saleprice'],
                 'number' => (int)$it['number'],
+                'full_num' => (int)$it['number'],
                 'gid' => (int)$it['generalid'],
                 'is_equipped' => (int)$it['generalid'] > 0 ? 1 : 0,
                 'bonus' => $bonus,
@@ -133,7 +138,8 @@ final class PackHandler
             'status' => 1,
             'message' => '出售成功',
             'sale_price' => $salePrice,
-            'silver' => $newSilver,
+            'silver' => $salePrice,
+            'all_silver' => $newSilver,
         ];
     }
 }

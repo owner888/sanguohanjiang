@@ -155,7 +155,9 @@ final class MatrixHandler
             'status' => 1,
             'now_mid' => $nowMid,
             'list' => $list,
+            'matrix' => $list,
             'generals' => $generalList,
+            'general' => $generalList,
             'message' => 'ok',
         ];
     }

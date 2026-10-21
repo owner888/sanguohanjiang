@@ -75,6 +75,7 @@ final class StrengthenHandler
             'rate' => 100, // 强化成功率 100%
             'cd' => 0,
             'list' => $list,
+            'info' => $list[1] ?? [],
             'message' => 'ok',
         ];
     }
@@ -137,6 +138,9 @@ final class StrengthenHandler
             'level' => $newLevel,
             'cost_silver' => $costSilver,
             'silver' => $remainSilver,
+            'gold' => 0,
+            'rate' => 100,
+            'power' => $newBonus['attack'] ?: ($newBonus['defense'] ?: $newBonus['hp']),
             'bonus' => $newBonus,
             'cd' => 0,
         ];

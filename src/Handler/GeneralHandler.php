@@ -204,9 +204,26 @@ final class GeneralHandler
             $idx++;
         }
 
+        $availableEquipments = [];
+        foreach ($allEquips as $eq) {
+            $bonus = self::calculateEquipBonus($eq);
+            $availableEquipments[] = array_merge($eq, [
+                'id' => (int)$eq['id'],
+                'equipid' => (int)$eq['equipid'],
+                'name' => $eq['name'],
+                'type' => (int)$eq['type'],
+                'level' => (int)$eq['level'],
+                'quality' => (int)$eq['quality'],
+                'gid' => (int)$eq['generalid'],
+                'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
+                'bonus' => $bonus,
+            ]);
+        }
+
         return [
             'status' => 1,
             'list' => $list,
+            'equipments' => $availableEquipments,
             'message' => 'ok',
         ];
     }
@@ -264,6 +281,7 @@ final class GeneralHandler
                 'equip' => $equipSlots,
                 'stats' => $stats,
             ],
+            'equipments' => $equipSlots,
         ];
     }
 

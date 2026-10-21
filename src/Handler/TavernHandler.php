@@ -91,6 +91,7 @@ final class TavernHandler
         return [
             'status' => 1,
             'list' => $list,
+            'jade' => 0,
             'message' => 'ok',
         ];
     }
@@ -176,6 +177,8 @@ final class TavernHandler
             'generalid' => $gid,
             'name' => $heroConfig['name'],
             'cost_silver' => $costSilver,
+            'price' => $costSilver,
+            'type' => 1,
             'silver' => $remainSilver,
         ];
     }
