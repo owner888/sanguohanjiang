@@ -23,7 +23,6 @@ final class WebSocketHandler
             self::$sweepTimerId = null;
         }
 
-        // 仅在常驻守护环境下挂载 Timer
         if (class_exists(Timer::class)) {
             self::$sweepTimerId = Timer::add($sweepInterval, static function (): void {
                 Broadcaster::sweep();
@@ -70,38 +69,33 @@ final class WebSocketHandler
     {
         self::touch($connection);
 
-        $payload = json_decode($data, true);
-        if (!is_array($payload)) {
-            $connection->send(json_encode([
-                'type' => 'error',
-                'message' => '无效的 JSON 格式',
-            ], JSON_UNESCAPED_UNICODE));
-            return;
-        }
-
-        $action = (string)($payload['action'] ?? $payload['type'] ?? '');
-
-        match ($action) {
-            'auth' => self::handleAuth($connection, $payload),
-
-            'chat' => self::handleChat($connection, $payload),
-
-            'marquee' => self::handleMarquee($connection, $payload),
-
-            default => $connection->send(json_encode([
-                'type' => 'unknown_action',
-                'action' => $action,
-            ], JSON_UNESCAPED_UNICODE)),
-        };
+        $ctx = new WsContext($connection, $data);
+        self::dispatch($ctx);
     }
 
     /**
-     * @param array<string, mixed> $payload
+     * 基于 WsContext 的全双工事件分发流水线 (完全对齐 Handler + Context 架构)
      */
-    private static function handleAuth(TcpConnection $connection, array $payload): void
+    public static function dispatch(WsContext $ctx): void
     {
-        $token = (string)($payload['token'] ?? '');
-        $uid = (int)($payload['uid'] ?? 0);
+        $action = $ctx->action();
+        if ($action === '') {
+            $ctx->error('未指定事件动作 action');
+            return;
+        }
+
+        match ($action) {
+            'auth' => self::handleAuth($ctx),
+            'chat' => self::handleChat($ctx),
+            'marquee' => self::handleMarquee($ctx),
+            default => $ctx->error("未知的事件类型: {$action}", 404),
+        };
+    }
+
+    public static function handleAuth(WsContext $ctx): void
+    {
+        $token = (string)$ctx->input('token', '');
+        $uid = (int)$ctx->input('uid', 0);
 
         if ($token !== '') {
             $session = Redis::getJson('token:' . $token);
@@ -111,40 +105,42 @@ final class WebSocketHandler
         }
 
         if ($uid <= 0) {
-            $connection->send(json_encode([
-                'type' => 'auth_fail',
+            $ctx->emit('auth_fail', [
                 'message' => '鉴权失败，Token 无效或已过期',
-            ], JSON_UNESCAPED_UNICODE));
+            ]);
             return;
         }
 
-        Broadcaster::bindUid($connection, $uid);
+        $ctx->bindUid($uid);
 
-        $member = DB::table('member')->where('uid', $uid)->first();
+        $member = $ctx->member();
         $nickname = $member['nickname'] ?? ('主公' . $uid);
 
-        $connection->send(json_encode([
-            'type' => 'auth_success',
+        $ctx->emit('auth_success', [
             'uid' => $uid,
             'nickname' => $nickname,
             'message' => "欢迎上线，{$nickname}！",
-        ], JSON_UNESCAPED_UNICODE));
+        ]);
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private static function handleChat(TcpConnection $connection, array $payload): void
+    public static function handleChat(WsContext $ctx): void
     {
-        $uid = (int)($payload['uid'] ?? 0);
-        $name = (string)($payload['name'] ?? '无名主公');
-        $msg = trim((string)($payload['message'] ?? ''));
+        $uid = $ctx->uid() ?? (int)$ctx->input('uid', 0);
+        $name = (string)$ctx->input('name', '');
+        if ($name === '' && $ctx->member() !== null) {
+            $name = (string)($ctx->member()['nickname'] ?? ('主公' . $uid));
+        }
+        if ($name === '') {
+            $name = '无名主公';
+        }
 
+        $msg = trim((string)$ctx->input('message', ''));
         if ($msg === '') {
+            $ctx->error('聊天内容不能为空');
             return;
         }
 
-        Broadcaster::broadcast('chat_message', [
+        $ctx->broadcast('chat_message', [
             'uid' => $uid,
             'name' => $name,
             'message' => htmlspecialchars($msg),
@@ -152,12 +148,9 @@ final class WebSocketHandler
         ]);
     }
 
-    /**
-     * @param array<string, mixed> $payload
-     */
-    private static function handleMarquee(TcpConnection $connection, array $payload): void
+    public static function handleMarquee(WsContext $ctx): void
     {
-        $content = trim((string)($payload['content'] ?? $payload['message'] ?? ''));
+        $content = trim((string)$ctx->input('content', $ctx->input('message', '')));
         if ($content !== '') {
             Broadcaster::notifyMarquee($content);
         }

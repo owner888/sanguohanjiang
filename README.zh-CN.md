@@ -177,8 +177,9 @@
 - [x] 原生 WebSocket 全双工长连接网关，支持鉴权、实时世界聊天与全服跑马灯大喇叭广播
 - [x] 完全对齐 `smart-book` 标准的纯粹 RFC 6455 协议级心跳机制（0x9/0xA 控制帧 ping/pong，杜绝应用层冗余载荷开销）
 - [x] 正式引入并继承 `omniphp/framework` 官方核心 HTTP `Context`（完全对齐 Go Gin 设计模式），统一请求上下文生命周期与属性封装
+- [x] 构建 WebSocket 全双工专属 `WsContext` 上下文模型，内聚报文载荷、玩家会话、错误回发与全服广播，提供免建立真实 Socket 的纯内存毫秒级测试能力
 - [x] 前端网络层指数退避断线重连（Exponential Backoff with Jitter）与服务端超时僵尸连接自动回收扫描（`sweep`）
-- [x] 编写 PHPUnit 全链路自动化测试套件 (20/20 100% 绿灯全过，223 个断言)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (20/20 100% 绿灯全过，229 个断言)
 - [ ] 逐步移植核心玩法模块（试炼塔 `tower`、过关斩将 `pass_general`）
 
 ---

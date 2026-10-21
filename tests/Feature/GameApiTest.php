@@ -587,5 +587,25 @@ final class GameApiTest extends TestCase
         $this->assertSame('bar', $ctx->input('foo'));
         $ctx->set('user_role', 'admin');
         $this->assertSame('admin', $ctx->get('user_role'));
+
+        // 9. 验证 WebSocket 全双工 WsContext 抽象与事件分发 (解耦底层的极速纯内存单测能力)
+        $wsCtx = \Hanjiang\WebSocket\WsContext::mock([
+            'action' => 'chat',
+            'message' => '来自 WsContext 的测试战报！',
+        ], uid: self::$uid);
+
+        $this->assertSame('chat', $wsCtx->action());
+        $this->assertSame('来自 WsContext 的测试战报！', $wsCtx->input('message'));
+        $this->assertSame(self::$uid, $wsCtx->uid());
+        $this->assertNotNull($wsCtx->member());
+
+        // 执行分发
+        \Hanjiang\WebSocket\WebSocketHandler::dispatch($wsCtx);
+
+        // 验证 WsContext 错误响应机制
+        $errCtx = \Hanjiang\WebSocket\WsContext::mock(['action' => 'chat', 'message' => '']);
+        \Hanjiang\WebSocket\WebSocketHandler::dispatch($errCtx);
+        $this->assertNotEmpty($errCtx->sentMessages);
+        $this->assertStringContainsString('聊天内容不能为空', $errCtx->sentMessages[0]);
     }
 }
