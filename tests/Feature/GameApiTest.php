@@ -580,5 +580,12 @@ final class GameApiTest extends TestCase
         $content = (string)file_get_contents($clientScript);
         $this->assertStringContainsString('scheduleReconnect', $content);
         $this->assertStringContainsString('RFC 6455', $content);
+
+        // 8. 验证 Context 继承自 OmniPHP 框架原生 Context (类似 Go Gin 设计模式)
+        $ctx = \Hanjiang\Context::mock(['foo' => 'bar']);
+        $this->assertInstanceOf(\OmniPHP\Http\Context::class, $ctx);
+        $this->assertSame('bar', $ctx->input('foo'));
+        $ctx->set('user_role', 'admin');
+        $this->assertSame('admin', $ctx->get('user_role'));
     }
 }

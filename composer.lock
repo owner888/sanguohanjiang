@@ -4,8 +4,68 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "40938572fcfd0d640da86310556cb2fe",
+    "content-hash": "9d7891b23303985c78d6637b476c145e",
     "packages": [
+        {
+            "name": "omniphp/framework",
+            "version": "v0.3.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/owner888/omniphp.git",
+                "reference": "c129ad3c8b2b0f447c4ccffd748ab4696d31f515"
+            },
+            "dist": {
+                "type": "zip",
+                "url": "https://api.github.com/repos/owner888/omniphp/zipball/c129ad3c8b2b0f447c4ccffd748ab4696d31f515",
+                "reference": "c129ad3c8b2b0f447c4ccffd748ab4696d31f515",
+                "shasum": ""
+            },
+            "require": {
+                "ext-curl": "*",
+                "ext-json": "*",
+                "ext-mbstring": "*",
+                "ext-pdo": "*",
+                "php": ">=8.4",
+                "workerman/workerman": "^5.1"
+            },
+            "suggest": {
+                "ext-redis": "Required for the Redis cache driver, the Redis Stream queue and the rate-limit middleware"
+            },
+            "type": "library",
+            "autoload": {
+                "psr-4": {
+                    "OmniPHP\\": "src/"
+                }
+            },
+            "notification-url": "https://packagist.org/downloads/",
+            "license": [
+                "MIT"
+            ],
+            "authors": [
+                {
+                    "name": "owner888",
+                    "homepage": "https://github.com/owner888"
+                }
+            ],
+            "description": "OmniPHP — The universal PHP framework. Lightweight, Workerman-based: HTTP router & middleware, query builder & migrations, Redis Stream queue, template engine, cache, i18n and structured logging.",
+            "homepage": "https://github.com/owner888/omniphp",
+            "keywords": [
+                "async",
+                "framework",
+                "http",
+                "orm",
+                "queue",
+                "redis",
+                "router",
+                "template",
+                "workerman"
+            ],
+            "support": {
+                "issues": "https://github.com/owner888/omniphp/issues",
+                "source": "https://github.com/owner888/omniphp"
+            },
+            "time": "2026-09-30T08:52:33+00:00"
+        },
         {
             "name": "workerman/coroutine",
             "version": "v1.1.6",

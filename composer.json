@@ -6,7 +6,8 @@
     "license": "MIT",
     "require": {
         "php": ">=8.3",
-        "workerman/workerman": "^5.1"
+        "workerman/workerman": "^5.1",
+        "omniphp/framework": "^0.3"
     },
     "autoload": {
         "psr-4": {
