@@ -56,6 +56,10 @@ use Hanjiang\Handler\BanquetHandler;
 use Hanjiang\Handler\DrinkHandler;
 use Hanjiang\Handler\DiceHandler;
 use Hanjiang\Handler\SacredtreeHandler;
+use Hanjiang\Handler\FlopHandler;
+use Hanjiang\Handler\ChallengeHandler;
+use Hanjiang\Handler\EliteHandler;
+use Hanjiang\Handler\MusterHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -131,6 +135,10 @@ final class GameApiTest extends TestCase
             'drink' => DrinkHandler::class,
             'dice' => DiceHandler::class,
             'sacredtree' => SacredtreeHandler::class,
+            'flop' => FlopHandler::class,
+            'challenge' => ChallengeHandler::class,
+            'elite' => EliteHandler::class,
+            'muster' => MusterHandler::class,
         ]));
 
         self::$router = $router;
@@ -1423,5 +1431,74 @@ final class GameApiTest extends TestCase
         $water = $this->request('sacredtree', 'watering');
         $this->assertSame(1, $water['status']);
         $this->assertGreaterThan(0, $water['silver']);
+    }
+
+    public function testFlopSystem(): void
+    {
+        // 1. 查看翻牌界面
+        $res = $this->request('flop', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(9, $res['cards']);
+
+        // 2. 翻开第 1 张卡牌
+        $turn = $this->request('flop', 'turnover', ['id' => 1]);
+        $this->assertSame(1, $turn['status']);
+        $this->assertGreaterThan(0, $turn['silver']);
+
+        // 3. 重复翻同一张卡牌被拦截
+        $dup = $this->request('flop', 'turnover', ['id' => 1]);
+        $this->assertSame(0, $dup['status']);
+    }
+
+    public function testChallengeSystem(): void
+    {
+        // 1. 查看擂台
+        $res = $this->request('challenge', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['masters']);
+
+        // 2. 挑战擂主 1
+        $pk = $this->request('challenge', 'action', ['id' => 1]);
+        $this->assertSame(1, $pk['status']);
+        $this->assertSame(1, $pk['win']);
+        $this->assertGreaterThan(0, $pk['silver']);
+    }
+
+    public function testEliteSystem(): void
+    {
+        // 1. 查看精英副本
+        $res = $this->request('elite', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['maps']);
+
+        // 2. 挑战精英大兴山
+        $battle = $this->request('elite', 'action', ['id' => 1]);
+        $this->assertSame(1, $battle['status']);
+        $this->assertSame(1, $battle['win']);
+        $this->assertGreaterThan(0, $battle['silver']);
+    }
+
+    public function testMusterSystem(): void
+    {
+        // 1. 查看点将台名册
+        $res = $this->request('muster', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 挑选一个未出征的后备武将进行退役
+        $freeGid = 0;
+        foreach ($res['list'] as $g) {
+            if ($g['pos'] === 0 && $g['id'] > 1) {
+                $freeGid = (int)$g['id'];
+                break;
+            }
+        }
+
+        if ($freeGid > 0) {
+            // 2. 遣散该武将退役 (软删除并领安家费)
+            $sale = $this->request('muster', 'sale_general', ['id' => $freeGid]);
+            $this->assertSame(1, $sale['status']);
+            $this->assertGreaterThan(0, $sale['severance_pay']);
+        }
     }
 }

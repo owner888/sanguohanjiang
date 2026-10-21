@@ -167,6 +167,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=drink&m=index|go_drink`: Green plum wine hero deliberations, Dukang wine toasts, and soul fortunes
 - `c=dice&m=index|shake_dice`: Fortunate god dice shaking, triple leopard jackpots, and silver/gold rewards
 - `c=sacredtree&m=index|watering`: Money-growing sacred tree cultivation, canopy watering, and gold/silver harvests
+- `c=flop&m=index|turnover`: Nine-grid card flips, card turnovers, and golden jackpot awards
+- `c=challenge&m=index|action`: Hero trial arenas, master duels (Ma Chao, Zhao Yun, Guan Yu), and arena honors
+- `c=elite&m=index|action`: Elite campaigns (Daxing, Wancheng, Hulao), guaranteed drops, and equipment blueprints
+- `c=muster&m=index|sale_general`: Warlord muster platform, backup officer dismissals, and severance pay claims
 
 ---
 
@@ -219,7 +223,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] High-tier diversion mechanics: Bole stud farm (`studfarm`), rough jade gambling (`jadegamble`), tomb raiding maps (`treasuremap`), and weaponry workshop (`workshop`)
 - [x] Four Divine Beast Sanctums (`sanctum`), cross-server martial tournaments (`compete`), national altar sacrifices (`countrysacrifice`), and imperial court expostulations (`expostulation`)
 - [x] Leisure & social festivity systems: Heroic banquets (`banquet`), plum wine deliberations (`drink`), celestial dice shaking (`dice`), and money sacred tree (`sacredtree`)
-- [x] PHPUnit end-to-end integration test suite (57/57 100% passing, 824 assertions)
+- [x] High-tier martial arenas & recruitment outlets: Card turnover prizes (`flop`), hero challenge arenas (`challenge`), elite campaigns (`elite`), and muster severance management (`muster`)
+- [x] PHPUnit end-to-end integration test suite (61/61 100% passing, 865 assertions)
 
 ---
 

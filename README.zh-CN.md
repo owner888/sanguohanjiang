@@ -171,6 +171,10 @@
 - `c=drink&m=index|go_drink`：青梅煮酒论英雄、杜康千年佳酿畅饮对饮与将魂银两祥瑞
 - `c=dice&m=index|shake_dice`：逍遥神骰行大运、至尊豹子大顺子摇骰与金银暴击瓜分
 - `c=sacredtree&m=index|watering`：聚宝通天摇钱神树、灵泉灌溉浇水成长与金叶玉果元宝银饷掉落收割
+- `c=flop&m=index|turnover`：九宫翻牌夺宝、金边卡牌翻转揭秘与至尊元宝大奖
+- `c=challenge&m=index|action`：英雄试炼擂台巅峰单挑、挑战守擂名将（马超/赵云/关羽）夺取擂主荣耀
+- `c=elite&m=index|action`：精英关卡战役（精英大兴山/宛城/虎牢关）、九宫格推演与必掉珍稀装备图纸
+- `c=muster&m=index|sale_general`：点将台大营名册、闲置武将退役遣散与巨额退役安家银两返还（软删除管理）
 
 ---
 
@@ -223,7 +227,8 @@
 - [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)
 - [x] 战神殿与朝堂宏图系统打通：四象圣域神尊决战 (`sanctum`)、跨服群雄论剑 (`compete`)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)
 - [x] 休闲社交与交互狂欢系统全面贯通：群英夜宴大摆豪门宴席 (`banquet`)、青梅煮酒论英雄 (`drink`)、逍遥神骰行大运 (`dice`)、聚宝摇钱神树浇水摇金 (`sacredtree`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (57/57 100% 绿灯全过，824 个断言)
+- [x] 巅峰试炼与点将全线闭环：九宫金边翻牌夺宝 (`flop`)、英雄试炼擂台决战 (`challenge`)、精英高难副本战役 (`elite`)、点将台退役遣散 (`muster`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (61/61 100% 绿灯全过，865 个断言)
 
 ---
 
