@@ -4,15 +4,21 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "eb21c14d9c4a1ca808477b7e1f84d182",
+    "content-hash": "6c64ce7ac4cb4b6cfc138004b1a64c2e",
     "packages": [
         {
             "name": "omniphp/framework",
-            "version": "dev-main",
+            "version": "v0.4.0",
+            "source": {
+                "type": "git",
+                "url": "https://github.com/owner888/omniphp.git",
+                "reference": "0dba81e1c6f9d990dd59a301d0da048a8bf8f4b8"
+            },
             "dist": {
-                "type": "path",
-                "url": "/Users/kaka/Development/owner/omniphp",
-                "reference": "4077a313933979456bdcf4c58f400a2c448f250f"
+                "type": "zip",
+                "url": "https://api.github.com/repos/owner888/omniphp/zipball/0dba81e1c6f9d990dd59a301d0da048a8bf8f4b8",
+                "reference": "0dba81e1c6f9d990dd59a301d0da048a8bf8f4b8",
+                "shasum": ""
             },
             "require": {
                 "ext-curl": "*",
@@ -70,9 +76,7 @@
                 "issues": "https://github.com/owner888/omniphp/issues",
                 "source": "https://github.com/owner888/omniphp"
             },
-            "transport-options": {
-                "relative": false
-            }
+            "time": "2026-10-21T06:38:57+00:00"
         },
         {
             "name": "workerman/coroutine",
