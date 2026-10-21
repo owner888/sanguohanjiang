@@ -6,10 +6,105 @@
  * 2. 指数退避智能断线重连 (Exponential Backoff with Random Jitter)
  * 3. 掉线重连后无感 Token 重新鉴权 (Auto Re-Auth)
  * 4. 全服跑马灯大喇叭与实时世界聊天事件分发器
+ * 5. 内置全服金色流光大喇叭跑马灯横幅渲染引擎
  */
 
 (function (window) {
     'use strict';
+
+    class MarqueeUI {
+        constructor() {
+            this.container = null;
+            this.textElement = null;
+            this.queue = [];
+            this.isPlaying = false;
+        }
+
+        initDOM() {
+            if (this.container || typeof document === 'undefined') return;
+
+            const style = document.createElement('style');
+            style.innerHTML = `
+                #hj_marquee_banner {
+                    position: fixed;
+                    top: 12px;
+                    left: 50%;
+                    transform: translateX(-50%);
+                    width: 80%;
+                    max-width: 820px;
+                    height: 38px;
+                    line-height: 38px;
+                    background: linear-gradient(90deg, rgba(20,20,20,0) 0%, rgba(40,15,5,0.88) 15%, rgba(60,25,10,0.92) 50%, rgba(40,15,5,0.88) 85%, rgba(20,20,20,0) 100%);
+                    border-top: 1px solid rgba(255,215,0,0.4);
+                    border-bottom: 1px solid rgba(255,215,0,0.4);
+                    box-shadow: 0 4px 16px rgba(0,0,0,0.6), 0 0 12px rgba(255,215,0,0.25);
+                    border-radius: 4px;
+                    overflow: hidden;
+                    z-index: 999999;
+                    pointer-events: none;
+                    display: none;
+                }
+                #hj_marquee_text {
+                    display: inline-block;
+                    white-space: nowrap;
+                    font-size: 16px;
+                    font-weight: bold;
+                    color: #ffd700;
+                    text-shadow: 0 0 6px rgba(255,215,0,0.8), 0 1px 3px rgba(0,0,0,0.9);
+                    padding-left: 100%;
+                    will-change: transform;
+                }
+                @keyframes hj_marquee_scroll {
+                    0% { transform: translateX(0); }
+                    100% { transform: translateX(-100%); }
+                }
+            `;
+            document.head.appendChild(style);
+
+            this.container = document.createElement('div');
+            this.container.id = 'hj_marquee_banner';
+
+            this.textElement = document.createElement('div');
+            this.textElement.id = 'hj_marquee_text';
+
+            this.container.appendChild(this.textElement);
+            document.body.appendChild(this.container);
+        }
+
+        enqueue(text) {
+            if (!text) return;
+            this.initDOM();
+            this.queue.push(text);
+            if (!this.isPlaying) {
+                this.playNext();
+            }
+        }
+
+        playNext() {
+            if (this.queue.length === 0) {
+                this.isPlaying = false;
+                if (this.container) {
+                    this.container.style.display = 'none';
+                }
+                return;
+            }
+
+            this.isPlaying = true;
+            const content = this.queue.shift();
+            if (this.container && this.textElement) {
+                this.container.style.display = 'block';
+                this.textElement.textContent = '📢 ' + content;
+
+                // 动态计算滚动速度 (字数越多适当提速)
+                const duration = Math.max(7, Math.min(16, content.length * 0.28));
+                this.textElement.style.animation = `hj_marquee_scroll ${duration}s linear infinite`;
+
+                setTimeout(() => {
+                    this.playNext();
+                }, duration * 1000);
+            }
+        }
+    }
 
     class GameWSClient {
         constructor() {
@@ -28,6 +123,9 @@
 
             // 事件订阅字典
             this.listeners = {};
+
+            // 跑马灯渲染器
+            this.marqueeUI = new MarqueeUI();
 
             this.initDefaultUrl();
         }
@@ -84,6 +182,12 @@
             this.ws.onmessage = (event) => {
                 try {
                     const msg = JSON.parse(event.data);
+
+                    // 全服跑马灯大喇叭事件自动触发 UI 滚动
+                    if (msg.type === 'marquee' && msg.data) {
+                        const content = msg.data.content || msg.data.message || '';
+                        this.marqueeUI.enqueue(content);
+                    }
 
                     // 事件分发
                     if (msg.type) {

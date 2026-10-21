@@ -153,6 +153,8 @@
 - `c=gem&m=index|adron|pick_off|merge_gem`：神装宝石孔位镶嵌、宝石安全拆卸与4合1宝石熔炼进阶升级
 - `c=heaven&m=index|pk|mop_up`：天命观星二十八星宿点亮、星盘守护神决战与一键观星扫荡
 - `c=worldboss&m=index|powerup|battle|reward`：全服世界 BOSS 极·魔王董卓集结讨伐战、士气鼓舞伤害加成、全服伤害榜与功勋宝箱领奖
+- `c=siege&m=index|battle_prepare|action|get_reward`：攻城掠地天下名城占领（洛阳/长安/建业/成都/襄阳/濮阳）、城池决战与每日封邑岁贡分红
+- `c=gvg&m=index|betting|sync_info`：军团跨服 GVG 巅峰争霸赛对阵树、冠军押注竞猜与胜利分红结算
 
 ---
 
@@ -199,9 +201,9 @@
 - [x] 原版经典深度养成与宏观格局重现：三国国家阵营格局 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
 - [x] 全面打通前端全量高频日常交互系统：每日签到福利 (`dailysign`)、VIP 特权俸禄与晋级礼包 (`vip`)、系统信箱与飞鸽传书 (`message`)、好友社交系统 (`friend`)、银矿占领挂机采矿 (`mine`)
 - [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、天命观星突破 (`heaven`)、全服世界 BOSS 董卓战 (`worldboss`)
-- [x] 智能协议平滑降级引擎与 `OmniPHP\Logger` 告警遥测追踪（杜绝前端任何白屏卡死，全自动日志捕获待移植动作）
-- [x] 数据库表结构全面规范化：全量表接入 `created_at`、`updated_at (ON UPDATE CURRENT_TIMESTAMP)` 数据库自动维护与 `deleted_at` 软删除防御体系
-- [x] 编写 PHPUnit 全链路自动化测试套件 (38/38 100% 绿灯全过，593 个断言)
+- [x] 军团攻城掠地城池战 (`siege`)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)、十六历史战役全景数值大字典 (`GameMasterData`)
+- [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
+- [x] 编写 PHPUnit 全链路自动化测试套件 (41/41 100% 绿灯全过，625 个断言)
 
 ---
 

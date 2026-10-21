@@ -149,6 +149,8 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=gem&m=index|adron|pick_off|merge_gem`: Divine gear gem socketing, unsocketing, and 4-to-1 gem synthesis fusion
 - `c=heaven&m=index|pk|mop_up`: Constellation stargazing, celestial guardian boss battles, and stargazing sweeps
 - `c=worldboss&m=index|powerup|battle|reward`: Server-wide Dong Zhuo World Boss crusade, morale cheers, DPS rankings, and spoils chests
+- `c=siege&m=index|battle_prepare|action|get_reward`: City siege warfare, territory conquest (Luoyang, Chang'an, Puyang), and daily fief tributes
+- `c=gvg&m=index|betting|sync_info`: Guild vs Guild (GVG) cross-server tournament brackets, championship betting, and victory dividends
 
 ---
 
@@ -195,9 +197,9 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Three Kingdoms nation faction system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
 - [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and server-wide Dong Zhuo World Boss crusade (`worldboss`)
-- [x] Smart protocol graceful fallback engine with `OmniPHP\Logger::warning` real-time missing-endpoint telemetry (zero client crashes or white screens)
-- [x] Database-level automatic timestamps (`created_at`, `updated_at` ON UPDATE CURRENT_TIMESTAMP) and soft deletes (`deleted_at`) across all tables without manual app-layer intervention
-- [x] PHPUnit end-to-end integration test suite (38/38 100% passing, 593 assertions)
+- [x] Legion territorial siege warfare (`siege`), GVG cross-server championship tournament betting (`gvg`), and 16-chapter campaign static master repository (`GameMasterData`)
+- [x] Built-in golden flowing marquee banner UI renderer in `ws_client.js` with hardware-accelerated broadcast animations
+- [x] PHPUnit end-to-end integration test suite (41/41 100% passing, 625 assertions)
 
 ---
 

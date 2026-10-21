@@ -39,6 +39,8 @@ use Hanjiang\Handler\MountHandler;
 use Hanjiang\Handler\GemHandler;
 use Hanjiang\Handler\HeavenHandler;
 use Hanjiang\Handler\WorldBossHandler;
+use Hanjiang\Handler\SiegeHandler;
+use Hanjiang\Handler\GvgHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -97,6 +99,8 @@ $router->use(new GameProtocolMiddleware([
     'gem' => GemHandler::class,
     'heaven' => HeavenHandler::class,
     'worldboss' => WorldBossHandler::class,
+    'siege' => SiegeHandler::class,
+    'gvg' => GvgHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

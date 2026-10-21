@@ -38,6 +38,8 @@ use Hanjiang\Handler\MountHandler;
 use Hanjiang\Handler\GemHandler;
 use Hanjiang\Handler\HeavenHandler;
 use Hanjiang\Handler\WorldBossHandler;
+use Hanjiang\Handler\SiegeHandler;
+use Hanjiang\Handler\GvgHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -95,6 +97,8 @@ final class GameApiTest extends TestCase
             'gem' => GemHandler::class,
             'heaven' => HeavenHandler::class,
             'worldboss' => WorldBossHandler::class,
+            'siege' => SiegeHandler::class,
+            'gvg' => GvgHandler::class,
         ]));
 
         self::$router = $router;
@@ -1069,5 +1073,55 @@ final class GameApiTest extends TestCase
         \Hanjiang\Handler\MemberHandler::addCurrency(self::$uid, silver: 5000);
         $member = \OmniPHP\Database\DB::table('member')->where('uid', self::$uid)->first();
         $this->assertGreaterThan(5000, (int)$member['silver']);
+    }
+
+    public function testSiegeSystem(): void
+    {
+        // 1. 查看名城列表
+        $res = $this->request('siege', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(6, $res['list']);
+
+        // 2. 攻打并占领濮阳城 (id: 6)
+        $action = $this->request('siege', 'action', ['city_id' => 6]);
+        $this->assertSame(1, $action['status']);
+        $this->assertSame(1, $action['win']);
+        $this->assertSame('中原·濮阳', $action['city_name']);
+
+        // 3. 领取已占领城池的每日岁贡
+        $reward = $this->request('siege', 'get_reward');
+        $this->assertSame(1, $reward['status']);
+        $this->assertGreaterThan(0, $reward['silver']);
+        $this->assertGreaterThan(0, $reward['gold']);
+    }
+
+    public function testGvgSystem(): void
+    {
+        // 1. 查看跨服 GVG 对阵树
+        $res = $this->request('gvg', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['teams']);
+
+        // 2. 押注竞猜天命无双军团夺冠
+        $bet = $this->request('gvg', 'betting', ['team_id' => 1, 'amount' => 5000]);
+        $this->assertSame(1, $bet['status']);
+        $this->assertSame(5000, $bet['bet_amount']);
+
+        // 3. 重复押注拦截
+        $dup = $this->request('gvg', 'betting', ['team_id' => 2, 'amount' => 5000]);
+        $this->assertSame(0, $dup['status']);
+    }
+
+    public function testGameMasterData(): void
+    {
+        // 验证 16 大历史战役章节数据完备
+        $this->assertCount(16, \Hanjiang\Battle\GameMasterData::CHAPTERS);
+        $redCliff = \Hanjiang\Battle\GameMasterData::getChapter(9);
+        $this->assertNotNull($redCliff);
+        $this->assertSame('赤壁之战', $redCliff['name']);
+
+        // 验证原版神兵利器名剑宝甲
+        $this->assertArrayHasKey(101, \Hanjiang\Battle\GameMasterData::ARTIFACTS);
+        $this->assertSame('青龙偃月刀', \Hanjiang\Battle\GameMasterData::ARTIFACTS[101]['name']);
     }
 }
