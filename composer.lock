@@ -8,16 +8,16 @@
     "packages": [
         {
             "name": "omniphp/framework",
-            "version": "v0.5.4",
+            "version": "v0.5.5",
             "source": {
                 "type": "git",
-                "url": "https://github.com/owner888/omniphp.git",
-                "reference": "1690fe8a25ba9314bd4bcf07854541bd391ba652"
+                "url": "git@github.com:owner888/omniphp.git",
+                "reference": "34c848a8bac23cd897b66be44421f2857954010a"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/owner888/omniphp/zipball/1690fe8a25ba9314bd4bcf07854541bd391ba652",
-                "reference": "1690fe8a25ba9314bd4bcf07854541bd391ba652",
+                "url": "https://api.github.com/repos/owner888/omniphp/zipball/34c848a8bac23cd897b66be44421f2857954010a",
+                "reference": "34c848a8bac23cd897b66be44421f2857954010a",
                 "shasum": ""
             },
             "require": {
@@ -76,7 +76,7 @@
                 "issues": "https://github.com/owner888/omniphp/issues",
                 "source": "https://github.com/owner888/omniphp"
             },
-            "time": "2026-10-21T08:20:19+00:00"
+            "time": "2026-10-21T08:43:21+00:00"
         },
         {
             "name": "workerman/coroutine",
