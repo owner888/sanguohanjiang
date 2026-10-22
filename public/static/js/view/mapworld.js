@@ -599,7 +599,7 @@
                 dom_page.append(html);
 
                 // 打张梁失败
-                if (xGame.guide == false && player.info.missionlevel == 1 && player.info.missionstage == 2 && res.list[20].openstatus == 1 && res.list[20].status == 0) {
+                if (xGame.guide == false && player.info.missionlevel == 1 && player.info.missionstage == 2 && res.list && res.list[20] && res.list[20].openstatus == 1 && res.list[20].status == 0) {
                     xGame.xsSet(player.info.uid + 'gozhangliang', 1, true);
                 }
                 
@@ -623,13 +623,14 @@
 
                 $('#mapworld_page').show();
                 xGame.iscrollRefresh();
+                $('#worldloading').removeClass('black').hide();
 
                 /* 处理显示上下关卡 */
                 if (!xGame.xsGet(player.info.uid + 'guide_hide_page', true)) {
                     that.displayGuanqiaPage(res.next_status);
                 }
                 //显示当前位置
-                if (map_ini['shili'][missionlevel][missionstage] && map_ini['shili'][missionlevel][missionstage].name) {
+                if (map_ini['shili'] && map_ini['shili'][missionlevel] && map_ini['shili'][missionlevel][missionstage] && map_ini['shili'][missionlevel][missionstage].name) {
                     $('#world').append('<p class="nowplace">' + map_ini['shili'][missionlevel][missionstage].name + '</p>')
                 }
 

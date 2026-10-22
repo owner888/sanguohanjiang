@@ -62,28 +62,35 @@ final class MapHandler
      */
     public static function get_scene_list(Context $ctx): array
     {
+        $uid = MemberHandler::resolveUid($ctx);
         $level = (int)($ctx->input('l', 1));
         if ($level <= 0) {
             $level = 1;
         }
 
+        $member = DB::table('member')->where('uid', $uid)->first();
+        $curStage = max(1, (int)($member['missionstage'] ?? 1));
+
         // 黄巾势力包含 4 个关卡 stage: 1大兴山 2青州 3广宗 4巨鹿
         $stages = [
-            1 => ['stage' => 1, 'name' => '大兴山', 'status' => FactionStatus::Active->value],
-            2 => ['stage' => 2, 'name' => '青州', 'status' => FactionStatus::Locked->value],
-            3 => ['stage' => 3, 'name' => '广宗', 'status' => FactionStatus::Locked->value],
-            4 => ['stage' => 4, 'name' => '巨鹿', 'status' => FactionStatus::Locked->value],
+            1 => ['stage' => 1, 'name' => '大兴山'],
+            2 => ['stage' => 2, 'name' => '青州'],
+            3 => ['stage' => 3, 'name' => '广宗'],
+            4 => ['stage' => 4, 'name' => '巨鹿'],
         ];
 
         $list = [];
         $stageItems = [];
         foreach ($stages as $stgId => $stg) {
+            $isOpen = ($stgId <= $curStage);
+            $isCleared = ($stgId < $curStage);
+
             $item = [
                 'id' => $stgId,
                 'stage' => $stg['stage'],
                 'name' => $stg['name'],
-                'openstatus' => 1,
-                'status' => $stg['status'],
+                'openstatus' => $isOpen ? 1 : 0,
+                'status' => $isCleared ? 1 : 0,
             ];
             $list[(string)$stgId] = $item;
             $stageItems[] = $item;
@@ -92,6 +99,7 @@ final class MapHandler
         return [
             'status' => 1,
             'popo' => 0,
+            'next_status' => ($curStage >= 4) ? 1 : 0,
             'list' => $list,
             'stages' => $stageItems, // 语义化关卡列表
         ];
@@ -110,14 +118,39 @@ final class MapHandler
         $curStage = (int)($member['missionstage'] ?? 1);
         $curMissionId = (int)($member['missionid'] ?? 1);
 
-        // 关卡据点敌人 (包含精准屏幕坐标与类型)
-        $enemies = [
-            1 => ['name' => '黄巾前哨', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
-            2 => ['name' => '黄巾精兵', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
-            3 => ['name' => '程远志',   'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
-            4 => ['name' => '邓茂',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
-            5 => ['name' => '张梁',     'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
+        // 关卡据点敌人 (按 Stage 精准配置对应场景怪)
+        $stageEnemies = [
+            1 => [
+                1 => ['name' => '黄巾前哨', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
+                2 => ['name' => '黄巾精兵', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
+                3 => ['name' => '程远志',   'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
+                4 => ['name' => '邓茂',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
+                5 => ['name' => '张梁',     'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
+            ],
+            2 => [
+                1 => ['name' => '青州前哨', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
+                2 => ['name' => '黄巾精锐', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
+                3 => ['name' => '波才',     'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
+                4 => ['name' => '彭脱',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
+                5 => ['name' => '张宝',     'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
+            ],
+            3 => [
+                1 => ['name' => '广宗前锋', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
+                2 => ['name' => '黄巾死士', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
+                3 => ['name' => '管亥',     'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
+                4 => ['name' => '严政',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
+                5 => ['name' => '张角',     'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
+            ],
+            4 => [
+                1 => ['name' => '巨鹿亲卫', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
+                2 => ['name' => '太平道尊', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
+                3 => ['name' => '高升',     'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
+                4 => ['name' => '韩忠',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
+                5 => ['name' => '天公将军', 'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
+            ],
         ];
+
+        $enemies = $stageEnemies[$stage] ?? $stageEnemies[1];
 
         $list = [];
         $missionItems = [];
