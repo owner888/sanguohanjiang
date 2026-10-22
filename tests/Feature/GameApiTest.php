@@ -80,6 +80,10 @@ use Hanjiang\Handler\CountryMineHandler;
 use Hanjiang\Handler\CountryBossHandler;
 use Hanjiang\Handler\HiteggHandler;
 use Hanjiang\Handler\LevelgiftHandler;
+use Hanjiang\Handler\CountryShopHandler;
+use Hanjiang\Handler\EquipForgeHandler;
+use Hanjiang\Handler\TotalLoginHandler;
+use Hanjiang\Handler\EpicHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -179,6 +183,10 @@ final class GameApiTest extends TestCase
             'countryboss' => CountryBossHandler::class,
             'hitegg' => HiteggHandler::class,
             'levelgift' => LevelgiftHandler::class,
+            'countryshop' => CountryShopHandler::class,
+            'equip_forge' => EquipForgeHandler::class,
+            'totallogin' => TotalLoginHandler::class,
+            'epic' => EpicHandler::class,
         ]));
 
         self::$router = $router;
@@ -1862,5 +1870,73 @@ final class GameApiTest extends TestCase
         // 2. 领取 5 级成长礼包 (如果当前等级达到 5 级)
         $gift = $this->request('levelgift', 'get_reward', ['level' => 5]);
         $this->assertIsArray($gift);
+    }
+
+    public function testCountryShopSystem(): void
+    {
+        // 1. 查看国家特产商城
+        $res = $this->request('countryshop', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 购买青龙偃月刀图纸
+        $buy = $this->request('countryshop', 'buy', ['id' => 1]);
+        $this->assertSame(1, $buy['status']);
+        $this->assertStringContainsString('青龙偃月刀', $buy['goods_name']);
+    }
+
+    public function testEquipForgeSystem(): void
+    {
+        // 1. 查看铸造工坊
+        $res = $this->request('equip_forge', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['recipes']);
+
+        // 2. 锻造神装青龙偃月刀
+        $forge = $this->request('equip_forge', 'fabrication', ['id' => 1]);
+        $this->assertSame(1, $forge['status']);
+        $this->assertStringContainsString('青龙偃月刀', $forge['equip_name']);
+
+        // 3. 熔炼一件未穿戴装备
+        $pack = $this->request('pack', 'index');
+        $freeEid = 0;
+        foreach ($pack['list'] as $item) {
+            if ($item['is_equipped'] === 0) {
+                $freeEid = (int)$item['id'];
+                break;
+            }
+        }
+        if ($freeEid > 0) {
+            $resolve = $this->request('equip_forge', 'resolve', ['id' => $freeEid]);
+            $this->assertSame(1, $resolve['status']);
+            $this->assertGreaterThan(0, $resolve['get_iron']);
+        }
+    }
+
+    public function testTotalLoginSystem(): void
+    {
+        // 1. 查看累登面板
+        $res = $this->request('totallogin', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 领取第 1 天累登豪礼
+        $reward = $this->request('totallogin', 'action', ['day' => 1]);
+        $this->assertSame(1, $reward['status']);
+        $this->assertGreaterThan(0, $reward['silver']);
+    }
+
+    public function testEpicSystem(): void
+    {
+        // 1. 查看史诗战纪
+        $res = $this->request('epic', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(3, $res['list']);
+
+        // 2. 挑战史诗白马之战
+        $battle = $this->request('epic', 'force', ['id' => 1]);
+        $this->assertSame(1, $battle['status']);
+        $this->assertSame(1, $battle['win']);
+        $this->assertGreaterThan(0, $battle['silver']);
     }
 }

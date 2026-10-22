@@ -191,6 +191,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=countryboss&m=index|powerup|battle|reward`: National divine guardian beast altars (Golden Dragon, Kirin, Fire Phoenix), morale surges, and boss trials
 - `c=hitegg&m=index|hit_egg`: Golden fortune egg smashings, hammer strikes, and silver/gold crit explosions
 - `c=levelgift&m=index|get_reward`: Lord level-up milestone packages (Levels 5, 10, 20, 30, 40, 50) and growth funds
+- `c=countryshop&m=index|buy`: National prestige tax shops, red artifact blueprints, and military provisions
+- `c=equip_forge&m=index|fabrication|resolve`: Celestial gear forges, artifact fabrications, and gear scrap smelting
+- `c=totallogin&m=index|action`: Continuous login festival milestones (Days 1 to 14) and carnival silver/gold bundles
+- `c=epic&m=index|force`: Historical epic campaigns (Baima, Wuchao, Huarong Road) and heroic warlord duels
 
 ---
 
@@ -249,7 +253,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Chronicles & campaign expeditions: Fortune lottery (`lottery`), warlord expeditions (`generaltask`), heroes chronicle bonds (`general_book`), and campaign pacifications (`copies`)
 - [x] Epic holy wars & overseas frontiers: Gold & Silver treasure islands (`island`), Hero Throne dominance (`herothrone`), martial god golden body trials (`beatengod`), and Imperial Capital Holy War (`war`)
 - [x] Border battlegrounds & growth milestones: Nation border mines (`countrymine`), national beast altars (`countryboss`), golden egg smashings (`hitegg`), and level-up milestone packages (`levelgift`)
-- [x] PHPUnit end-to-end integration test suite (81/81 100% passing, 1094 assertions)
+- [x] National trade & celestial forges: National prestige stores (`countryshop`), gear fabrications (`equip_forge`), continuous login festivals (`totallogin`), and historical epics (`epic`)
+- [x] PHPUnit end-to-end integration test suite (85/85 100% passing, 1136 assertions)
 
 ---
 

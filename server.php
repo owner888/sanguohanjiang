@@ -81,6 +81,10 @@ use Hanjiang\Handler\CountryMineHandler;
 use Hanjiang\Handler\CountryBossHandler;
 use Hanjiang\Handler\HiteggHandler;
 use Hanjiang\Handler\LevelgiftHandler;
+use Hanjiang\Handler\CountryShopHandler;
+use Hanjiang\Handler\EquipForgeHandler;
+use Hanjiang\Handler\TotalLoginHandler;
+use Hanjiang\Handler\EpicHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -181,6 +185,10 @@ $router->use(new GameProtocolMiddleware([
     'countryboss' => CountryBossHandler::class,
     'hitegg' => HiteggHandler::class,
     'levelgift' => LevelgiftHandler::class,
+    'countryshop' => CountryShopHandler::class,
+    'equip_forge' => EquipForgeHandler::class,
+    'totallogin' => TotalLoginHandler::class,
+    'epic' => EpicHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {
