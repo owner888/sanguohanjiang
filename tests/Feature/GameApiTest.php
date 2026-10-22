@@ -462,13 +462,20 @@ final class GameApiTest extends TestCase
         $this->assertSame(0, $send['list'][0]['type']);
         $this->assertNotEmpty($send['list'][0]['nickname']);
 
+        // 测试拉取全量聊天频道记录
+        $index = $this->request('chat', 'index');
+        $this->assertSame(1, $index['status']);
+        $this->assertNotEmpty($index['list']);
+
+        // 测试增量读取接口 c=chat&m=read (由于刚发完并初始化过，此时增量列表为空，避免客户端 DOM 重复追加)
         $read = $this->request('chat', 'read');
         $this->assertSame(1, $read['status']);
-        $this->assertNotEmpty($read['list']);
+        $this->assertIsArray($read['list']);
+        $this->assertEmpty($read['list'], '增量轮询在没有新消息时必须为空数组，杜绝客户端重复追加');
 
         // 测试探活接口 c=index&m=index
-        $index = $this->request('index', 'index');
-        $this->assertSame(1, $index['status']);
+        $rootIndex = $this->request('index', 'index');
+        $this->assertSame(1, $rootIndex['status']);
     }
 
     public function testMainquestSystem(): void
