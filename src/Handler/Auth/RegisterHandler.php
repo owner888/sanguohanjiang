@@ -144,7 +144,7 @@ final class RegisterHandler
             'guide' => 0,
             'guidestep' => 0,
             'guidestop' => 0,
-            'missionsite' => 1,
+            'missionsite' => 2, // 初始置于黄巾势力地图，确保引导第1步指引.guanqia1顺畅定位
             'missionlevel' => 1,
             'missionstage' => 1,
             'missionid' => 1,

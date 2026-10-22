@@ -89,7 +89,7 @@ final class MemberHandler
                 'guide' => 0,
                 'guidestep' => 0,
                 'guidestop' => 0,
-                'missionsite' => 1,
+                'missionsite' => 2,
                 'missionlevel' => 1,
                 'missionstage' => 1,
                 'missionid' => 1,

@@ -7,6 +7,11 @@
         this.action = {     // 引导步骤801-900：将领界面，901-1000：任务界面，1001-1100：点将台界面，1101-1200：布阵界面，1201-1300：校场界面
             1 : function() { //首次进入，曲阳
                 $('#header').find('.rightside_wrap').hide();
+                // 容灾校正：确保引导处于势力地图(missionsite=2)，避免在大地图找不到.guanqia1而卡死遮罩
+                if (($('#mapworld_page').find('.guanqia1').length == 0 || player.info.missionsite != 2) && typeof mapWorld !== 'undefined' && mapWorld.loadShiliMap) {
+                    player.info.missionsite = 2;
+                    mapWorld.loadShiliMap(1);
+                }
                 guide.showNpc(lang('guide1'), function () {
                     guide.createFullmask();
                     guide.anim2bottom(function() {
