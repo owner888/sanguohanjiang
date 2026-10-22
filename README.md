@@ -171,6 +171,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=challenge&m=index|action`: Hero trial arenas, master duels (Ma Chao, Zhao Yun, Guan Yu), and arena honors
 - `c=elite&m=index|action`: Elite campaigns (Daxing, Wancheng, Hulao), guaranteed drops, and equipment blueprints
 - `c=muster&m=index|sale_general`: Warlord muster platform, backup officer dismissals, and severance pay claims
+- `c=business&m=index|go_business|buy|refresh`: Four Seas commerce, merchant fleet caravans (Luoyang, Chengdu, Jianye), and trade profits
+- `c=gambling&m=index|buy|cut|sell`: Treasure bowl gambling, rough stone cuts, and pawnshop silver liquidations
+- `c=task&m=index|accept_task|get_reward|refresh`: Daily military bounty boards, 5-star quest refreshes, and reward claims
+- `c=talent&m=index|levelup`: Warlord talent awakening (Fierce Attack, Iron Wall, Bloodthirst, Critical Hit) and stat surges
 
 ---
 
@@ -224,7 +228,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Four Divine Beast Sanctums (`sanctum`), cross-server martial tournaments (`compete`), national altar sacrifices (`countrysacrifice`), and imperial court expostulations (`expostulation`)
 - [x] Leisure & social festivity systems: Heroic banquets (`banquet`), plum wine deliberations (`drink`), celestial dice shaking (`dice`), and money sacred tree (`sacredtree`)
 - [x] High-tier martial arenas & recruitment outlets: Card turnover prizes (`flop`), hero challenge arenas (`challenge`), elite campaigns (`elite`), and muster severance management (`muster`)
-- [x] PHPUnit end-to-end integration test suite (61/61 100% passing, 865 assertions)
+- [x] Merchant economy & talent mastery: Four Seas commerce (`business`), treasure bowl gambling (`gambling`), daily military bounties (`task`), and talent tree awakenings (`talent`)
+- [x] PHPUnit end-to-end integration test suite (65/65 100% passing, 916 assertions)
 
 ---
 

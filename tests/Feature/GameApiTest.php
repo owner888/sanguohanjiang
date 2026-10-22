@@ -60,6 +60,10 @@ use Hanjiang\Handler\FlopHandler;
 use Hanjiang\Handler\ChallengeHandler;
 use Hanjiang\Handler\EliteHandler;
 use Hanjiang\Handler\MusterHandler;
+use Hanjiang\Handler\BusinessHandler;
+use Hanjiang\Handler\GamblingHandler;
+use Hanjiang\Handler\TaskHandler;
+use Hanjiang\Handler\TalentHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -139,6 +143,10 @@ final class GameApiTest extends TestCase
             'challenge' => ChallengeHandler::class,
             'elite' => EliteHandler::class,
             'muster' => MusterHandler::class,
+            'business' => BusinessHandler::class,
+            'gambling' => GamblingHandler::class,
+            'task' => TaskHandler::class,
+            'talent' => TalentHandler::class,
         ]));
 
         self::$router = $router;
@@ -1500,5 +1508,73 @@ final class GameApiTest extends TestCase
             $this->assertSame(1, $sale['status']);
             $this->assertGreaterThan(0, $sale['severance_pay']);
         }
+    }
+
+    public function testBusinessSystem(): void
+    {
+        // 1. 查看四海通商
+        $res = $this->request('business', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['cities']);
+
+        // 2. 启程通商洛阳商市 (city: 1)
+        $go = $this->request('business', 'go_business', ['id' => 1]);
+        $this->assertSame(1, $go['status']);
+        $this->assertSame('中原·洛阳商市', $go['city_name']);
+    }
+
+    public function testGamblingSystem(): void
+    {
+        // 1. 查看聚宝博彩盆
+        $res = $this->request('gambling', 'index');
+        $this->assertSame(1, $res['status']);
+
+        // 2. 投注原石
+        $buy = $this->request('gambling', 'buy');
+        $this->assertSame(1, $buy['status']);
+
+        // 3. 抛光雕琢
+        $cut = $this->request('gambling', 'cut');
+        $this->assertSame(1, $cut['status']);
+        $this->assertGreaterThan(0, $cut['final_value']);
+
+        // 4. 典当折现
+        $sell = $this->request('gambling', 'sell');
+        $this->assertSame(1, $sell['status']);
+        $this->assertGreaterThan(0, $sell['silver']);
+    }
+
+    public function testTaskSystem(): void
+    {
+        // 1. 查看悬赏大厅看板
+        $res = $this->request('task', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 接取悬赏任务 1
+        $accept = $this->request('task', 'accept_task', ['id' => 1]);
+        $this->assertSame(1, $accept['status']);
+
+        // 3. 交付悬赏领赏
+        $reward = $this->request('task', 'get_reward', ['id' => 1]);
+        $this->assertSame(1, $reward['status']);
+        $this->assertGreaterThan(0, $reward['silver']);
+    }
+
+    public function testTalentSystem(): void
+    {
+        // 1. 获取主公武将 ID
+        $generals = $this->request('general', 'index');
+        $mainGid = (int)$generals['list'][1]['id'];
+
+        // 2. 查看天赋树
+        $res = $this->request('talent', 'index', ['gid' => $mainGid]);
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 3. 升级猛攻天赋 (id: 1)
+        $up = $this->request('talent', 'levelup', ['gid' => $mainGid, 'id' => 1]);
+        $this->assertSame(1, $up['status']);
+        $this->assertSame(2, $up['level']);
     }
 }

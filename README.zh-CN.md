@@ -175,6 +175,10 @@
 - `c=challenge&m=index|action`：英雄试炼擂台巅峰单挑、挑战守擂名将（马超/赵云/关羽）夺取擂主荣耀
 - `c=elite&m=index|action`：精英关卡战役（精英大兴山/宛城/虎牢关）、九宫格推演与必掉珍稀装备图纸
 - `c=muster&m=index|sale_general`：点将台大营名册、闲置武将退役遣散与巨额退役安家银两返还（软删除管理）
+- `c=business&m=index|go_business|buy|refresh`：四海通商行商经商（洛阳/成都/建业/襄阳）、商市行情采购与暴利返航折现
+- `c=gambling&m=index|buy|cut|sell`：金银宝盆博彩、原石抛光雕琢与聚宝盆估价翻倍典当
+- `c=task&m=index|accept_task|get_reward|refresh`：每日军务悬赏令看板、接取平定剿匪、交付领赏与揭榜刷新
+- `c=talent&m=index|levelup`：武将天赋神力树觉醒（破军猛攻/金刚铁壁/百战嗜血/无双会心）与战力暴涨翻倍
 
 ---
 
@@ -228,7 +232,8 @@
 - [x] 战神殿与朝堂宏图系统打通：四象圣域神尊决战 (`sanctum`)、跨服群雄论剑 (`compete`)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)
 - [x] 休闲社交与交互狂欢系统全面贯通：群英夜宴大摆豪门宴席 (`banquet`)、青梅煮酒论英雄 (`drink`)、逍遥神骰行大运 (`dice`)、聚宝摇钱神树浇水摇金 (`sacredtree`)
 - [x] 巅峰试炼与点将全线闭环：九宫金边翻牌夺宝 (`flop`)、英雄试炼擂台决战 (`challenge`)、精英高难副本战役 (`elite`)、点将台退役遣散 (`muster`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (61/61 100% 绿灯全过，865 个断言)
+- [x] 商业经贸与天赋神力体系贯通：四海通商行商经商 (`business`)、金银宝盆博彩 (`gambling`)、每日军务悬赏令 (`task`)、武将天赋神力树 (`talent`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (65/65 100% 绿灯全过，916 个断言)
 
 ---
 
