@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -68,6 +67,20 @@ final class MainquestHandler
         ],
     ];
 
+    private static function getTaskId(int $uid): int
+    {
+        $cached = Redis::get("mainquest:task_id:{$uid}");
+        if ($cached !== null && (int)$cached > 0) {
+            return (int)$cached;
+        }
+        return 1;
+    }
+
+    private static function setTaskId(int $uid, int $taskId): void
+    {
+        Redis::set("mainquest:task_id:{$uid}", (string)$taskId, 86400 * 30);
+    }
+
     /**
      * 动态检测某个主线任务是否已达成条件
      */
@@ -96,8 +109,7 @@ final class MainquestHandler
     public static function index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $member = DB::table('member')->where('uid', $uid)->first();
-        $curTaskId = max(1, (int)($member['missionid'] ?? 1));
+        $curTaskId = self::getTaskId($uid);
 
         $taskConfig = self::QUEST_POOL[$curTaskId] ?? self::QUEST_POOL[count(self::QUEST_POOL)];
         $isCompleted = self::checkTaskCompletion($taskConfig['id'], $uid);
@@ -118,7 +130,7 @@ final class MainquestHandler
     {
         $uid = MemberHandler::resolveUid($ctx);
         $member = DB::table('member')->where('uid', $uid)->first();
-        $curTaskId = max(1, (int)($member['missionid'] ?? 1));
+        $curTaskId = self::getTaskId($uid);
 
         if (!isset(self::QUEST_POOL[$curTaskId])) {
             return [
@@ -152,13 +164,13 @@ final class MainquestHandler
         }
 
         $nextTaskId = $curTaskId + 1;
+        self::setTaskId($uid, $nextTaskId);
 
         DB::table('member')->where('uid', $uid)->update([
             'silver' => $newSilver,
             'gold' => $newGold,
             'exp' => $newExp,
             'level' => $curLevel,
-            'missionid' => $nextTaskId,
         ]);
 
         Redis::del('player:' . $uid);

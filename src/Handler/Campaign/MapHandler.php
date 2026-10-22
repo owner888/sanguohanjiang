@@ -102,8 +102,13 @@ final class MapHandler
      */
     public static function get_mission_list(Context $ctx): array
     {
+        $uid = MemberHandler::resolveUid($ctx);
         $level = (int)($ctx->input('l', 1));
         $stage = (int)($ctx->input('s', 1));
+
+        $member = DB::table('member')->where('uid', $uid)->first();
+        $curStage = (int)($member['missionstage'] ?? 1);
+        $curMissionId = (int)($member['missionid'] ?? 1);
 
         // 关卡据点敌人 (包含精准屏幕坐标与类型)
         $enemies = [
@@ -117,6 +122,27 @@ final class MapHandler
         $list = [];
         $missionItems = [];
         foreach ($enemies as $mid => $cfg) {
+            // 计算据点解锁与通关状态
+            if ($stage < $curStage) {
+                // 已打通的大关卡：全部据点已击败并开放
+                $openstatus = 1;
+                $status = 1;
+            } elseif ($stage === $curStage) {
+                if ($mid < $curMissionId) {
+                    $openstatus = 1;
+                    $status = 1; // 已打通
+                } elseif ($mid === $curMissionId) {
+                    $openstatus = 1;
+                    $status = 0; // 当前挑战据点
+                } else {
+                    $openstatus = 0; // 未解锁
+                    $status = 0;
+                }
+            } else {
+                $openstatus = 0;
+                $status = 0;
+            }
+
             $item = [
                 'id' => $mid,
                 'missionid' => $mid,
@@ -126,8 +152,8 @@ final class MapHandler
                 'type' => $cfg['type'],
                 'x' => $cfg['x'],
                 'y' => $cfg['y'],
-                'openstatus' => 1,
-                'status' => 0,
+                'openstatus' => $openstatus,
+                'status' => $status,
                 'maxtimes' => 5,
                 'coin' => 0,
                 'power' => 100 * $mid,
@@ -139,7 +165,7 @@ final class MapHandler
         return [
             'status' => 1,
             'popo' => 0,
-            'next_status' => 0,
+            'next_status' => ($curStage > $stage) ? 1 : 0,
             'list' => $list,
             'missions' => $missionItems, // 语义化据点列表
         ];
@@ -315,8 +341,14 @@ final class MapHandler
             'rightbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
         ];
 
-        // 5. 战斗胜利升级与经验结算
+        // 5. 战斗胜利关卡推进、升级与经验结算
         $levelUp = 0;
+        $isWin = $simResult['win'];
+        $isLastMission = ($missionId >= 5); // 5号Boss是本关最终守关将领
+        $nextStage = $stage;
+        $nextMissionId = $missionId;
+        $openstatus = 0;
+
         if ($member !== null) {
             $newExp = (int)$member['exp'] + 100;
             $curLevel = (int)$member['level'];
@@ -326,25 +358,72 @@ final class MapHandler
                 $levelUp = 1;
             }
 
-            DB::table('member')->where('uid', $uid)->update([
-                'act' => max(0, (int)$member['act'] - 1),
-                'silver' => (int)$member['silver'] + 500,
-                'exp' => $newExp,
-                'level' => $curLevel,
-            ]);
+            $curMemberStage = (int)($member['missionstage'] ?? 1);
+            $curMemberMission = (int)($member['missionid'] ?? 1);
+
+            if ($isWin) {
+                if ($isLastMission) {
+                    // 打败守关Boss，整关通关！开启下一大关场景
+                    $openstatus = 1;
+                    $nextStage = $stage + 1;
+                    $nextMissionId = 1;
+                } else {
+                    // 普通据点通关，推进到下一个据点
+                    $openstatus = 0;
+                    $nextStage = $stage;
+                    $nextMissionId = max($curMemberMission, $missionId + 1);
+                }
+
+                // 推进玩家进度并留存关卡小地图
+                DB::table('member')->where('uid', $uid)->update([
+                    'act' => max(0, (int)$member['act'] - 1),
+                    'silver' => (int)$member['silver'] + 500,
+                    'exp' => $newExp,
+                    'level' => $curLevel,
+                    'missionsite' => 3, // 保持在关卡小地图现场
+                    'missionlevel' => $level,
+                    'missionstage' => $nextStage,
+                    'missionid' => $nextMissionId,
+                ]);
+
+                // 记录关卡进度到 zc_sanguo_map 表
+                $existMap = DB::table('map')->where('uid', $uid)->where('level', $level)->where('stage', $stage)->first();
+                if ($existMap !== null) {
+                    DB::table('map')->where('uid', $uid)->where('level', $level)->where('stage', $stage)->update([
+                        'mission' => max((int)$existMap['mission'], $missionId),
+                        'dateline' => time(),
+                    ]);
+                } else {
+                    DB::table('map')->insert([
+                        'uid' => $uid,
+                        'level' => $level,
+                        'stage' => $stage,
+                        'mission' => $missionId,
+                        'dateline' => time(),
+                    ]);
+                }
+            } else {
+                DB::table('member')->where('uid', $uid)->update([
+                    'act' => max(0, (int)$member['act'] - 1),
+                ]);
+            }
             Redis::del('player:' . $uid);
         }
 
         return [
             'status' => 1,
             'info' => [
-                'win' => $simResult['win'] ? 1 : -1,
+                'win' => $isWin ? 1 : -1,
                 'exp' => 100,
                 'gexp' => 150,
                 'silver' => 500,
                 'gettype' => 3,
+                'getvalue' => 500,
                 'background' => 1,
-                'openstatus' => 1,
+                'openstatus' => $openstatus,
+                'missionlevel' => $level,
+                'missionstage' => $nextStage,
+                'missionid' => $nextMissionId,
                 'itemname' => '青铜铠甲',
                 'levelup' => $levelUp,
                 'report' => 0,
