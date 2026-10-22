@@ -15,6 +15,7 @@ use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
 use Hanjiang\Middleware\GameProtocolMiddleware;
 use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
+use Hanjiang\Middleware\ThrottleMiddleware;
 use PHPUnit\Framework\TestCase;
 use Workerman\Protocols\Http\Response as WorkermanResponse;
 
@@ -34,6 +35,7 @@ final class GameApiTest extends TestCase
         $router = new Router(dirname(__DIR__, 2) . '/public');
         $router->use(new CorsMiddleware());
         $router->use(new ResponseEnvelopeMiddleware());
+        $router->use(new ThrottleMiddleware());
         // 自动发现并挂载全量 7 大领域子目录下的全部 Handler 映射 (驼峰与下划线双向兼容)
         $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
 
@@ -1878,5 +1880,23 @@ final class GameApiTest extends TestCase
         $bonus = $firstEq->calculateBonus();
         $this->assertIsArray($bonus);
         $this->assertGreaterThan(0, $firstEq->getSite());
+    }
+
+    public function testThrottleProtectionMiddleware(): void
+    {
+        // 1. 正常操作应畅通无阻
+        $res = $this->request('tavern', 'index');
+        $this->assertSame(1, $res['status']);
+
+        // 2. 模拟并发重入锁已存在时的防重放拦截
+        $lockKey = "hj:lock:req:" . self::$uid . ":tavern.action";
+        Redis::set($lockKey, '1', 5);
+
+        $blocked = $this->request('tavern', 'action');
+        $this->assertSame(-1, $blocked['status']);
+        $this->assertStringContainsString('过于频繁', (string)$blocked['message']);
+
+        // 3. 锁释放后恢复正常
+        Redis::del($lockKey);
     }
 }

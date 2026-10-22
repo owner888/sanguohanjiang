@@ -7,6 +7,7 @@ namespace Hanjiang\Http;
 use Hanjiang\Middleware\MiddlewareInterface;
 use OmniPHP\Http\Context;
 use OmniPHP\Http\StaticServer;
+use OmniPHP\Logger;
 use Workerman\Connection\TcpConnection;
 use Workerman\Protocols\Http\Request;
 use Workerman\Protocols\Http\Response as WorkermanResponse;
@@ -68,6 +69,14 @@ final class Router
                 ));
             }
         } catch (\Throwable $e) {
+            Logger::error("Unhandled HTTP Exception: {$e->getMessage()}", [
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+                'path' => $request->path(),
+                'query' => $request->queryString(),
+                'trace' => $e->getTraceAsString(),
+            ]);
+
             $connection->send(new WorkermanResponse(
                 500,
                 ['Content-Type' => 'application/json; charset=utf-8'],

@@ -11,6 +11,7 @@ use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
 use Hanjiang\Middleware\GameProtocolMiddleware;
 use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
+use Hanjiang\Middleware\ThrottleMiddleware;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use Workerman\Connection\TcpConnection;
@@ -30,6 +31,7 @@ $httpWorker->name = 'Hanjiang-Http-Gateway';
 $router = new Router($config['http']['public_path']);
 $router->use(new CorsMiddleware());
 $router->use(new ResponseEnvelopeMiddleware());
+$router->use(new ThrottleMiddleware());
 // 自动挂载 7 大领域子目录下的全部 Handler 映射 (驼峰与下划线双向兼容)
 $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
 

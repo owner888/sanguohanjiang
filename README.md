@@ -279,7 +279,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] National trade & celestial forges: National prestige stores (`countryshop`), gear fabrications (`equip_forge`), continuous login festivals (`totallogin`), and historical epics (`epic`)
 - [x] Operational giftings & achievement telemetry: Universal CDKeys (`activationcode`), military drills (`exercise`), lord combat overview (`information`), and brotherhood recruitment (`invitation`)
 - [x] Lightweight domain thin models (`src/Model/`) with native `SoftDeletes`, automatic type casting, and encapsulated domain methods (`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`)
-- [x] PHPUnit end-to-end integration test suite (90/90 100% passing, 1197 assertions)
+- [x] High-concurrency debouncing & anti-cheat: Atomic request reentrancy protection via `ThrottleMiddleware`
+- [x] PHPUnit end-to-end integration test suite (91/91 100% passing, 1202 assertions)
 
 ---
 
