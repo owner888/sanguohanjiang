@@ -91,7 +91,13 @@
    composer install
    ```
 
-3. 启动服务：
+3. 导入标准数据库结构：
+   ```bash
+   mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
+   mysql -uroot -proot zc_sanguo < database/schema.sql
+   ```
+
+4. 启动服务：
    ```bash
    # 调试模式（前台运行，Ctrl+C 停止）
    php server.php start
@@ -104,7 +110,7 @@
    php server.php stop
    ```
 
-4. 打开游戏：
+5. 打开游戏：
    在浏览器中访问：
    ```
    http://127.0.0.1:18100/

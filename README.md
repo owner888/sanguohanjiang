@@ -91,7 +91,13 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
    composer install
    ```
 
-3. Start server:
+3. Import database schema:
+   ```bash
+   mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
+   mysql -uroot -proot zc_sanguo < database/schema.sql
+   ```
+
+4. Start server:
    ```bash
    # Debug mode (foreground)
    php server.php start
@@ -100,7 +106,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
    php server.php start -d
    ```
 
-4. Play the game:
+5. Play the game:
    Open your browser and navigate to:
    ```
    http://127.0.0.1:18100/
