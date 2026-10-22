@@ -76,6 +76,10 @@ use Hanjiang\Handler\IslandHandler;
 use Hanjiang\Handler\HerothroneHandler;
 use Hanjiang\Handler\BeatengodHandler;
 use Hanjiang\Handler\WarHandler;
+use Hanjiang\Handler\CountryMineHandler;
+use Hanjiang\Handler\CountryBossHandler;
+use Hanjiang\Handler\HiteggHandler;
+use Hanjiang\Handler\LevelgiftHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -171,6 +175,10 @@ final class GameApiTest extends TestCase
             'herothrone' => HerothroneHandler::class,
             'beatengod' => BeatengodHandler::class,
             'war' => WarHandler::class,
+            'countrymine' => CountryMineHandler::class,
+            'countryboss' => CountryBossHandler::class,
+            'hitegg' => HiteggHandler::class,
+            'levelgift' => LevelgiftHandler::class,
         ]));
 
         self::$router = $router;
@@ -1781,5 +1789,78 @@ final class GameApiTest extends TestCase
         $shop = $this->request('war', 'point_shop');
         $this->assertSame(1, $shop['status']);
         $this->assertNotEmpty($shop['goods']);
+    }
+
+    public function testCountryMineSystem(): void
+    {
+        // 1. 查看国家矿山
+        $res = $this->request('countrymine', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['mines']);
+
+        // 2. 占领官渡铜矿
+        $claim = $this->request('countrymine', 'caikuang', ['id' => 1]);
+        $this->assertSame(1, $claim['status']);
+        $this->assertSame(1, $claim['mine_id']);
+
+        // 3. 掠夺敌国矿车
+        $rob = $this->request('countrymine', 'rob', ['id' => 2]);
+        $this->assertSame(1, $rob['status']);
+        $this->assertSame(1, $rob['win']);
+        $this->assertGreaterThan(0, $rob['rob_silver']);
+
+        // 4. 收取开采银饷
+        $harvest = $this->request('countrymine', 'get_reward');
+        $this->assertSame(1, $harvest['status']);
+        $this->assertGreaterThan(0, $harvest['silver']);
+    }
+
+    public function testCountryBossSystem(): void
+    {
+        // 1. 查看护国神兽
+        $res = $this->request('countryboss', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['boss_name']);
+
+        // 2. 鼓舞军威
+        $buff = $this->request('countryboss', 'powerup');
+        $this->assertSame(1, $buff['status']);
+        $this->assertGreaterThan(0, $buff['buff']);
+
+        // 3. 挑战护国神兽
+        $battle = $this->request('countryboss', 'battle');
+        $this->assertSame(1, $battle['status']);
+        $this->assertGreaterThan(0, $battle['damage']);
+
+        // 4. 领取护国神兽宝箱
+        $reward = $this->request('countryboss', 'reward');
+        $this->assertSame(1, $reward['status']);
+        $this->assertGreaterThan(0, $reward['silver']);
+    }
+
+    public function testHiteggSystem(): void
+    {
+        // 1. 查看砸金蛋
+        $res = $this->request('hitegg', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(3, $res['eggs']);
+
+        // 2. 砸碎如意金蛋
+        $hit = $this->request('hitegg', 'hit_egg', ['id' => 1]);
+        $this->assertSame(1, $hit['status']);
+        $this->assertGreaterThan(0, $hit['silver']);
+        $this->assertGreaterThan(0, $hit['gold']);
+    }
+
+    public function testLevelgiftSystem(): void
+    {
+        // 1. 查看等级礼包
+        $res = $this->request('levelgift', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 领取 5 级成长礼包 (如果当前等级达到 5 级)
+        $gift = $this->request('levelgift', 'get_reward', ['level' => 5]);
+        $this->assertIsArray($gift);
     }
 }

@@ -191,6 +191,10 @@
 - `c=herothrone&m=index|action`：英雄王座巅峰争霸（青铜铁血/白银霸烈/至尊第一王座）、九宫格攻擂推演与霸主加冕
 - `c=beatengod&m=index|beaten|get_box_reward`：真武战神金光试炼、敲击金身赐福掉落与战神宝箱领奖
 - `c=war&m=index|entry|point_shop`：魏蜀吴皇城跨服封神国战大厅、出征报名参战与军功功勋商城兑换
+- `c=countrymine&m=index|caikuang|rob|get_reward|give_up`：三国国家边境矿山开采、敌国矿车掠夺对决与国库收益收缴
+- `c=countryboss&m=index|powerup|battle|reward`：魏蜀吴国家守护神兽祭坛（真金神龙/踏云麒麟/九羽火凤）、全军鼓舞与神兽试炼宝箱
+- `c=hitegg&m=index|hit_egg`：金蛋纳福大暴击（吉祥金蛋/富贵银蛋/至尊彩蛋）、挥锤破蛋与元宝爆出
+- `c=levelgift&m=index|get_reward`：主公等级成长里程碑礼包（5/10/20/30/40/50级）与成长基金一键领奖
 
 ---
 
@@ -248,7 +252,8 @@
 - [x] 终极养成进阶体系全线贯通：神将品质飞升 (`advanced`)、装备精炼词条 (`refine`)、武将七星突破 (`star`)、国家战争学院科技 (`war_college`)
 - [x] 英雄图谱与战役平乱全线就绪：幸运大转盘 (`lottery`)、武将远征试炼 (`generaltask`)、名将谱羁绊点亮 (`general_book`)、平乱战役副本 (`copies`)
 - [x] 跨服争霸与海外秘境全线贯通：东海金银岛秘境 (`island`)、英雄王座巅峰争霸 (`herothrone`)、真武战神金身试炼 (`beatengod`)、皇城跨服封神国战 (`war`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (77/77 100% 绿灯全过，1040 个断言)
+- [x] 边境阵营战场与等级里程碑：国家边境矿山争夺 (`countrymine`)、国家神兽守护神祭坛 (`countryboss`)、金蛋纳福大暴击 (`hitegg`)、主公等级成长基金礼包 (`levelgift`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (81/81 100% 绿灯全过，1094 个断言)
 
 ---
 

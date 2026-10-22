@@ -187,6 +187,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=herothrone&m=index|action`: Iron, Silver, and Imperial Hero Throne dominance tournaments
 - `c=beatengod&m=index|beaten|get_box_reward`: Golden martial god body beatings, divine crystal drops, and trials chests
 - `c=war&m=index|entry|point_shop`: Three Kingdoms Imperial Capital Cross-Server Holy War, enlistments, and military merit shop
+- `c=countrymine&m=index|caikuang|rob|get_reward|give_up`: Nation border mines (Guan Du, Jian Ge, Chi Bi), convoy plunders, and military revenue harvests
+- `c=countryboss&m=index|powerup|battle|reward`: National divine guardian beast altars (Golden Dragon, Kirin, Fire Phoenix), morale surges, and boss trials
+- `c=hitegg&m=index|hit_egg`: Golden fortune egg smashings, hammer strikes, and silver/gold crit explosions
+- `c=levelgift&m=index|get_reward`: Lord level-up milestone packages (Levels 5, 10, 20, 30, 40, 50) and growth funds
 
 ---
 
@@ -244,7 +248,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Pinnacle tier ascensions: Quality ascension (`advanced`), gear affix refinement (`refine`), seven-star breakthrough (`star`), and War College technologies (`war_college`)
 - [x] Chronicles & campaign expeditions: Fortune lottery (`lottery`), warlord expeditions (`generaltask`), heroes chronicle bonds (`general_book`), and campaign pacifications (`copies`)
 - [x] Epic holy wars & overseas frontiers: Gold & Silver treasure islands (`island`), Hero Throne dominance (`herothrone`), martial god golden body trials (`beatengod`), and Imperial Capital Holy War (`war`)
-- [x] PHPUnit end-to-end integration test suite (77/77 100% passing, 1040 assertions)
+- [x] Border battlegrounds & growth milestones: Nation border mines (`countrymine`), national beast altars (`countryboss`), golden egg smashings (`hitegg`), and level-up milestone packages (`levelgift`)
+- [x] PHPUnit end-to-end integration test suite (81/81 100% passing, 1094 assertions)
 
 ---
 

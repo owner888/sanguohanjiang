@@ -77,6 +77,10 @@ use Hanjiang\Handler\IslandHandler;
 use Hanjiang\Handler\HerothroneHandler;
 use Hanjiang\Handler\BeatengodHandler;
 use Hanjiang\Handler\WarHandler;
+use Hanjiang\Handler\CountryMineHandler;
+use Hanjiang\Handler\CountryBossHandler;
+use Hanjiang\Handler\HiteggHandler;
+use Hanjiang\Handler\LevelgiftHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -173,6 +177,10 @@ $router->use(new GameProtocolMiddleware([
     'herothrone' => HerothroneHandler::class,
     'beatengod' => BeatengodHandler::class,
     'war' => WarHandler::class,
+    'countrymine' => CountryMineHandler::class,
+    'countryboss' => CountryBossHandler::class,
+    'hitegg' => HiteggHandler::class,
+    'levelgift' => LevelgiftHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {
