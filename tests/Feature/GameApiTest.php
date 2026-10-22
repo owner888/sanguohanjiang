@@ -64,6 +64,10 @@ use Hanjiang\Handler\BusinessHandler;
 use Hanjiang\Handler\GamblingHandler;
 use Hanjiang\Handler\TaskHandler;
 use Hanjiang\Handler\TalentHandler;
+use Hanjiang\Handler\AdvancedHandler;
+use Hanjiang\Handler\RefineHandler;
+use Hanjiang\Handler\StarHandler;
+use Hanjiang\Handler\WarCollegeHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -147,6 +151,10 @@ final class GameApiTest extends TestCase
             'gambling' => GamblingHandler::class,
             'task' => TaskHandler::class,
             'talent' => TalentHandler::class,
+            'advanced' => AdvancedHandler::class,
+            'refine' => RefineHandler::class,
+            'star' => StarHandler::class,
+            'war_college' => WarCollegeHandler::class,
         ]));
 
         self::$router = $router;
@@ -1574,6 +1582,67 @@ final class GameApiTest extends TestCase
 
         // 3. 升级猛攻天赋 (id: 1)
         $up = $this->request('talent', 'levelup', ['gid' => $mainGid, 'id' => 1]);
+        $this->assertSame(1, $up['status']);
+        $this->assertSame(2, $up['level']);
+    }
+
+    public function testAdvancedSystem(): void
+    {
+        // 1. 获取主公武将 ID
+        $generals = $this->request('general', 'index');
+        $mainGid = (int)$generals['list'][1]['id'];
+
+        // 2. 查看进阶面板
+        $res = $this->request('advanced', 'index', ['gid' => $mainGid]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1, $res['can_advance']);
+
+        // 3. 执行品质进阶飞升
+        $adv = $this->request('advanced', 'start_advanced', ['gid' => $mainGid]);
+        $this->assertSame(1, $adv['status']);
+        $this->assertGreaterThan(1, $adv['new_quality']);
+    }
+
+    public function testRefineSystem(): void
+    {
+        // 1. 查看装备精炼
+        $res = $this->request('refine', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertArrayHasKey('current_refine', $res);
+        $eid = (int)$res['eid'];
+
+        // 2. 执行精炼淬火
+        $refine = $this->request('refine', 'refinning', ['id' => $eid]);
+        $this->assertSame(1, $refine['status']);
+        $this->assertArrayHasKey('refine', $refine);
+    }
+
+    public function testStarSystem(): void
+    {
+        // 1. 获取主公武将 ID
+        $generals = $this->request('general', 'index');
+        $mainGid = (int)$generals['list'][1]['id'];
+
+        // 2. 查看星级
+        $res = $this->request('star', 'index', ['gid' => $mainGid]);
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThanOrEqual(1, $res['star']);
+
+        // 3. 升星突破
+        $up = $this->request('star', 'level_up', ['gid' => $mainGid]);
+        $this->assertSame(1, $up['status']);
+        $this->assertGreaterThan(1, $up['new_star']);
+    }
+
+    public function testWarCollegeSystem(): void
+    {
+        // 1. 查看战争学院
+        $res = $this->request('war_college', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(4, $res['techs']);
+
+        // 2. 研发步兵玄甲圆阵科技 (id: 1)
+        $up = $this->request('war_college', 'level_up', ['id' => 1]);
         $this->assertSame(1, $up['status']);
         $this->assertSame(2, $up['level']);
     }

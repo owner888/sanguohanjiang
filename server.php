@@ -65,6 +65,10 @@ use Hanjiang\Handler\BusinessHandler;
 use Hanjiang\Handler\GamblingHandler;
 use Hanjiang\Handler\TaskHandler;
 use Hanjiang\Handler\TalentHandler;
+use Hanjiang\Handler\AdvancedHandler;
+use Hanjiang\Handler\RefineHandler;
+use Hanjiang\Handler\StarHandler;
+use Hanjiang\Handler\WarCollegeHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -149,6 +153,10 @@ $router->use(new GameProtocolMiddleware([
     'gambling' => GamblingHandler::class,
     'task' => TaskHandler::class,
     'talent' => TalentHandler::class,
+    'advanced' => AdvancedHandler::class,
+    'refine' => RefineHandler::class,
+    'star' => StarHandler::class,
+    'war_college' => WarCollegeHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

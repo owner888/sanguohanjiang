@@ -175,6 +175,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=gambling&m=index|buy|cut|sell`: Treasure bowl gambling, rough stone cuts, and pawnshop silver liquidations
 - `c=task&m=index|accept_task|get_reward|refresh`: Daily military bounty boards, 5-star quest refreshes, and reward claims
 - `c=talent&m=index|levelup`: Warlord talent awakening (Fierce Attack, Iron Wall, Bloodthirst, Critical Hit) and stat surges
+- `c=advanced&m=index|start_advanced`: Warlord quality tier ascension (Green -> Blue -> Purple -> Orange -> Dark Gold Divine)
+- `c=refine&m=index|refinning`: Blacksmith gear refinement affixes (Armor Piercing, Tenacity, Critical Strike)
+- `c=star&m=index|level_up`: Seven-star constellation warlord breakthrough and attribute surges
+- `c=war_college&m=index|level_up`: National War College branch tech research (Infantry, Cavalry, Archers, Strategists)
 
 ---
 
@@ -229,7 +233,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Leisure & social festivity systems: Heroic banquets (`banquet`), plum wine deliberations (`drink`), celestial dice shaking (`dice`), and money sacred tree (`sacredtree`)
 - [x] High-tier martial arenas & recruitment outlets: Card turnover prizes (`flop`), hero challenge arenas (`challenge`), elite campaigns (`elite`), and muster severance management (`muster`)
 - [x] Merchant economy & talent mastery: Four Seas commerce (`business`), treasure bowl gambling (`gambling`), daily military bounties (`task`), and talent tree awakenings (`talent`)
-- [x] PHPUnit end-to-end integration test suite (65/65 100% passing, 916 assertions)
+- [x] Pinnacle tier ascensions: Quality ascension (`advanced`), gear affix refinement (`refine`), seven-star breakthrough (`star`), and War College technologies (`war_college`)
+- [x] PHPUnit end-to-end integration test suite (69/69 100% passing, 955 assertions)
 
 ---
 
