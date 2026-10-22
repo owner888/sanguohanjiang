@@ -145,7 +145,10 @@ final class WebSocketHandler
 
         $chatMsg = [
             'uid' => $uid,
+            'nickname' => $name,
             'name' => $name,
+            'type' => 0,
+            'system' => 0,
             'message' => htmlspecialchars($msg),
             'time' => time(),
         ];

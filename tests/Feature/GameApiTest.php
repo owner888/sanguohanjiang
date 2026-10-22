@@ -458,10 +458,17 @@ final class GameApiTest extends TestCase
     {
         $send = $this->request('chat', 'send', ['message' => '测试三国聊天']);
         $this->assertSame(1, $send['status']);
+        $this->assertArrayHasKey('list', $send, '聊天发送成功必须包含 list 供前端 chatpop.js 立即渲染');
+        $this->assertSame(0, $send['list'][0]['type']);
+        $this->assertNotEmpty($send['list'][0]['nickname']);
 
         $read = $this->request('chat', 'read');
         $this->assertSame(1, $read['status']);
         $this->assertNotEmpty($read['list']);
+
+        // 测试探活接口 c=index&m=index
+        $index = $this->request('index', 'index');
+        $this->assertSame(1, $index['status']);
     }
 
     public function testMainquestSystem(): void
