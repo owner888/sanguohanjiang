@@ -266,7 +266,8 @@
 - [x] 边境阵营战场与等级里程碑：国家边境矿山争夺 (`countrymine`)、国家神兽守护神祭坛 (`countryboss`)、金蛋纳福大暴击 (`hitegg`)、主公等级成长基金礼包 (`levelgift`)
 - [x] 官营特产与神装天铸体系全线贯通：国家特产商城 (`countryshop`)、天工神装铸造熔炼 (`equip_forge`)、开服十四日累登狂欢 (`totallogin`)、天命战纪史诗副本 (`epic`)
 - [x] 运营激活与战力成就基石就绪：至尊CDKey激活码兑换 (`activationcode`)、整军经武演武礼包 (`exercise`)、主公全军总战力透视 (`information`)、结义邀请拉新分红 (`invitation`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (89/89 100% 绿灯全过，1183 个断言)
+- [x] 核心业务轻量薄模型 (`src/Model/`) 落地：引入 `SoftDeletes` 自动软删除过滤、强类型属性转换与内聚领域方法（`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`）
+- [x] 编写 PHPUnit 全链路自动化测试套件 (90/90 100% 绿灯全过，1197 个断言)
 
 ---
 

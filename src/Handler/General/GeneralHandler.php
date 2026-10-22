@@ -6,51 +6,26 @@ namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
 
+use Hanjiang\Model\General;
+use Hanjiang\Model\Equipment;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 
 final class GeneralHandler
 {
     /**
-     * 计算单件装备提供的属性加成
+     * 计算单件装备提供的属性加成 (委托至 Equipment 领域模型)
      *
      * @param array<string, mixed> $equip
      * @return array{attack: int, defense: int, hp: int}
      */
     public static function calculateEquipBonus(array $equip): array
     {
-        $type = (int)($equip['type'] ?? 1);
-        $level = max(1, (int)($equip['level'] ?? 1));
-        $quality = max(1, (int)($equip['quality'] ?? 1));
-        $qualityMultiplier = 1.0 + ($quality - 1) * 0.2;
-
-        return match ($type) {
-            1 => [ // 武器: 增加攻击
-                'attack' => (int)round((50 + ($level - 1) * 20) * $qualityMultiplier),
-                'defense' => 0,
-                'hp' => 0,
-            ],
-            2 => [ // 铠甲: 增加物防
-                'attack' => 0,
-                'defense' => (int)round((30 + ($level - 1) * 10) * $qualityMultiplier),
-                'hp' => 0,
-            ],
-            3 => [ // 披风: 增加策防 (统一汇入 defense)
-                'attack' => 0,
-                'defense' => (int)round((20 + ($level - 1) * 8) * $qualityMultiplier),
-                'hp' => 0,
-            ],
-            4 => [ // 兵符/战马: 增加生命
-                'attack' => 0,
-                'defense' => 0,
-                'hp' => (int)round((300 + ($level - 1) * 100) * $qualityMultiplier),
-            ],
-            default => ['attack' => 0, 'defense' => 0, 'hp' => 0],
-        };
+        return (new Equipment($equip))->calculateBonus();
     }
 
     /**
-     * 计算武将的综合战斗属性 (基础数值 + 穿戴装备加成)
+     * 计算武将的综合战斗属性 (委托至 General 领域模型)
      *
      * @param array<string, mixed> $general
      * @param list<array<string, mixed>> $equippedItems
@@ -58,59 +33,7 @@ final class GeneralHandler
      */
     public static function calculateGeneralStats(array $general, array $equippedItems = []): array
     {
-        $level = max(1, (int)($general['level'] ?? 1));
-        $baseHp = 1500 + ($level - 1) * 120;
-        $baseAtk = 320 + ($level - 1) * 25;
-        $baseDef = 120 + ($level - 1) * 12;
-        $baseSpeed = 150 + ($level - 1) * 5;
-
-        $addAtk = 0;
-        $addDef = 0;
-        $addHp = 0;
-
-        foreach ($equippedItems as $item) {
-            $bonus = self::calculateEquipBonus($item);
-            $addAtk += $bonus['attack'];
-            $addDef += $bonus['defense'];
-            $addHp += $bonus['hp'];
-        }
-
-        // 叠加将魂星盘命格加成
-        $uid = (int)($general['uid'] ?? 0);
-        $gid = (int)($general['id'] ?? 0);
-        if ($uid > 0 && $gid > 0) {
-            $soulBonus = SoulHandler::calculateSoulBonus($uid, $gid);
-            $addHp += $soulBonus['hp'];
-            $addAtk += $soulBonus['attack'];
-            $addDef += $soulBonus['defense'];
-        }
-
-        // 叠加武将洗髓培养永久加成 (体力加生命，武力加攻击，智力加防御)
-        $wuliUp = (int)($general['wuliup'] ?? 0);
-        $zhiliUp = (int)($general['zhiliup'] ?? 0);
-        $tiliUp = (int)($general['tiliup'] ?? 0);
-        $addAtk += $wuliUp * 2;
-        $addDef += $zhiliUp * 2;
-        $addHp += $tiliUp * 10;
-
-        $totalHp = $baseHp + $addHp;
-        $totalAtk = $baseAtk + $addAtk;
-        $totalDef = $baseDef + $addDef;
-
-        return [
-            'level' => $level,
-            'hp' => $totalHp,
-            'allblood' => $totalHp,
-            'attack' => $totalAtk,
-            'defense' => $totalDef,
-            'speed' => $baseSpeed,
-            'base_hp' => $baseHp,
-            'base_attack' => $baseAtk,
-            'base_defense' => $baseDef,
-            'add_hp' => $addHp,
-            'add_attack' => $addAtk,
-            'add_defense' => $addDef,
-        ];
+        return (new General($general))->calculateStats($equippedItems);
     }
 
     /**
@@ -118,7 +41,7 @@ final class GeneralHandler
      */
     public static function getLevelUpExp(int $level): int
     {
-        return max(80, 80 * $level * $level);
+        return General::getLevelUpExp($level);
     }
 
     /**

@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Hanjiang\Tests\Feature;
 
+use Hanjiang\Model\Member;
+use Hanjiang\Model\General;
+use Hanjiang\Model\Equipment;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 use OmniPHP\Cache\Redis;
@@ -2007,5 +2010,36 @@ final class GameApiTest extends TestCase
         $reward = $this->request('invitation', 'get_reward');
         $this->assertSame(1, $reward['status']);
         $this->assertGreaterThan(0, $reward['silver']);
+    }
+
+    public function testLightweightThinModelsArchitecture(): void
+    {
+        // 1. 验证 Member 模型自动类型转换 (Casting) 与领域方法
+        $member = Member::findByUid(self::$uid);
+        $this->assertNotNull($member);
+        $this->assertIsInt($member->level);
+        $this->assertIsInt($member->silver);
+        $this->assertIsInt($member->gold);
+        $this->assertIsInt($member->uid);
+        $this->assertSame(self::$uid, $member->uid);
+
+        // 2. 验证 General 模型自动过滤软删除与领域属性计算
+        $generals = General::query()->where('uid', self::$uid)->get();
+        $this->assertNotEmpty($generals);
+        $firstGen = General::fromArray($generals[0]);
+        $this->assertIsInt($firstGen->level);
+
+        $stats = $firstGen->calculateStats();
+        $this->assertArrayHasKey('attack', $stats);
+        $this->assertArrayHasKey('defense', $stats);
+        $this->assertArrayHasKey('hp', $stats);
+
+        // 3. 验证 Equipment 模型属性推算
+        $equips = Equipment::query()->where('uid', self::$uid)->get();
+        $this->assertNotEmpty($equips);
+        $firstEq = Equipment::fromArray($equips[0]);
+        $bonus = $firstEq->calculateBonus();
+        $this->assertIsArray($bonus);
+        $this->assertGreaterThan(0, $firstEq->getSite());
     }
 }

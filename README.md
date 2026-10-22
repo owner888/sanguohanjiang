@@ -262,7 +262,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Border battlegrounds & growth milestones: Nation border mines (`countrymine`), national beast altars (`countryboss`), golden egg smashings (`hitegg`), and level-up milestone packages (`levelgift`)
 - [x] National trade & celestial forges: National prestige stores (`countryshop`), gear fabrications (`equip_forge`), continuous login festivals (`totallogin`), and historical epics (`epic`)
 - [x] Operational giftings & achievement telemetry: Universal CDKeys (`activationcode`), military drills (`exercise`), lord combat overview (`information`), and brotherhood recruitment (`invitation`)
-- [x] PHPUnit end-to-end integration test suite (89/89 100% passing, 1183 assertions)
+- [x] Lightweight domain thin models (`src/Model/`) with native `SoftDeletes`, automatic type casting, and encapsulated domain methods (`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`)
+- [x] PHPUnit end-to-end integration test suite (90/90 100% passing, 1197 assertions)
 
 ---
 
