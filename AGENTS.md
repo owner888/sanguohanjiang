@@ -43,6 +43,11 @@ A high-performance Three Kingdoms tactical card RPG game server reconstructed wi
    - Directly consume `OmniPHP\Http\Context`, `OmniPHP\WebSocket\Context`, `OmniPHP\Database\DB`, and `OmniPHP\Cache\Redis`.
    - Never write redundant standalone wrappers (`src/Context.php`, `src/Database/DB.php`). If domain extension is needed, legitimately extend the base class.
 
+9. **Worker Process Isolation & Zero Master fd Sharing Law (长连接子进程 Fork 隔离铁律)**:
+   - **Strictly forbidden**: Never initialize network connection pools (`DB::init()`, `Redis::init()`) in the Master process global scope before `Worker::runAll()`.
+   - **Reason**: `pcntl_fork()` duplicates open socket file descriptors. Sharing an fd across workers leads to concurrent packet collision, `Packets out of order` MySQL crashes, and severe race corruption.
+   - **Required**: `DB::init()` and `Redis::init()` must be initialized strictly inside the `$worker->onWorkerStart` event callback for each child worker independently.
+
 ---
 
 ## 2. Directory Layout & Standards
