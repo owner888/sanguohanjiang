@@ -72,6 +72,10 @@ use Hanjiang\Handler\LotteryHandler;
 use Hanjiang\Handler\GeneraltaskHandler;
 use Hanjiang\Handler\GeneralBookHandler;
 use Hanjiang\Handler\CopiesHandler;
+use Hanjiang\Handler\IslandHandler;
+use Hanjiang\Handler\HerothroneHandler;
+use Hanjiang\Handler\BeatengodHandler;
+use Hanjiang\Handler\WarHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -163,6 +167,10 @@ final class GameApiTest extends TestCase
             'generaltask' => GeneraltaskHandler::class,
             'general_book' => GeneralBookHandler::class,
             'copies' => CopiesHandler::class,
+            'island' => IslandHandler::class,
+            'herothrone' => HerothroneHandler::class,
+            'beatengod' => BeatengodHandler::class,
+            'war' => WarHandler::class,
         ]));
 
         self::$router = $router;
@@ -1715,5 +1723,63 @@ final class GameApiTest extends TestCase
         $sweep = $this->request('copies', 'mop_up');
         $this->assertSame(1, $sweep['status']);
         $this->assertGreaterThan(0, $sweep['silver']);
+    }
+
+    public function testIslandSystem(): void
+    {
+        // 1. 查看金银岛
+        $res = $this->request('island', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(3, $res['islands']);
+
+        // 2. 挑战蓬莱仙境岛 (island: 1)
+        $battle = $this->request('island', 'pk', ['id' => 1]);
+        $this->assertSame(1, $battle['status']);
+        $this->assertSame(1, $battle['win']);
+        $this->assertGreaterThan(0, $battle['silver']);
+    }
+
+    public function testHerothroneSystem(): void
+    {
+        // 1. 查看英雄王座
+        $res = $this->request('herothrone', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(3, $res['thrones']);
+
+        // 2. 冲击青铜铁血王座 (throne: 1)
+        $action = $this->request('herothrone', 'action', ['id' => 1]);
+        $this->assertSame(1, $action['status']);
+        $this->assertSame(1, $action['win']);
+        $this->assertGreaterThan(0, $action['silver']);
+    }
+
+    public function testBeatengodSystem(): void
+    {
+        // 1. 查看战神试炼
+        $res = $this->request('beatengod', 'index');
+        $this->assertSame(1, $res['status']);
+
+        // 2. 敲击战神金身
+        $beaten = $this->request('beatengod', 'beaten');
+        $this->assertSame(1, $beaten['status']);
+        $this->assertGreaterThan(0, $beaten['silver']);
+    }
+
+    public function testWarSystem(): void
+    {
+        // 1. 查看皇城国战大厅
+        $res = $this->request('war', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['leaderboard']);
+
+        // 2. 报名皇城国战出征
+        $entry = $this->request('war', 'entry');
+        $this->assertSame(1, $entry['status']);
+        $this->assertGreaterThan(0, $entry['silver']);
+
+        // 3. 查看军功商城
+        $shop = $this->request('war', 'point_shop');
+        $this->assertSame(1, $shop['status']);
+        $this->assertNotEmpty($shop['goods']);
     }
 }

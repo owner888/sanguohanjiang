@@ -183,6 +183,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=generaltask&m=index|action|get_report`: Warlord expeditions, scout patrols, and exploration spoils
 - `c=general_book&m=index|levelup`: Heroes of the Three Kingdoms chronicle, bond activation, and army stat boosts
 - `c=copies&m=index|pk|mop_up`: Multi-hero campaign copies (Ten Attendants, Dong Zhuo, Zhang Kai), boss duels, and mop sweeps
+- `c=island&m=index|pk`: Penglai, Yingzhou, and Fangzhang treasure islands, beast conquests, and overseas spoils
+- `c=herothrone&m=index|action`: Iron, Silver, and Imperial Hero Throne dominance tournaments
+- `c=beatengod&m=index|beaten|get_box_reward`: Golden martial god body beatings, divine crystal drops, and trials chests
+- `c=war&m=index|entry|point_shop`: Three Kingdoms Imperial Capital Cross-Server Holy War, enlistments, and military merit shop
 
 ---
 
@@ -239,7 +243,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Merchant economy & talent mastery: Four Seas commerce (`business`), treasure bowl gambling (`gambling`), daily military bounties (`task`), and talent tree awakenings (`talent`)
 - [x] Pinnacle tier ascensions: Quality ascension (`advanced`), gear affix refinement (`refine`), seven-star breakthrough (`star`), and War College technologies (`war_college`)
 - [x] Chronicles & campaign expeditions: Fortune lottery (`lottery`), warlord expeditions (`generaltask`), heroes chronicle bonds (`general_book`), and campaign pacifications (`copies`)
-- [x] PHPUnit end-to-end integration test suite (73/73 100% passing, 998 assertions)
+- [x] Epic holy wars & overseas frontiers: Gold & Silver treasure islands (`island`), Hero Throne dominance (`herothrone`), martial god golden body trials (`beatengod`), and Imperial Capital Holy War (`war`)
+- [x] PHPUnit end-to-end integration test suite (77/77 100% passing, 1040 assertions)
 
 ---
 

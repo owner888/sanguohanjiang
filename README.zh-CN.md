@@ -187,6 +187,10 @@
 - `c=generaltask&m=index|action|get_report`：武将派遣远征试炼、古栈道南蛮巡狩与凯旋战利品将魂上缴
 - `c=general_book&m=index|levelup`：三国英雄名将谱图鉴、点亮桃园结义/五虎上将/五子良将/东吴都督羁绊
 - `c=copies&m=index|pk|mop_up`：平乱战役副本（十常侍之乱/董卓乱政/张闿叛军据点）、九宫格推演与一键平乱扫荡
+- `c=island&m=index|pk`：东海金银岛秘境探险（蓬莱仙境/瀛洲金岛/方丈古境）、护岛神兽对决与海外龙脉珍宝
+- `c=herothrone&m=index|action`：英雄王座巅峰争霸（青铜铁血/白银霸烈/至尊第一王座）、九宫格攻擂推演与霸主加冕
+- `c=beatengod&m=index|beaten|get_box_reward`：真武战神金光试炼、敲击金身赐福掉落与战神宝箱领奖
+- `c=war&m=index|entry|point_shop`：魏蜀吴皇城跨服封神国战大厅、出征报名参战与军功功勋商城兑换
 
 ---
 
@@ -243,7 +247,8 @@
 - [x] 商业经贸与天赋神力体系贯通：四海通商行商经商 (`business`)、金银宝盆博彩 (`gambling`)、每日军务悬赏令 (`task`)、武将天赋神力树 (`talent`)
 - [x] 终极养成进阶体系全线贯通：神将品质飞升 (`advanced`)、装备精炼词条 (`refine`)、武将七星突破 (`star`)、国家战争学院科技 (`war_college`)
 - [x] 英雄图谱与战役平乱全线就绪：幸运大转盘 (`lottery`)、武将远征试炼 (`generaltask`)、名将谱羁绊点亮 (`general_book`)、平乱战役副本 (`copies`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (73/73 100% 绿灯全过，998 个断言)
+- [x] 跨服争霸与海外秘境全线贯通：东海金银岛秘境 (`island`)、英雄王座巅峰争霸 (`herothrone`)、真武战神金身试炼 (`beatengod`)、皇城跨服封神国战 (`war`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (77/77 100% 绿灯全过，1040 个断言)
 
 ---
 

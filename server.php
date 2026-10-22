@@ -73,6 +73,10 @@ use Hanjiang\Handler\LotteryHandler;
 use Hanjiang\Handler\GeneraltaskHandler;
 use Hanjiang\Handler\GeneralBookHandler;
 use Hanjiang\Handler\CopiesHandler;
+use Hanjiang\Handler\IslandHandler;
+use Hanjiang\Handler\HerothroneHandler;
+use Hanjiang\Handler\BeatengodHandler;
+use Hanjiang\Handler\WarHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -165,6 +169,10 @@ $router->use(new GameProtocolMiddleware([
     'generaltask' => GeneraltaskHandler::class,
     'general_book' => GeneralBookHandler::class,
     'copies' => CopiesHandler::class,
+    'island' => IslandHandler::class,
+    'herothrone' => HerothroneHandler::class,
+    'beatengod' => BeatengodHandler::class,
+    'war' => WarHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {
