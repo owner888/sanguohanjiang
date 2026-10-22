@@ -60,7 +60,7 @@ if (!empty($config['ws']['listen'])) {
         \Hanjiang\WebSocket\WebSocketHandler::init();
     };
 
-    $wsWorker->onConnect = [Hanjiang\WebSocket\WebSocketHandler::class, 'onConnect'];
+    $wsWorker->onWebSocketConnect = [Hanjiang\WebSocket\WebSocketHandler::class, 'onWebSocketConnect'];
     $wsWorker->onClose = [Hanjiang\WebSocket\WebSocketHandler::class, 'onClose'];
     $wsWorker->onMessage = [Hanjiang\WebSocket\WebSocketHandler::class, 'onMessage'];
     // 对齐 smart-book 规范：注册协议级 ping (Opcode 0x9) 回调，自动回 pong 帧并刷新连接活跃时间

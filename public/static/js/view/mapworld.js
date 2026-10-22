@@ -457,7 +457,7 @@
                     that.displayShiliPage(res.next_status);
                 }
                 //显示当前位置
-                if (map_ini['world'][missionlevel].name) {
+                if (map_ini['world'] && map_ini['world'][missionlevel] && map_ini['world'][missionlevel].name) {
                     $('#world').append('<p class="nowplace">' + map_ini['world'][missionlevel].name + '</p>')
                 }
 

@@ -54,6 +54,15 @@ final class WebSocketHandler
     public static function onConnect(TcpConnection $connection): void
     {
         self::touch($connection);
+    }
+
+    /**
+     * WebSocket 握手正式完成事件（协议级 Upgrade 成功）
+     * 只有在此阶段，才能向客户端发送 WebSocket 数据帧，彻底根治浏览器 1006 异常断开与无限重连！
+     */
+    public static function onWebSocketConnect(TcpConnection $connection, mixed $httpHeader = null): void
+    {
+        self::touch($connection);
         Broadcaster::register($connection);
         $connection->send(json_encode([
             'type' => 'connected',
