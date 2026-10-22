@@ -85,6 +85,10 @@ use Hanjiang\Handler\CountryShopHandler;
 use Hanjiang\Handler\EquipForgeHandler;
 use Hanjiang\Handler\TotalLoginHandler;
 use Hanjiang\Handler\EpicHandler;
+use Hanjiang\Handler\ActivationCodeHandler;
+use Hanjiang\Handler\ExerciseHandler;
+use Hanjiang\Handler\InformationHandler;
+use Hanjiang\Handler\InvitationHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -189,6 +193,10 @@ $router->use(new GameProtocolMiddleware([
     'equip_forge' => EquipForgeHandler::class,
     'totallogin' => TotalLoginHandler::class,
     'epic' => EpicHandler::class,
+    'activationcode' => ActivationCodeHandler::class,
+    'exercise' => ExerciseHandler::class,
+    'information' => InformationHandler::class,
+    'invitation' => InvitationHandler::class,
 ]));
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

@@ -84,6 +84,10 @@ use Hanjiang\Handler\CountryShopHandler;
 use Hanjiang\Handler\EquipForgeHandler;
 use Hanjiang\Handler\TotalLoginHandler;
 use Hanjiang\Handler\EpicHandler;
+use Hanjiang\Handler\ActivationCodeHandler;
+use Hanjiang\Handler\ExerciseHandler;
+use Hanjiang\Handler\InformationHandler;
+use Hanjiang\Handler\InvitationHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -187,6 +191,10 @@ final class GameApiTest extends TestCase
             'equip_forge' => EquipForgeHandler::class,
             'totallogin' => TotalLoginHandler::class,
             'epic' => EpicHandler::class,
+            'activationcode' => ActivationCodeHandler::class,
+            'exercise' => ExerciseHandler::class,
+            'information' => InformationHandler::class,
+            'invitation' => InvitationHandler::class,
         ]));
 
         self::$router = $router;
@@ -722,11 +730,8 @@ final class GameApiTest extends TestCase
 
     public function testWebSocketAndBroadcasterSystem(): void
     {
-        // 1. 发送跑马灯大喇叭广播 (直接使用框架原生 Broadcaster)
-        \OmniPHP\WebSocket\Broadcaster::broadcast('marquee', [
-            'content' => '全服通告：三国争霸正式开启！',
-            'type' => 'system_broadcast',
-        ]);
+        // 1. 发送跑马灯大喇叭广播
+        \Hanjiang\WebSocket\WebSocketHandler::handleMarquee(\OmniPHP\WebSocket\Context::mock(['content' => '全服通告：三国争霸正式开启！']));
 
         // 2. 检查 Redis 广播历史
         $history = \OmniPHP\Cache\Redis::getJson('broadcast_history');
@@ -1938,5 +1943,68 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $battle['status']);
         $this->assertSame(1, $battle['win']);
         $this->assertGreaterThan(0, $battle['silver']);
+    }
+
+    public function testActivationCodeSystem(): void
+    {
+        // 1. 查看激活码主界面
+        $res = $this->request('activationcode', 'index');
+        $this->assertSame(1, $res['status']);
+
+        // 2. 兑换官方豪礼码 VIP888
+        $reward = $this->request('activationcode', 'get_reward', ['code' => 'VIP888']);
+        $this->assertSame(1, $reward['status']);
+        $this->assertSame(88888, $reward['silver']);
+        $this->assertSame(200, $reward['gold']);
+
+        // 3. 重复兑换拦截
+        $dup = $this->request('activationcode', 'get_reward', ['code' => 'VIP888']);
+        $this->assertSame(-2, $dup['status']);
+    }
+
+    public function testExerciseSystem(): void
+    {
+        // 1. 查看整军演武
+        $res = $this->request('exercise', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThanOrEqual(1, $res['gift_count']);
+
+        // 2. 拆开整军礼包
+        $open = $this->request('exercise', 'open_gift');
+        $this->assertSame(1, $open['status']);
+        $this->assertGreaterThan(0, $open['silver']);
+        $this->assertGreaterThan(0, $open['act']);
+    }
+
+    public function testInformationSystem(): void
+    {
+        // 1. 查看主公总战力总览
+        $res = $this->request('information', 'get_info');
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThan(0, $res['total_power']);
+        $this->assertGreaterThanOrEqual(1, $res['general_count']);
+
+        // 2. 查看个人成就勋章
+        $ach = $this->request('information', 'get_own_achievement');
+        $this->assertSame(1, $ach['status']);
+        $this->assertNotEmpty($ach['list']);
+    }
+
+    public function testInvitationSystem(): void
+    {
+        // 1. 查看结义邀请
+        $res = $this->request('invitation', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['my_code']);
+
+        // 2. 绑定好友结义码
+        $bind = $this->request('invitation', 'change', ['code' => 'HJ888888']);
+        $this->assertSame(1, $bind['status']);
+        $this->assertSame(100, $bind['gold']);
+
+        // 3. 领取邀请达标奖励
+        $reward = $this->request('invitation', 'get_reward');
+        $this->assertSame(1, $reward['status']);
+        $this->assertGreaterThan(0, $reward['silver']);
     }
 }

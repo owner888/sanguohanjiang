@@ -195,6 +195,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=equip_forge&m=index|fabrication|resolve`: Celestial gear forges, artifact fabrications, and gear scrap smelting
 - `c=totallogin&m=index|action`: Continuous login festival milestones (Days 1 to 14) and carnival silver/gold bundles
 - `c=epic&m=index|force`: Historical epic campaigns (Baima, Wuchao, Huarong Road) and heroic warlord duels
+- `c=activationcode&m=index|get_reward`: Universal CDKey / redemption code claims (VIP666, VIP888, SG888) and ingot/silver windfalls
+- `c=exercise&m=index|open_gift`: Imperial military exercise drills, gift box openings, and deployment orders
+- `c=information&m=index|get_info|get_own_achievement`: Lord combat rating overview, warlord statistics, and achievement badges
+- `c=invitation&m=index|change|get_reward`: Brotherhood recruitment codes, recruit dividend ingots, and referral milestone gifts
 
 ---
 
@@ -254,7 +258,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Epic holy wars & overseas frontiers: Gold & Silver treasure islands (`island`), Hero Throne dominance (`herothrone`), martial god golden body trials (`beatengod`), and Imperial Capital Holy War (`war`)
 - [x] Border battlegrounds & growth milestones: Nation border mines (`countrymine`), national beast altars (`countryboss`), golden egg smashings (`hitegg`), and level-up milestone packages (`levelgift`)
 - [x] National trade & celestial forges: National prestige stores (`countryshop`), gear fabrications (`equip_forge`), continuous login festivals (`totallogin`), and historical epics (`epic`)
-- [x] PHPUnit end-to-end integration test suite (85/85 100% passing, 1136 assertions)
+- [x] Operational giftings & achievement telemetry: Universal CDKeys (`activationcode`), military drills (`exercise`), lord combat overview (`information`), and brotherhood recruitment (`invitation`)
+- [x] PHPUnit end-to-end integration test suite (89/89 100% passing, 1183 assertions)
 
 ---
 

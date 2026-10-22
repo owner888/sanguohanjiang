@@ -199,6 +199,10 @@
 - `c=equip_forge&m=index|fabrication|resolve`：天工神兵铸造工坊、神装开炉淬火打造与闲置装备熔炼提取精铁
 - `c=totallogin&m=index|action`：全服开服累登狂欢大礼（1~14天全梯度封赏）、豪华银票元宝礼包一键申领
 - `c=epic&m=index|force`：三国历史天命战纪史诗战役（白马之战/火烧乌巢/华容道劫曹）、九宫格推演决战领赏
+- `c=activationcode&m=index|get_reward`：全服至尊特权激活码/CDKey兑换系统（VIP666/VIP888/SG888）、海量元宝银两秒级兑付与防重领取
+- `c=exercise&m=index|open_gift`：全军整军经武大演习、整军礼包拆开与行军令军饷犒赏
+- `c=information&m=index|get_info|get_own_achievement`：主公全军总战力透视总览、名将总汇统计与个人成就勋章荣耀
+- `c=invitation&m=index|change|get_reward`：结义金兰邀请招募、好友绑定双向获赠元宝与邀请人头里程碑达标大礼
 
 ---
 
@@ -258,7 +262,8 @@
 - [x] 跨服争霸与海外秘境全线贯通：东海金银岛秘境 (`island`)、英雄王座巅峰争霸 (`herothrone`)、真武战神金身试炼 (`beatengod`)、皇城跨服封神国战 (`war`)
 - [x] 边境阵营战场与等级里程碑：国家边境矿山争夺 (`countrymine`)、国家神兽守护神祭坛 (`countryboss`)、金蛋纳福大暴击 (`hitegg`)、主公等级成长基金礼包 (`levelgift`)
 - [x] 官营特产与神装天铸体系全线贯通：国家特产商城 (`countryshop`)、天工神装铸造熔炼 (`equip_forge`)、开服十四日累登狂欢 (`totallogin`)、天命战纪史诗副本 (`epic`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (85/85 100% 绿灯全过，1136 个断言)
+- [x] 运营激活与战力成就基石就绪：至尊CDKey激活码兑换 (`activationcode`)、整军经武演武礼包 (`exercise`)、主公全军总战力透视 (`information`)、结义邀请拉新分红 (`invitation`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (89/89 100% 绿灯全过，1183 个断言)
 
 ---
 
