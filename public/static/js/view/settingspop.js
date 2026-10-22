@@ -440,4 +440,19 @@
             this.unbindAll();
         },
     };
+
+    // 全局防丢委托：确保无论鼠标、触屏在任何时机点击关闭/开启音乐按钮均百分之百响应并同步静音
+    $(document).undelegate('#music_btn', 'click touchend').delegate('#music_btn', 'click touchend', function(e) {
+        if (e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+        if (window.gAudio) {
+            var nextStatus = !window.gAudio.musicstatus;
+            window.gAudio.settingmusic(nextStatus);
+            var text = nextStatus ? (lang('music_off') || '关闭音乐') : (lang('music_on') || '开启音乐');
+            $('#music_btn').text(text).html(text);
+        }
+        return false;
+    });
 })();

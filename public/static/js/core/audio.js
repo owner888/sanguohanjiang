@@ -78,6 +78,7 @@
                 } else {
                     try {
                         m.pause();
+                        m.muted = true;
                         m.currentTime = 0;
                     } catch(e) {}
                 }
@@ -142,6 +143,7 @@
                         au.preload = 'auto';
                         self.nativemusic[audioid] = au;
                     }
+                    au.muted = false;
                     var p = au.play();
                     if (p != undefined && p != null && p['catch'] != undefined) {
                         p['catch'](function(e) {
