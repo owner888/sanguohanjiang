@@ -22,6 +22,15 @@
     "require-dev": {
         "phpunit/phpunit": "^13.4"
     },
+    "scripts": {
+        "test": "phpunit",
+        "server:start": "php server.php start",
+        "server:daemon": "php server.php start -d",
+        "server:reload": "php server.php reload",
+        "server:restart": "php server.php restart -d",
+        "server:stop": "php server.php stop",
+        "server:status": "php server.php status"
+    },
     "repositories": [
         {
             "type": "vcs",

@@ -100,17 +100,23 @@
 4. 启动服务：
    ```bash
    # 调试模式（前台运行，Ctrl+C 停止）
-   php server.php start
+   composer server:start
 
    # 守护进程模式（后台常驻）
-   php server.php start -d
+   composer server:daemon
 
-   # 重载代码 / 停止服务
-   php server.php reload
-   php server.php stop
+   # 重载代码 / 查看状态 / 停止服务
+   composer server:reload
+   composer server:status
+   composer server:stop
    ```
 
-5. 打开游戏：
+5. 执行全量自动化测试套件：
+   ```bash
+   composer test
+   ```
+
+6. 打开游戏：
    在浏览器中访问：
    ```
    http://127.0.0.1:18100/

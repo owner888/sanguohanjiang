@@ -100,13 +100,23 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 4. Start server:
    ```bash
    # Debug mode (foreground)
-   php server.php start
+   composer server:start
 
    # Daemon mode (background)
-   php server.php start -d
+   composer server:daemon
+
+   # Hot reload / status / stop
+   composer server:reload
+   composer server:status
+   composer server:stop
    ```
 
-5. Play the game:
+5. Run test suite:
+   ```bash
+   composer test
+   ```
+
+6. Play the game:
    Open your browser and navigate to:
    ```
    http://127.0.0.1:18100/
