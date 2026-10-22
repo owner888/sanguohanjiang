@@ -258,10 +258,10 @@
             var that = this;
             
             world_id = parseInt(world_id);
-            nextWorld = map_ini['worldname'][world_id + 1];
+            nextWorld = map_ini['worldname'] && map_ini['worldname'][world_id + 1];
             
             if (world_id > 1){
-                prevWorld = map_ini['worldname'][world_id - 1];
+                prevWorld = map_ini['worldname'] && map_ini['worldname'][world_id - 1];
             }
             
 
@@ -372,7 +372,7 @@
                 var lastenemy = null;
                 var lastenemy_id = 0;
                 var html = '';
-                var shili_map_ini = map_ini['shili'][player.info.missionlevel];
+                var shili_map_ini = (map_ini['shili'] && map_ini['shili'][player.info.missionlevel]) || {};
                 var nowstage = {};
                 var style = '';
 
@@ -1056,14 +1056,14 @@
                 //暂时前端写死,南宋势力不显示英雄集结
                 if (player.info.missionlevel != 15) {
                     var k1 = player.info.missionlevel - 1;
-                    prevShili = map_ini['world'][k1];
+                    prevShili = (map_ini['world'] && map_ini['world'][k1]) || null;
                 }
             }
             //暂时前端写死,英雄集结不显示宋朝势力,宋朝势力不显示接下来的势力
             //2014-06-04 添加新势力隋唐，宋朝要显隋唐势力，隋唐不显示接下来的势力
             if (player.info.missionlevel != 14 && player.info.missionlevel != 16) {
                 var k2 = player.info.missionlevel + 1;
-                nextShili = map_ini['world'][k2];
+                nextShili = (map_ini['world'] && map_ini['world'][k2]) || null;
             }
             if (prevShili) {
                 $('#footer').find('#guanqia_prev').text(prevShili.name).unbind('touchend').bind('touchend',

@@ -393,28 +393,41 @@ final class MapHandler
 
             $curMemberStage = (int)($member['missionstage'] ?? 1);
             $curMemberMission = (int)($member['missionid'] ?? 1);
+            $maxStageForLevel = 4; // 黄巾势力共有 4 个大关卡场景
+            $nextLevel = $level;
 
             if ($isWin) {
                 if ($isLastMission) {
-                    // 打败守关Boss，整关通关！开启下一大关场景
-                    $openstatus = 1;
-                    $nextStage = $stage + 1;
-                    $nextMissionId = 1;
+                    if ($stage >= $maxStageForLevel) {
+                        // 打败势力最终Boss，整势力彻底通关！开启下一新势力 (例如袁绍势力)
+                        $openstatus = 2;
+                        $nextLevel = $level + 1;
+                        $nextStage = 1;
+                        $nextMissionId = 1;
+                        $nextSite = 1; // 回到世界大地图展现新势力开启
+                    } else {
+                        // 打败守关Boss，当前小关卡通关！开启下一大关场景
+                        $openstatus = 1;
+                        $nextStage = $stage + 1;
+                        $nextMissionId = 1;
+                        $nextSite = 2; // 回到势力场景地图展现新开启关卡
+                    }
                 } else {
                     // 普通据点通关，推进到下一个据点
                     $openstatus = 0;
                     $nextStage = $stage;
                     $nextMissionId = max($curMemberMission, $missionId + 1);
+                    $nextSite = 3; // 保持在关卡小地图现场
                 }
 
-                // 推进玩家进度并留存关卡小地图
+                // 推进玩家进度
                 DB::table('member')->where('uid', $uid)->update([
                     'act' => max(0, (int)$member['act'] - 1),
                     'silver' => (int)$member['silver'] + 500,
                     'exp' => $newExp,
                     'level' => $curLevel,
-                    'missionsite' => 3, // 保持在关卡小地图现场
-                    'missionlevel' => $level,
+                    'missionsite' => $nextSite,
+                    'missionlevel' => $nextLevel,
                     'missionstage' => $nextStage,
                     'missionid' => $nextMissionId,
                 ]);
@@ -454,7 +467,8 @@ final class MapHandler
                 'getvalue' => 500,
                 'background' => 1,
                 'openstatus' => $openstatus,
-                'missionlevel' => $level,
+                'get_level' => $level, // 势力通关标记
+                'missionlevel' => $nextLevel,
                 'missionstage' => $nextStage,
                 'missionid' => $nextMissionId,
                 'itemname' => '青铜铠甲',
