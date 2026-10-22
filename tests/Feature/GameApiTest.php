@@ -476,6 +476,11 @@ final class GameApiTest extends TestCase
         // 测试探活接口 c=index&m=index
         $rootIndex = $this->request('index', 'index');
         $this->assertSame(1, $rootIndex['status']);
+
+        // 清理单测写入的测试聊天消息，绝不污染真实在线玩家屏幕
+        $all = Redis::getJson('chat_messages') ?: [];
+        $cleaned = array_values(array_filter($all, static fn(array $m): bool => ($m['message'] ?? '') !== '测试三国聊天'));
+        Redis::setJson('chat_messages', $cleaned, 86400);
     }
 
     public function testMainquestSystem(): void

@@ -8317,16 +8317,18 @@ display: inline-block;
 font-weight: normal;
 }
 #chatpop #chatpop_scroller #chatpop_list div{
-float: left
+display: inline;
+float: none;
 }
 #chatpop #chatpop_scroller #chatpop_list li p{
 color:#fff;
-float: left;
-max-width: 834px;
-max-height:90px;
+display: inline;
+float: none;
+width: auto !important;
+max-width: none;
 min-height: 30px;
 line-height: 30px;
-overflow:hidden;
+word-break: break-all;
 }
 /*名字*/
 #chatpop #chatpop_scroller #chatpop_list li .name{
