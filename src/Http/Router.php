@@ -30,22 +30,25 @@ final class Router
     public function dispatch(TcpConnection $connection, Request $request): void
     {
         $path = $request->path();
+        $isApi = $path === '/index.php' || str_ends_with($path, '.php') || $request->get('c') !== null;
 
-        // 1. 静态文件直出 (autoload 动态注入端口兼容，其余统一走 OmniPHP 官方 StaticServer)
-        if (str_ends_with($path, 'autoload.js')) {
-            $realFile = realpath($this->publicPath . $path);
-            if ($realFile !== false && is_file($realFile)) {
-                $content = (string)file_get_contents($realFile);
-                $connection->send(new WorkermanResponse(200, [
-                    'Content-Type' => 'application/javascript; charset=utf-8',
-                    'Cache-Control' => 'no-cache',
-                ], $content));
+        if (!$isApi) {
+            // 1. 静态文件直出 (autoload 动态注入端口兼容，其余统一走 OmniPHP 官方 StaticServer)
+            if (str_ends_with($path, 'autoload.js')) {
+                $realFile = realpath($this->publicPath . $path);
+                if ($realFile !== false && is_file($realFile)) {
+                    $content = (string)file_get_contents($realFile);
+                    $connection->send(new WorkermanResponse(200, [
+                        'Content-Type' => 'application/javascript; charset=utf-8',
+                        'Cache-Control' => 'no-cache',
+                    ], $content));
+                    return;
+                }
+            }
+
+            if (StaticServer::serve($connection, $request, '', $this->publicPath, ['index' => 'index.html', 'spaFallback' => false])) {
                 return;
             }
-        }
-
-        if (StaticServer::serve($connection, $request, '', $this->publicPath, ['index' => 'index.html', 'spaFallback' => true])) {
-            return;
         }
 
         // 2. 组装请求上下文 Context
