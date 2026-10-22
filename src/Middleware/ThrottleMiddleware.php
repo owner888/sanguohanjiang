@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Middleware;
 
+use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Http\Context;
 
@@ -37,14 +38,7 @@ final class ThrottleMiddleware implements MiddlewareInterface
             return $next($ctx);
         }
 
-        $token = (string)$ctx->query('token', $ctx->post('token', ''));
-        $uid = (int)$ctx->query('uid', $ctx->post('uid', 0));
-        if ($uid <= 0 && $token !== '') {
-            $session = Redis::getJson('token:' . $token);
-            if (is_array($session) && isset($session['uid'])) {
-                $uid = (int)$session['uid'];
-            }
-        }
+        $uid = MemberHandler::resolveUid($ctx);
 
         if ($uid <= 0) {
             return $next($ctx);

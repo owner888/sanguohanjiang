@@ -22,8 +22,9 @@ final class LoginHandler
         }
 
         $token = 'tk_guest_' . $uid . '_' . bin2hex(random_bytes(8));
-        // 将 Token 写入 Redis 缓存，有效期 7 天
+        // 将 Token 写入 Redis 缓存 (双向兼容纯字符串与结构化 JSON)，有效期 7 天
         Redis::set('token:' . $token, (string)$uid, 86400 * 7);
+        Redis::setJson('token_session:' . $token, ['uid' => $uid, 'time' => time()], 86400 * 7);
         Redis::set('user_token:' . $uid, $token, 86400 * 7);
 
         $member = DB::table('member')->where('uid', $uid)->first();
@@ -58,8 +59,9 @@ final class LoginHandler
         $uid = (int)$user['uid'];
         $token = 'tk_user_' . $uid . '_' . bin2hex(random_bytes(8));
 
-        // 写入 Redis 缓存
+        // 写入 Redis 缓存 (双向兼容纯字符串与结构化 JSON)
         Redis::set('token:' . $token, (string)$uid, 86400 * 7);
+        Redis::setJson('token_session:' . $token, ['uid' => $uid, 'time' => time()], 86400 * 7);
         Redis::set('user_token:' . $uid, $token, 86400 * 7);
 
         $member = DB::table('member')->where('uid', $uid)->first();

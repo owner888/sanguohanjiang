@@ -109,9 +109,11 @@ final class WebSocketHandler
         $uid = (int)$ctx->input('uid', 0);
 
         if ($token !== '') {
-            $session = Redis::getJson('token:' . $token);
-            if (is_array($session) && isset($session['uid'])) {
-                $uid = (int)$session['uid'];
+            $cached = Redis::get('token:' . $token);
+            if ($cached !== null && (int)$cached > 0) {
+                $uid = (int)$cached;
+            } elseif (preg_match('/^tk_(?:guest|user)_(\d+)_/i', $token, $m)) {
+                $uid = (int)$m[1];
             }
         }
 

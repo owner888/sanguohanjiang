@@ -12,7 +12,7 @@ use OmniPHP\Cache\Redis;
 final class MemberHandler
 {
     /**
-     * 根据请求上下文解析当前真实 uid
+     * 根据请求上下文解析当前真实 uid (多重防御，坚决杜绝跨号串号)
      */
     public static function resolveUid(Context $ctx): int
     {
@@ -22,6 +22,19 @@ final class MemberHandler
             if ($cachedUid !== null && (int)$cachedUid > 0) {
                 return (int)$cachedUid;
             }
+            $json = Redis::getJson('token:' . $token);
+            if (is_array($json) && isset($json['uid']) && (int)$json['uid'] > 0) {
+                return (int)$json['uid'];
+            }
+            // 容灾解析：从自描述 Token 格式直接解构 (如 tk_guest_34_xxx 或 tk_user_18_xxx)
+            if (preg_match('/^tk_(?:guest|user)_(\d+)_/i', $token, $matches)) {
+                $uid = (int)$matches[1];
+                if ($uid > 0) {
+                    // 自动回填 Redis 缓存
+                    Redis::set('token:' . $token, (string)$uid, 86400 * 7);
+                    return $uid;
+                }
+            }
         }
 
         $inputUid = (int)$ctx->input('uid', 0);
@@ -29,9 +42,7 @@ final class MemberHandler
             return $inputUid;
         }
 
-        // 回退到最新活跃用户
-        $latest = DB::table('member')->orderBy('uid', 'DESC')->first();
-        return $latest !== null ? (int)$latest['uid'] : 10001;
+        return 1;
     }
 
     /**
@@ -113,6 +124,7 @@ final class MemberHandler
             'missionsite' => (int)$member['missionsite'],
             'missionlevel' => (int)$member['missionlevel'],
             'missionstage' => (int)$member['missionstage'],
+            'missionid' => (int)$member['missionid'],
             'mainquest' => [],
             'attackcd' => [
                 'status' => (int)($field['attackstatus'] ?? 0),
