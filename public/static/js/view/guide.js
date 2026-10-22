@@ -1595,27 +1595,26 @@
                 this.makeArrow(offset, null, isright);
             }
             
-            $('#guide_target').unbind('touchend').one('touchend',
-            function(e) {
-                dom.trigger(eventName,[]);
-                e.preventDefault();
+            var fireTrigger = function(e) {
+                if (e) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+                dom.trigger(eventName, []);
+                if (eventName !== 'click') {
+                    dom.trigger('click', []);
+                }
+                if (eventName !== 'touchend') {
+                    dom.trigger('touchend', []);
+                }
                 guide.hide();
-                
                 if (callback) {
                     callback();
                 }
-            });
-            
-            $('#guide_arrow').unbind('touchend').one('touchend',
-            function(e) {
-                dom.trigger(eventName,[]);
-                e.preventDefault();
-                guide.hide();
-                
-                if (callback) {
-                    callback();
-                }
-            });
+            };
+
+            $('#guide_target').unbind('click touchend').one('click touchend', fireTrigger);
+            $('#guide_arrow').unbind('click touchend').one('click touchend', fireTrigger);
             this.cleanFullmask(); //清除可能存在的全屏mask
 
         },
@@ -1653,7 +1652,7 @@
                 this.makeArrow(offset);
             }
             
-            dom.unbind('touchend').one('touchend',
+            dom.unbind('click touchend').one('click touchend',
             function(e) {
                 e.preventDefault();
                 guide.hide();
@@ -1663,11 +1662,14 @@
             });
             //这里这样写就不会二次触发了，因为不管是不是touchend时间one时间肯定可以触发
             if (eventName) {
-                $('#guide_arrow').unbind('touchend').one('touchend',
+                $('#guide_arrow').unbind('click touchend').one('click touchend',
                 function(e) {
                     dom.trigger(eventName,[]);
                     if (eventName != 'touchend') {
                         dom.trigger('touchend');
+                    }
+                    if (eventName != 'click') {
+                        dom.trigger('click');
                     }
                 });
             }
@@ -1794,7 +1796,7 @@
             };
             npc_page.show();
             setTimeout(function() {
-                npc_page.unbind('touchend').one('touchend', touchRender);
+                npc_page.unbind('click touchend').one('click touchend', touchRender);
             },
             500);
             guide.cleanFullmask();
@@ -2102,7 +2104,7 @@
             guideNpc.append(skipBtnDom);
 
             // 绑定跳过引导
-            skipBtnDom.unbind('touchend').bind('touchend', function (e) {
+            skipBtnDom.unbind('click touchend').bind('click touchend', function (e) {
                 
                 if (xGame.checkLock(true)) {
                     return false;
