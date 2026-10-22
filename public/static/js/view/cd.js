@@ -648,6 +648,11 @@
         },
 
         read: function() {
+            // 现代全双工架构 (对齐 smart-book): 当 WebSocket 长连接在线时，消息走 WebSocket 毫秒级下推，静默跳过无谓的 HTTP 短轮询
+            if (window.GameWS && window.GameWS.isConnected) {
+                return;
+            }
+
             var that = this;
             var Func = function(res) {
                 switch (parseInt(res.status)) {

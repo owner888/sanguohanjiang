@@ -316,6 +316,49 @@
             const uid = parseInt(localStorage.getItem('uid') || '0', 10);
             window.GameWS.connect(token, uid);
         });
+
+        // 核心混合架构 (对齐 smart-book): 发送走 HTTP 网关，接收走 WebSocket 毫秒级下推
+        window.GameWS.on('chat_message', function (data) {
+            if (!data || !data.message) return;
+
+            var msgItem = {
+                id: data.id || Date.now(),
+                uid: data.uid || 0,
+                nickname: data.nickname || data.name || '系统',
+                name: data.nickname || data.name || '系统',
+                type: typeof data.type !== 'undefined' ? data.type : 0,
+                system: data.system || 0,
+                message: data.message,
+                time: data.time || Math.floor(Date.now() / 1000)
+            };
+
+            // 如果是当前玩家自己发送的，发送时的 HTTP 回调已经立即渲染并追加过了，避免重复
+            var myUid = (typeof player !== 'undefined' && player.info) ? player.info.uid : 0;
+            if (myUid > 0 && msgItem.uid === myUid) {
+                return;
+            }
+
+            // 1. 如果大聊天弹窗当前正打开着，实时追加到弹窗 DOM 中
+            if (typeof chatpop !== 'undefined' && chatpop.isshow && chatpop.centerDom) {
+                chatpop.centerDom.append(chatpop.buildLi([msgItem]));
+                chatpop.deleteTenLine();
+                chatpop.setWidth();
+                chatpop.chatRefresh(true);
+            }
+
+            // 2. 无论弹窗是否打开，都实时推送到主界面左下角小聊天窗口
+            if (typeof CD !== 'undefined' && CD['chat']) {
+                if (CD['chat'].allChatData) {
+                    CD['chat'].allChatData.unshift(msgItem);
+                }
+                if (typeof CD['chat'].createMain === 'function') {
+                    CD['chat'].createMain([msgItem]);
+                }
+                if (typeof CD['chat'].createCountryMain === 'function') {
+                    CD['chat'].createCountryMain([msgItem]);
+                }
+            }
+        });
     }
 
 })(typeof window !== 'undefined' ? window : this);
