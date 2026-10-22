@@ -74,11 +74,12 @@
                 var m = this.nativemusic[i];
                 if (m == undefined || m == null) continue;
                 if (this.isNative) {
-                    m.stop();
-                    m.release();
+                    try { m.stop(); m.release(); } catch(e) {}
                 } else {
-                    m.pause();
-                    try { m.currentTime = 0; } catch(e) {}
+                    try {
+                        m.pause();
+                        m.currentTime = 0;
+                    } catch(e) {}
                 }
             }
             this.current = null;
@@ -87,6 +88,11 @@
         playbgm: function(audioid) {
             var self = this;
             self.current = audioid; //记录意图，解锁/出错恢复时用
+
+            if (self.musicstatus !== true) {
+                self.stopMusic();
+                return;
+            }
 
             if (self.ready == true && self.musicstatus == true && self.musicurl[audioid] != null) {
                 //step 1 干掉其他的音乐

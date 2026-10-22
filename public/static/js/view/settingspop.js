@@ -29,7 +29,7 @@
             var that = this;
 
             that.e = xGame.loadPopTmpl('settings');
-            that.e.find('.hidebtn').unbind('touchend').bind('touchend',
+            that.e.find('.hidebtn').unbind('click touchend').bind('click touchend',
             function(e) {
                 that.hide();
                 return false;
@@ -84,7 +84,7 @@
             if (codestatus == 1 && player.info.appreview == 0) {//可以使用兑换码
                 var code_btn = that.e.find('#code_btn');
                 code_btn.css('display', 'inline-block');
-                code_btn.unbind('touchend').bind('touchend',
+                code_btn.unbind('click touchend').bind('click touchend',
                 function() {
                     that.exchange();
                     return false;
@@ -160,7 +160,7 @@
             }
             
             //退出账号
-            that.e.find('#change_btn').unbind('touchend').bind('touchend',
+            that.e.find('#change_btn').unbind('click touchend').bind('click touchend',
             function() {
                 if(that.isPlatform('kakao')) {
                     xGame.confirm.show(lang('notice'), lang('kakaofriendspop_change_ask'), 2,
@@ -188,7 +188,7 @@
             });
             
             // 帮助按钮
-            that.e.find('#help_btn').unbind('touchend').bind('touchend',
+            that.e.find('#help_btn').unbind('click touchend').bind('click touchend',
             function() {
                 xGame.showpop('helpinfo');
                 return false;
@@ -197,11 +197,22 @@
             // 声音按钮
             if (gAudio) {
                 that.setMusicBtn(gAudio.musicstatus);
-                that.e.find('#music_btn').unbind('touchend').bind('touchend',
-                function() {
+                var lastToggleTime = 0;
+                that.e.find('#music_btn').unbind('click touchend').bind('click touchend',
+                function(e) {
+                    var now = Date.now();
+                    if (now - lastToggleTime < 250) {
+                        return false;
+                    }
+                    lastToggleTime = now;
+                    if (e) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
                     if (gAudio) {
-                        gAudio.settingmusic(!gAudio.musicstatus);
-                        that.setMusicBtn(gAudio.musicstatus);
+                        var nextStatus = !gAudio.musicstatus;
+                        gAudio.settingmusic(nextStatus);
+                        that.setMusicBtn(nextStatus);
                     }
                     return false;
                 });
@@ -221,11 +232,11 @@
         },
 
         setMusicBtn: function(status) {
-            if (status == true) {
-                $('#music_btn').html(lang('music_off'));
-            } else {
-                $('#music_btn').html(lang('music_on'));
+            var text = status ? (lang('music_off') || '关闭音乐') : (lang('music_on') || '开启音乐');
+            if (this.e) {
+                this.e.find('#music_btn').text(text).html(text);
             }
+            $('#music_btn').text(text).html(text);
         },
 
          //兑换码代码
@@ -399,24 +410,24 @@
                 this.e.find('#platformdj_btn').unbind('touchend');
                 this.e.find('#delete_btn').unbind('touchend');
                 this.e.find('#weibo_btn').unbind('touchend');
-                this.e.find('#change_btn').unbind('touchend');
-                this.e.find('#help_btn').unbind('touchend');
-                this.e.find('#music_btn').unbind('touchend');
+                this.e.find('#change_btn').unbind('click touchend');
+                this.e.find('#help_btn').unbind('click touchend');
+                this.e.find('#music_btn').unbind('click touchend');
                 this.e.remove();
                 this.e = null;
             }
             if (this.a) {
-                this.a.find('.content').find('.hidebtn').unbind('touchend');
-                this.a.find('.content').find('.cancle').unbind('touchend');
-                this.a.find('.content').find('.ok').unbind('touchend');
-                this.a.find('.content').find('.zctech_user_info').unbind('touchend');
+                this.a.find('.content').find('.hidebtn').unbind('click touchend');
+                this.a.find('.content').find('.cancle').unbind('click touchend');
+                this.a.find('.content').find('.ok').unbind('click touchend');
+                this.a.find('.content').find('.zctech_user_info').unbind('click touchend');
                 this.a.remove();
                 this.a = null;
             }
             if (this.p) {
-                this.p.find('.content').find('.hidebtn').unbind('touchend');
-                this.p.find('.content').find('#reset').unbind('touchend');
-                this.p.find('.content').find('#set').unbind('touchend');
+                this.p.find('.content').find('.hidebtn').unbind('click touchend');
+                this.p.find('.content').find('#reset').unbind('click touchend');
+                this.p.find('.content').find('#set').unbind('click touchend');
                 this.p.remove();
                 this.p = null;
             }
