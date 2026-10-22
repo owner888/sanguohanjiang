@@ -51,11 +51,14 @@
 │   │   ├── CorsMiddleware.php             # 跨域与 OPTIONS 预检处理
 │   │   ├── GameProtocolMiddleware.php     # 将 c=xxx&m=yyy 智能分发至对应 Handler
 │   │   └── ResponseEnvelopeMiddleware.php # 统一协议响应信封自动包装
-│   ├── Handler/             # 纯无状态动作处理器 (杜绝类属性常驻污染)
-│   │   ├── IosHandler.php        # 客户端握手与版本校验
-│   │   ├── UserHandler.php       # 用户登录与 Token 交换
-│   │   ├── RegisterHandler.php   # 试玩游客与正式注册
-│   │   └── MemberHandler.php     # 玩家数据、军令体力与主城信息
+│   ├── Handler/             # 领域驱动无状态动作处理器 (DDD 分层架构)
+│   │   ├── Auth/            # 接入与账号认证 (Ios, User, Login, Register)
+│   │   ├── City/            # 主城基础设施、征收与福利 (City, Member, DailySign, Vip)
+│   │   ├── General/         # 武将招募、将魂突破与洗髓 (General, Star, Soul, Tavern)
+│   │   ├── Equip/           # 铁匠铺、神装铸造与宝石 (Pack, Strengthen, Refine, Gem, Forge)
+│   │   ├── Campaign/        # 九宫格战役关卡、战位与试炼 (Map, Matrix, Tower, Copies, Sanctum)
+│   │   ├── Pvp/             # 演武竞技、天下名城与国战 (Arena, Compete, Country, Siege, War)
+│   │   └── Activity/        # 四海通商、博彩、夜宴与任务 (Chat, Shop, Trade, Dice, Task)
 │   └── Http/                # HTTP 协议层与网关
 │       ├── Router.php       # 流水线驱动器及静态文件服务器
 │       └── Response.php     # 统一协议响应助手

@@ -51,11 +51,14 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   │   ├── CorsMiddleware.php             # Cross-origin and OPTIONS preflight
 │   │   ├── GameProtocolMiddleware.php     # Dispatches c=xxx&m=yyy to Handler actions
 │   │   └── ResponseEnvelopeMiddleware.php # Standardizes JSON response envelopes
-│   ├── Handler/             # Stateless action handlers (no class state leaks)
-│   │   ├── IosHandler.php        # Client bootstrap & version checks
-│   │   ├── UserHandler.php       # User authentication & token exchange
-│   │   ├── RegisterHandler.php   # Guest & account registration
-│   │   └── MemberHandler.php     # Player profile, stamina, and city data
+│   ├── Handler/             # Stateless domain action handlers (DDD Layout)
+│   │   ├── Auth/            # Authentication & onboarding (Ios, User, Login, Register)
+│   │   ├── City/            # City infrastructure, levy, VIP & gifts (City, Member, DailySign, Vip)
+│   │   ├── General/         # Heroes, talents, ascension, training & tavern (General, Star, Soul, Tavern)
+│   │   ├── Equip/           # Blacksmith, refinement, gems & forge (Pack, Strengthen, Refine, Gem, Forge)
+│   │   ├── Campaign/        # 9-grid campaign maps, tactics & towers (Map, Matrix, Tower, Copies, Sanctum)
+│   │   ├── Pvp/             # Military rankings, nations & siege wars (Arena, Compete, Country, Siege, War)
+│   │   └── Activity/        # Commerce, gambling, banquets & quests (Chat, Shop, Trade, Dice, Task)
 │   └── Http/                # HTTP Gateway & Router
 │       ├── Router.php       # Pipeline runner & static asset server
 │       └── Response.php     # Protocol response helper

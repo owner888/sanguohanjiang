@@ -60,27 +60,14 @@ src/
 │   ├── CorsMiddleware.php
 │   ├── GameProtocolMiddleware.php
 │   └── ResponseEnvelopeMiddleware.php
-├── Handler/             # Stateless action handlers
-│   ├── IosHandler.php        # Handshake & asset version verification
-│   ├── RegisterHandler.php   # Guest & member registration
-│   ├── UserHandler.php       # Authentication & server list selection
-│   ├── LoginHandler.php      # Token issuance & session binding
-│   ├── MemberHandler.php     # Player profile, stamina, and city building state
-│   ├── CityHandler.php       # Main city buildings, levy, and imposition
-│   ├── MapHandler.php        # World map, campaign scenes, and battle trigger
-│   ├── GeneralHandler.php    # Hero recruitment, inventory, and stats
-│   ├── MatrixHandler.php     # 9-grid formation lineup management
-│   ├── PackHandler.php       # Bag items, consumables, and gear
-│   ├── StrengthenHandler.php # Equipment upgrade & refinement
-│   ├── TavernHandler.php     # General recruitment tavern
-│   ├── PracticeHandler.php   # Martial training field & leap exp
-│   ├── ChatHandler.php       # World/country real-time chat
-│   ├── MainquestHandler.php  # Main storyline quests & milestones
-│   ├── ShopHandler.php       # Mall, stamina pack purchases
-│   └── ArenaHandler.php      # PVP arena & military rankings
-├── Database/            # Persistent storage & caching
-│   ├── DB.php                # PDO fluid query builder with auto-reconnect
-│   └── Redis.php             # High-speed memory caching proxy
+├── Handler/             # Stateless domain action handlers (DDD Layout)
+│   ├── Auth/            # Authentication & onboarding (Ios, User, Login, Register)
+│   ├── City/            # City infrastructure, levy, VIP & gifts (City, Member, DailySign, Vip)
+│   ├── General/         # Heroes, talents, ascension, training & tavern (General, Star, Soul, Tavern)
+│   ├── Equip/           # Blacksmith, refinement, gems & forge (Pack, Strengthen, Refine, Gem, Forge)
+│   ├── Campaign/        # 9-grid campaign maps, tactics & towers (Map, Matrix, Tower, Copies, Sanctum)
+│   ├── Pvp/             # Military rankings, nations & siege wars (Arena, Compete, Country, Siege, War)
+│   └── Activity/        # Commerce, gambling, banquets & quests (Chat, Shop, Trade, Dice, Task)
 ├── Enum/                # Strong-typed domain enums
 │   ├── Faction.php           # 16 Three Kingdoms historical factions
 │   ├── FactionStatus.php     # Locked / Active / Cleared states
