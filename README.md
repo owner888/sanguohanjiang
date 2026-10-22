@@ -179,6 +179,10 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=refine&m=index|refinning`: Blacksmith gear refinement affixes (Armor Piercing, Tenacity, Critical Strike)
 - `c=star&m=index|level_up`: Seven-star constellation warlord breakthrough and attribute surges
 - `c=war_college&m=index|level_up`: National War College branch tech research (Infantry, Cavalry, Archers, Strategists)
+- `c=lottery&m=index|action`: Celestial fortune lottery wheel, sector spins, and jackpot draws
+- `c=generaltask&m=index|action|get_report`: Warlord expeditions, scout patrols, and exploration spoils
+- `c=general_book&m=index|levelup`: Heroes of the Three Kingdoms chronicle, bond activation, and army stat boosts
+- `c=copies&m=index|pk|mop_up`: Multi-hero campaign copies (Ten Attendants, Dong Zhuo, Zhang Kai), boss duels, and mop sweeps
 
 ---
 
@@ -234,7 +238,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] High-tier martial arenas & recruitment outlets: Card turnover prizes (`flop`), hero challenge arenas (`challenge`), elite campaigns (`elite`), and muster severance management (`muster`)
 - [x] Merchant economy & talent mastery: Four Seas commerce (`business`), treasure bowl gambling (`gambling`), daily military bounties (`task`), and talent tree awakenings (`talent`)
 - [x] Pinnacle tier ascensions: Quality ascension (`advanced`), gear affix refinement (`refine`), seven-star breakthrough (`star`), and War College technologies (`war_college`)
-- [x] PHPUnit end-to-end integration test suite (69/69 100% passing, 955 assertions)
+- [x] Chronicles & campaign expeditions: Fortune lottery (`lottery`), warlord expeditions (`generaltask`), heroes chronicle bonds (`general_book`), and campaign pacifications (`copies`)
+- [x] PHPUnit end-to-end integration test suite (73/73 100% passing, 998 assertions)
 
 ---
 

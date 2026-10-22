@@ -68,6 +68,10 @@ use Hanjiang\Handler\AdvancedHandler;
 use Hanjiang\Handler\RefineHandler;
 use Hanjiang\Handler\StarHandler;
 use Hanjiang\Handler\WarCollegeHandler;
+use Hanjiang\Handler\LotteryHandler;
+use Hanjiang\Handler\GeneraltaskHandler;
+use Hanjiang\Handler\GeneralBookHandler;
+use Hanjiang\Handler\CopiesHandler;
 use Hanjiang\Handler\UserHandler;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\CorsMiddleware;
@@ -155,6 +159,10 @@ final class GameApiTest extends TestCase
             'refine' => RefineHandler::class,
             'star' => StarHandler::class,
             'war_college' => WarCollegeHandler::class,
+            'lottery' => LotteryHandler::class,
+            'generaltask' => GeneraltaskHandler::class,
+            'general_book' => GeneralBookHandler::class,
+            'copies' => CopiesHandler::class,
         ]));
 
         self::$router = $router;
@@ -1645,5 +1653,67 @@ final class GameApiTest extends TestCase
         $up = $this->request('war_college', 'level_up', ['id' => 1]);
         $this->assertSame(1, $up['status']);
         $this->assertSame(2, $up['level']);
+    }
+
+    public function testLotterySystem(): void
+    {
+        // 1. 查看大转盘
+        $res = $this->request('lottery', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertCount(8, $res['sectors']);
+
+        // 2. 旋转转盘
+        $roll = $this->request('lottery', 'action');
+        $this->assertSame(1, $roll['status']);
+        $this->assertArrayHasKey('prize_name', $roll);
+    }
+
+    public function testGeneraltaskSystem(): void
+    {
+        // 1. 获取有效武将 ID
+        $generals = $this->request('general', 'index');
+        $gid = (int)$generals['list'][1]['id'];
+
+        // 2. 查看远征
+        $res = $this->request('generaltask', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 3. 派遣武将出征 (task: 1)
+        $action = $this->request('generaltask', 'action', ['task_id' => 1, 'gid' => $gid]);
+        $this->assertSame(1, $action['status']);
+        $this->assertSame('古栈道斥候侦察', $action['task_name']);
+    }
+
+    public function testGeneralBookSystem(): void
+    {
+        // 1. 查看名将谱
+        $res = $this->request('general_book', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 点亮桃园结义羁绊 (combo: 1)
+        $up = $this->request('general_book', 'levelup', ['id' => 1]);
+        $this->assertSame(1, $up['status']);
+        $this->assertSame('桃园结义', $up['combo_name']);
+    }
+
+    public function testCopiesSystem(): void
+    {
+        // 1. 查看平乱副本
+        $res = $this->request('copies', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+
+        // 2. 挑战十常侍之乱 (copy: 1)
+        $battle = $this->request('copies', 'pk', ['id' => 1]);
+        $this->assertSame(1, $battle['status']);
+        $this->assertSame(1, $battle['win']);
+        $this->assertGreaterThan(0, $battle['silver']);
+
+        // 3. 一键平乱扫荡
+        $sweep = $this->request('copies', 'mop_up');
+        $this->assertSame(1, $sweep['status']);
+        $this->assertGreaterThan(0, $sweep['silver']);
     }
 }

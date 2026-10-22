@@ -183,6 +183,10 @@
 - `c=refine&m=index|refinning`：铁匠铺神装精炼淬火、附加破甲抗暴闪避卓越词条属性
 - `c=star&m=index|level_up`：武将七星连珠星级突破、星宿命格觉醒与战力倍增
 - `c=war_college&m=index|level_up`：三国内阁国家战争学院兵种科技研发（步兵/骑兵/弓手/策士科技全军被动光环）
+- `c=lottery&m=index|action`：天赐幸运大转盘、五行扇区指针抽奖与至尊百两元宝大奖
+- `c=generaltask&m=index|action|get_report`：武将派遣远征试炼、古栈道南蛮巡狩与凯旋战利品将魂上缴
+- `c=general_book&m=index|levelup`：三国英雄名将谱图鉴、点亮桃园结义/五虎上将/五子良将/东吴都督羁绊
+- `c=copies&m=index|pk|mop_up`：平乱战役副本（十常侍之乱/董卓乱政/张闿叛军据点）、九宫格推演与一键平乱扫荡
 
 ---
 
@@ -238,7 +242,8 @@
 - [x] 巅峰试炼与点将全线闭环：九宫金边翻牌夺宝 (`flop`)、英雄试炼擂台决战 (`challenge`)、精英高难副本战役 (`elite`)、点将台退役遣散 (`muster`)
 - [x] 商业经贸与天赋神力体系贯通：四海通商行商经商 (`business`)、金银宝盆博彩 (`gambling`)、每日军务悬赏令 (`task`)、武将天赋神力树 (`talent`)
 - [x] 终极养成进阶体系全线贯通：神将品质飞升 (`advanced`)、装备精炼词条 (`refine`)、武将七星突破 (`star`)、国家战争学院科技 (`war_college`)
-- [x] 编写 PHPUnit 全链路自动化测试套件 (69/69 100% 绿灯全过，955 个断言)
+- [x] 英雄图谱与战役平乱全线就绪：幸运大转盘 (`lottery`)、武将远征试炼 (`generaltask`)、名将谱羁绊点亮 (`general_book`)、平乱战役副本 (`copies`)
+- [x] 编写 PHPUnit 全链路自动化测试套件 (73/73 100% 绿灯全过，998 个断言)
 
 ---
 
