@@ -124,8 +124,18 @@ if (true || _dateline >= 1387468800) {
         },
 
         /*活动图标自动收起*/
-        autoFadeOut: function() {
+        autoFadeOut: function(e) {
             if (this.activitymenustatus) {
+                var now = Date.now();
+                if (this.lastActivityOpenTime && (now - this.lastActivityOpenTime < 350)) {
+                    return;
+                }
+                if (e && e.target) {
+                    var $t = $(e.target);
+                    if ($t.closest('#header_activitymenu_control, .header_activity_menu').length > 0) {
+                        return;
+                    }
+                }
                 this.activitymenustatus = false;
                 var activitymenu = $('#header').find('.header_activity_menu');
                 $('#header').find('#header_activitymenu_control').removeClass('open');
@@ -231,8 +241,17 @@ if (true || _dateline >= 1387468800) {
             });
 
             var dom_header = $('#header');
+            var lastActivityToggleTime = 0;
             //活动图标
-            dom_header.find('#header_activitymenu_control').unbind('touchend').bind('touchend', function(e){
+            dom_header.find('#header_activitymenu_control').unbind('touchend click').bind('touchend click', function(e){
+                var now = Date.now();
+                if (now - lastActivityToggleTime < 350) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    return false;
+                }
+                lastActivityToggleTime = now;
+
                 var linenum = Math.ceil(player.activityList.length/3) || 1;
                 var activitymenu = $('#header').find('.header_activity_menu');
                 if (that.activitymenustatus) {
@@ -244,6 +263,7 @@ if (true || _dateline >= 1387468800) {
                     });
                 } else {
                     that.activitymenustatus = true;
+                    that.lastActivityOpenTime = now;
                     //计算右侧活动图标区域宽度和坐标 begin
                     // 原版按 960/1136/1024 固定设计坐标；现按实际布局宽右对齐（宽屏适配）
                     var width = linenum * 105;
@@ -259,6 +279,10 @@ if (true || _dateline >= 1387468800) {
                     activitymenu.show();
                 }
                 e.preventDefault();
+                e.stopPropagation();
+            });
+            // 阻止活动菜单内部点击穿透触发外部 autoFadeOut
+            $('#header').find('.header_activity_menu').unbind('click touchend').bind('click touchend', function(e) {
                 e.stopPropagation();
             });
             //通关奖励

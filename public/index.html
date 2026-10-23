@@ -102,8 +102,14 @@
     }
 
     if (!('ontouchstart' in window) || navigator.maxTouchPoints === 0) {
-        document.addEventListener('mousedown', function(e) { fireTouch('touchstart', e); }, true);
-        document.addEventListener('mouseup', function(e) { fireTouch('touchend', e); }, true);
+        document.addEventListener('mousedown', function(e) {
+            if (window.redirectMouseToTouch) return;
+            fireTouch('touchstart', e);
+        }, true);
+        document.addEventListener('mouseup', function(e) {
+            if (window.redirectMouseToTouch) return;
+            fireTouch('touchend', e);
+        }, true);
     }
 })();
 </script>
