@@ -172,7 +172,7 @@
                     /* 新手引导 */
                     xGame.showGuide([1403, 1404, 1405, 1406, 1407]);
 
-                    if ($.isArray(res.treasuremap) == false) {
+                    if (res.treasuremap && $.isArray(res.treasuremap) == false && res.treasuremap.type) {
                         var type = '';
                         if (parseInt(res.treasuremap.type) == 1) {
                             type = lang('part1');
@@ -226,7 +226,7 @@
                     that.e.find('#levy_force_cost').html(lang('cost_%s_gold', [res.gold]));
                     that.force_gold = res.gold;
                     that.createResult(2, res.silver, res.addition);
-                    if ($.isArray(res.treasuremap) == false) {
+                    if (res.treasuremap && $.isArray(res.treasuremap) == false && res.treasuremap.type) {
                         var type = '';
                         if (parseInt(res.treasuremap.type) == 1) {
                             type = lang('part1');

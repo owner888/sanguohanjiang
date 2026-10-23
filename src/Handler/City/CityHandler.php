@@ -90,6 +90,10 @@ final class CityHandler
             'levytimes' => $newRemainTimes,
             'crit' => $isCrit ? 1 : 0,
             'multiplier' => $multiplier,
+            'addition' => 0,
+            'gift' => 0,
+            'treasuremap' => [],
+            'exercisetimes' => 0,
             'cd' => 0,
             'message' => $isCrit ? "天降祥瑞！触发 {$multiplier} 倍丰收，获得 {$earnedSilver} 银两！" : "征收成功，获得 {$earnedSilver} 银两",
         ];
@@ -131,6 +135,11 @@ final class CityHandler
             'all_silver' => $newTotalSilver,
             'all_gold' => $newGold,
             'gold_cost' => $costGold,
+            'gold' => $costGold,
+            'addition' => 0,
+            'gift' => 0,
+            'treasuremap' => [],
+            'exercisetimes' => 0,
             'message' => "强征成功，消耗 {$costGold} 元宝，获得 {$earnedSilver} 银两",
         ];
     }
