@@ -89,11 +89,13 @@
             rightInfo = '';
             
             var unreceive = 0;
+            res.list = res.list || {};
             /*暂时先写死*/
             for (var i = 1; i <= 100; i++) {
                 if (res.list[i] != undefined) {
                     rightInfo = '';
-                    for (var j = 0;j < res.list[i].right.length; j ++) {
+                    var rights = res.list[i].right || [];
+                    for (var j = 0; j < rights.length; j++) {
                         //console.log(res.list[i].right[j]);
                         if (res.list[i].status == 0) {
                             button = '<button id="vip_lvbtn' + i + '" class="btn pop_btn_big_disable" level="' + i + '">' + lang('not_open') + '</button>';
