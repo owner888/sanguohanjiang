@@ -993,6 +993,7 @@ if (true || _dateline >= 1387468800) {
         //from wyx.draw,thank you.:)
         doAnimate: function(e, keyframes, time, callback) {
             if (!e || e.length <= 0) {
+                if (callback) callback();
                 return;
             }
 
@@ -1004,27 +1005,33 @@ if (true || _dateline >= 1387468800) {
             });
 
             var timeseconeds = parseFloat(time.replace('s', '')) * 1000 + 100;//'0.5s' => 500 + 100(这100是为执行留出富余时间)
-            //单独新增一个定时器，防止动画卡死没有回调
+            var called = false;
             var animTimer = setTimeout(function() {
                 animTimer = null;
-                if(e) {
-                    e.trigger('animationend', []);
-                    e.trigger('webkitAnimationEnd', []);
-                }
+                fn();
             }, timeseconeds);
 
             var fn = function() {
-                e.css({
-                    'animation': '',
-                    '-webkit-animation': ''
-                });
-                if (callback) {
-                    callback();
-                }
-                e = null;
+                if (called) return;
+                called = true;
                 if (animTimer) {
                     clearTimeout(animTimer);
                     animTimer = null;
+                }
+                if (e && e.length > 0) {
+                    try {
+                        e.unbind('webkitAnimationEnd animationend');
+                        e.css({
+                            'animation': '',
+                            '-webkit-animation': ''
+                        });
+                    } catch(err) {}
+                }
+                e = null;
+                if (callback) {
+                    var cb = callback;
+                    callback = null;
+                    cb();
                 }
             };
 
