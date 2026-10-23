@@ -14,11 +14,20 @@
                 }
                 guide.showNpc(lang('guide1'), function () {
                     guide.cleanFullmask();
-                    var target = $('.guanqia1, #guanqia1');
-                    if (target.length === 0) {
-                        target = $('#mapworld_page').find('.guanqia1, #guanqia1');
-                    }
-                    guide.create('click', target);
+                    var retries = 0;
+                    var pollGuanqia = function() {
+                        var target = $('.guanqia1, #guanqia1, .guanqia[s="1"]');
+                        if (target.length > 0) {
+                            guide.cleanFullmask();
+                            guide.create('click', target.first());
+                        } else if (retries < 30) {
+                            retries++;
+                            setTimeout(pollGuanqia, 100);
+                        } else {
+                            guide.cleanFullmask();
+                        }
+                    };
+                    pollGuanqia();
                 });
                 if (player.missionThread != null) {
                     clearInterval(player.missionThread);
@@ -1591,6 +1600,7 @@
             guide.hide();
             if (dom == null || dom.length <= 0) {
                 console.log('箭头指向没有找到目标');
+                guide.cleanFullmask();
                 return false;
             }
             var offset = this.getDomOffset(dom);
