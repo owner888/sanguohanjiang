@@ -579,6 +579,9 @@
 
         buildList: function(data, append) {
             var that = this;
+            if (!data || !data.length) {
+                data = [];
+            }
             var html = '',
             className = '';
             /*判断是否存在数据*/
