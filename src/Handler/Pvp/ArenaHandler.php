@@ -113,7 +113,7 @@ final class ArenaHandler
             );
         }
 
-        // 格式化对手列表
+        // 格式化对手列表 (1-based: 1..5)
         $list = [];
         $idx = 1;
         foreach ($opponents as $op) {
@@ -128,27 +128,73 @@ final class ArenaHandler
                 }
             }
 
-            $list[$idx] = [
+            $list[(string)$idx] = [
                 'rank' => (int)$op['rank'],
                 'uid' => $opUid,
-                'name' => $op['name'],
+                'username' => (string)$op['name'],
+                'name' => (string)$op['name'],
                 'level' => $level,
-                'head' => ($idx % 2 === 0) ? 2 : 1,
+                'gender' => ($idx % 2 === 0) ? 2 : 1,
+                'status' => 0,
             ];
             $idx++;
         }
 
         // 默认保底兜底
         if (empty($list)) {
-            $list[1] = ['rank' => 1, 'uid' => 10001, 'name' => '诸葛孔明', 'level' => 25, 'head' => 1];
+            $list['1'] = ['rank' => 1, 'uid' => 10001, 'username' => '诸葛孔明', 'name' => '诸葛孔明', 'level' => 25, 'gender' => 1, 'status' => 0];
         }
+
+        // 查询天梯榜首前五名霸主
+        $topFive = DB::query("SELECT `uid`, `username`, `rank` FROM `zc_sanguo_arena` ORDER BY `rank` ASC LIMIT 5");
+        $topList = [];
+        $tIdx = 1;
+        foreach ($topFive as $top) {
+            $tUid = (int)$top['uid'];
+            $level = 20;
+            if (isset(self::NPC_DEFENDERS[$tUid])) {
+                $level = (int)self::NPC_DEFENDERS[$tUid]['level'];
+            } else {
+                $m = DB::table('member')->where('uid', $tUid)->first();
+                if ($m !== null) {
+                    $level = (int)$m['level'];
+                }
+            }
+            $topList[(string)$tIdx] = [
+                'uid' => $tUid,
+                'rank' => (int)$top['rank'],
+                'username' => (string)$top['username'],
+                'level' => $level,
+                'tree' => 0,
+            ];
+            $tIdx++;
+        }
+
+        $logData = [
+            'rank' => $myRank,
+            'times' => max(0, (int)$myArena['times']),
+            'cd' => 0,
+            'act_arena_int' => 100,
+        ];
+
+        $endTime = max(0, strtotime('tomorrow') - time());
+
+        $rewardData = [
+            'intnum' => 50,
+            'silver' => 10000,
+            'reputation' => 100,
+        ];
 
         return [
             'status' => 1,
             'rank' => $myRank,
             'left_times' => max(0, (int)$myArena['times']),
             'cd' => 0,
+            'log' => $logData,
             'list' => $list,
+            'top_list' => $topList,
+            'reward' => $rewardData,
+            'end_time' => $endTime,
             'message' => 'ok',
         ];
     }

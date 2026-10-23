@@ -47,6 +47,10 @@
 
         fillData: function(list, log, reward, topList, status, endtimes) {
             var that = this;
+            log = log || { cd: 0, rank: 1, act_arena_int: 0, times: 15 };
+            reward = reward || {};
+            topList = topList || {};
+            list = list || {};
 
             that.e = xGame.loadPopTmpl('arena');
 
