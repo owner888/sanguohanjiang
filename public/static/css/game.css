@@ -206,14 +206,15 @@ position:absolute;
 color:#883C1C;
 }
 #confirm_page .text {
-width: 370px;
+width: 414px;
 position:absolute;
-left:40px;
-top:92px;
-padding:10px;
-font-size: 22px;
+left:30px;
+top:86px;
+padding:4px 6px;
+font-size: 20px;
 color:#000;
-line-height: 30px;
+line-height: 28px;
+text-align: center;
 }
 #confirm_page .text .r{
 color:#f00;
@@ -7839,15 +7840,17 @@ background: url(../img/pop/practice_percent6.png) 0 16px no-repeat , url(../img/
 color:red;
 }
 #confirm_page .text .plv{
-width: 50px;
-height: 43px;
-display: block;
-float: left;
+width: 40px;
+height: 34px;
+display: inline-block;
+vertical-align: middle;
+background-size: contain !important;
+margin: 0 4px;
 }
 #confirm_page .text .t_s{
-float: left;
-height: 43px;
-line-height: 43px;
+display: inline-block;
+vertical-align: middle;
+line-height: 34px;
 }
 .right_dom #practicepop_scroller li .btn{
 bottom: -55px;

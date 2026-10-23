@@ -1053,7 +1053,7 @@ var langObj = {
     'exp' : '经验',
     'lvup_to_lv' : '升级成功！该训练位等级升为 {1}',
     'no_block_site' : '当前没有空余训练位',
-    'lv_site_ask' : '确定要花费<em id="buy_lvup_price">{1}</em>元宝升级该训练位？<br/><em class="t_s">(</em><span class="plv practice_lv{2}"></span><em class="t_s">训练位将获得<em style="color:#f00;">{3}%</em>的训练经验)</em>',
+    'lv_site_ask' : '确定要花费<em id="buy_lvup_price">{1}</em>元宝升级该训练位？<br/><span class="t_s">(<span class="plv practice_lv{2}"></span>训练位将获得<em style="color:#f00;">{3}%</em>训练经验)</span>',
     'unlock_site_ask' : '确定要花费<em id="buy_unlock_price">{1}</em>元宝解锁该训练位？<br/>(解锁训练位将使您能训练更多将领)',
     /*rushpop*/
     'not_reached' : '未达成',
