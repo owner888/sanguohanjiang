@@ -161,6 +161,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=country&m=index|select_country|donate|salary`: Three Kingdoms nations (Wei, Shu, Wu), allegiance selection, military donations, and daily salaries
 - `c=cultivate&m=index|roll|save`: Warlord marrow cultivation & attribute cleansing (Strength, Intellect, Vitality)
 - `c=dailysign&m=index|sign`: 30-Day monthly continuous check-in, tiered silver/gold rewards, and anti-duplicate validations
+- `c=logined&m=index|get_reward`: 1-15 Day consecutive login rewards, daily progression, and streak resets
 - `c=vip&m=index|get_vip_reward|get_gift`: VIP tier privileges, daily VIP salaries, and promotion milestone gift packages
 - `c=vipwage&m=index|get_vip_wage`: VIP daily salary distribution, tiered silver/free leaps/souls claim and status checks
 - `c=message&m=index|get_message|send_message|del_message`: Mailbox system, secret pigeon correspondence, and battle reports

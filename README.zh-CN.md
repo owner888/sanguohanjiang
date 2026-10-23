@@ -161,6 +161,7 @@
 - `c=country&m=index|select_country|donate|salary`：魏蜀吴三国势力格局、天命随机选国封赏、国家军资捐献与每日国家俸禄
 - `c=cultivate&m=index|roll|save`：武将洗髓培养系统，武力/智力/体力永久洗练与属性注入强化
 - `c=dailysign&m=index|sign`：30天连续月度签到、阶梯式海量银两/元宝/军令封赏与防重复签到校验
+- `c=logined&m=index|get_reward`：1~15天连续登录阶梯大礼包、登录天数递增与断签自动重置
 - `c=vip&m=index|get_vip_reward|get_gift`：VIP 尊享等级特权、每日 VIP 专属俸禄与段位晋升豪华大礼包
 - `c=vipwage&m=index|get_vip_wage`：VIP 专属每日工资发放、等级加成银两/突飞卡/军令将魂领取与已领状态校验
 - `c=message&m=index|get_message|send_message|del_message`：系统信箱与邮件流、飞鸽传书玩家私信交互与战报记录

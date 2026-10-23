@@ -57,8 +57,10 @@
                 e.preventDefault();
             });
             
-            this.e.find('#time').html(res.day + lang('day'));
+            var dayNum = (res.day != null) ? res.day : 1;
+            this.e.find('#time').html(dayNum + lang('day'));
             this.rewardDom = this.e.find('#logined_list');
+            res.list = res.list || [];
             this.rewardData = res.list;
             this.buildList(res.list);
             this.bindAll();

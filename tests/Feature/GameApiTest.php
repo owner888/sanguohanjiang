@@ -1487,6 +1487,20 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('popo', $res['list']['boss']);
     }
 
+    public function testLoginedSystem(): void
+    {
+        $res = $this->request('logined', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertGreaterThanOrEqual(1, $res['day']);
+        $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('id', $res['list'][0]);
+        $this->assertArrayHasKey('type', $res['list'][0]);
+
+        $claim = $this->request('logined', 'get_reward', ['id' => 1]);
+        $this->assertSame(1, $claim['status']);
+        $this->assertGreaterThan(0, $claim['all_silver']);
+    }
+
     public function testBusinessSystem(): void
     {
         // 1. 查看四海通商
