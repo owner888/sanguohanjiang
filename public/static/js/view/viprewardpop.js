@@ -101,7 +101,8 @@
 
             that.e.find('#viprewardpop_now').html('VIP' + player.info.vip);
 
-            if(typeof data.my_reward.length == 'undefined') {//当有奖励的时候
+            data.list = data.list || [];
+            if(data.my_reward && !$.isArray(data.my_reward)) {//当有奖励的时候
                 var html = '';
                 for(var z = 1; z <= 3; z ++) {
                     if(data.my_reward['get'+z] > 0) {

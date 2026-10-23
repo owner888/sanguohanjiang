@@ -162,6 +162,7 @@
 - `c=cultivate&m=index|roll|save`：武将洗髓培养系统，武力/智力/体力永久洗练与属性注入强化
 - `c=dailysign&m=index|sign`：30天连续月度签到、阶梯式海量银两/元宝/军令封赏与防重复签到校验
 - `c=vip&m=index|get_vip_reward|get_gift`：VIP 尊享等级特权、每日 VIP 专属俸禄与段位晋升豪华大礼包
+- `c=vipwage&m=index|get_vip_wage`：VIP 专属每日工资发放、等级加成银两/突飞卡/军令将魂领取与已领状态校验
 - `c=message&m=index|get_message|send_message|del_message`：系统信箱与邮件流、飞鸽传书玩家私信交互与战报记录
 - `c=friend&m=index|add_friend|del_friend`：高朋满座好友社交系统、结交盟友与防重好友管理
 - `c=mine&m=index|caikuang|zhanling|get_silver|give_up`：富饶银矿与赤金矿脉占领、离线挂机采矿收益累积与定时收缴提取

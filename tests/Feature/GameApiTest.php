@@ -825,6 +825,16 @@ final class GameApiTest extends TestCase
         // 4. 重复领取礼包被拦截
         $dupGift = $this->request('vip', 'get_gift', ['level' => 1]);
         $this->assertSame(0, $dupGift['status']);
+
+        // 5. VIP 每日工资测试 (c=vipwage&m=index / get_vip_wage)
+        $wage = $this->request('vipwage', 'index');
+        $this->assertSame(1, $wage['status']);
+        $this->assertNotEmpty($wage['list']);
+        $this->assertNotEmpty($wage['my_reward']);
+        $this->assertArrayHasKey('get1', $wage['my_reward']);
+
+        $claimWage = $this->request('vipwage', 'get_vip_wage');
+        $this->assertSame(1, $claimWage['status']);
     }
 
     public function testMessageSystem(): void
