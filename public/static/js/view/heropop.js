@@ -901,20 +901,23 @@
             //that.bottomDom.find('#hero_img').css('backgroundImage','url(' + staticUrl + 'img/avatar/a' + data.image + '.jpg)');
             that.bottomDom.find('#hero_img').css('backgroundImage', 'url(' + xGame.avatar(data.image, true) + ')');
 
-            that.bottomDom.find('#star_num').css('width', parseInt(data.star) * 18 + 'px');
+            var starVal = parseInt(data.star || 1);
+            that.bottomDom.find('#star_num').css('width', (isNaN(starVal) ? 1 : starVal) * 18 + 'px');
 
             that.bottomDom.find('#hero_h').html(data.hp + (that.tree > 1 ? '<span class="tree tree' + that.tree + '"></span>' : ''));
-            that.bottomDom.find('#hero_a').html(data.wuli + ' +' + data.wuliup);
-            that.bottomDom.find('#hero_t').html(data.talent.name == null ? lang('no') : data.talent.name);
-            that.bottomDom.find('#hero_k').html(data.zhili + ' +' + data.zhiliup);
-            if (data.skill.length != 0) {
-                that.bottomDom.find('#hero_s').html(data.skill.name == null ? lang('no') : data.skill.name);
+            that.bottomDom.find('#hero_a').html((data.wuli || 85) + ' +' + (data.wuliup || 0));
+            var talentObj = data.talent || { name: lang('no'), description: '' };
+            var skillObj = data.skill || { name: lang('no'), description: '' };
+            that.bottomDom.find('#hero_t').html(talentObj.name == null ? lang('no') : talentObj.name);
+            that.bottomDom.find('#hero_k').html((data.zhili || 70) + ' +' + (data.zhiliup || 0));
+            if (skillObj && skillObj.name) {
+                that.bottomDom.find('#hero_s').html(skillObj.name == null ? lang('no') : skillObj.name);
             }
-            that.bottomDom.find('#hero_p').html(data.tili + ' +' + data.tiliup);
+            that.bottomDom.find('#hero_p').html((data.tili || 90) + ' +' + (data.tiliup || 0));
 
             //填充侧边信息
-            $('#talent_info').html(data.talent.name == null ? lang('no') : data.talent.name + '：' + data.talent.description);
-            $('#skilld_info').html(data.skill.name == null ? lang('no') : data.skill.name + '：' + data.skill.description);
+            $('#talent_info').html(talentObj.name == null ? lang('no') : talentObj.name + '：' + (talentObj.description || ''));
+            $('#skilld_info').html(skillObj.name == null ? lang('no') : skillObj.name + '：' + (skillObj.description || ''));
 
             if (that.skillScroll == null) {
                 that.skillScroll = new iScroll('hero_skill_scroller', {

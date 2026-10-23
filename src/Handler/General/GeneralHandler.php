@@ -85,63 +85,32 @@ final class GeneralHandler
         foreach ($generals as $g) {
             $gid = (int)$g['id'];
             $equipped = $equipsByGeneral[$gid] ?? [];
-            $stats = self::calculateGeneralStats($g, $equipped);
-
-            // 格式化 4 个槽位的已装配装备
-            $equipSlot = [];
-            foreach ($equipped as $eq) {
-                $type = (int)$eq['type'];
-                $equipSlot[$type] = [
-                    'id' => (int)$eq['id'],
-                    'equipid' => (int)$eq['equipid'],
-                    'name' => $eq['name'],
-                    'type' => $type,
-                    'level' => (int)$eq['level'],
-                    'quality' => (int)$eq['quality'],
-                    'bonus' => self::calculateEquipBonus($eq),
-                ];
-            }
-
-            $list[$idx] = [
-                'id' => $gid,
-                'uid' => $uid,
-                'generalid' => (int)$g['generalid'],
-                'name' => $g['name'],
-                'level' => $stats['level'],
-                'exp' => (int)$g['exp'],
-                'levelupexp' => self::getLevelUpExp($stats['level']),
-                'wuli' => 85,
-                'zhili' => 70,
-                'tili' => 90,
-                'hp' => $stats['hp'],
-                'allblood' => $stats['allblood'],
-                'attack' => $stats['attack'],
-                'defense' => $stats['defense'],
-                'speed' => $stats['speed'],
-                'skillid' => 1,
-                'talentid' => 1,
-                'pos' => (int)$g['pos'],
-                'goout' => (int)$g['pos'] > 0 ? 1 : 0,
-                'equip' => $equipSlot,
-                'stats' => $stats,
-            ];
+            $list[(string)$idx] = self::formatHeroData($g, $equipped, $uid);
             $idx++;
         }
 
         $availableEquipments = [];
+        $eqIdx = 1;
         foreach ($allEquips as $eq) {
             $bonus = self::calculateEquipBonus($eq);
-            $availableEquipments[] = array_merge($eq, [
+            $item = array_merge($eq, [
                 'id' => (int)$eq['id'],
                 'equipid' => (int)$eq['equipid'],
+                'etype' => (int)$eq['type'],
                 'name' => $eq['name'],
                 'type' => (int)$eq['type'],
                 'level' => (int)$eq['level'],
                 'quality' => (int)$eq['quality'],
                 'gid' => (int)$eq['generalid'],
+                'needlevel' => 1,
+                'available' => 1,
+                'hammer' => 0,
+                'hammer_quality' => 0,
                 'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
                 'bonus' => $bonus,
             ]);
+            $availableEquipments[(string)$eqIdx] = $item;
+            $eqIdx++;
         }
 
         return [
@@ -174,39 +143,177 @@ final class GeneralHandler
         }
 
         $realGid = (int)$general['id'];
-        $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $realGid)->whereNull('deleted_at')->get();
-        $stats = self::calculateGeneralStats($general, $equipped);
-
-        $equipSlots = [];
-        foreach ($equipped as $eq) {
-            $type = (int)$eq['type'];
-            $equipSlots[$type] = [
-                'id' => (int)$eq['id'],
-                'name' => $eq['name'],
-                'type' => $type,
-                'level' => (int)$eq['level'],
-                'bonus' => self::calculateEquipBonus($eq),
-            ];
+        $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
+        $equipped = [];
+        $unequipped = [];
+        $eqIdx = 1;
+        foreach ($allEquips as $eq) {
+            if ((int)$eq['generalid'] === $realGid) {
+                $equipped[] = $eq;
+            } elseif ((int)$eq['generalid'] === 0) {
+                $bonus = self::calculateEquipBonus($eq);
+                $unequipped[(string)$eqIdx] = array_merge($eq, [
+                    'id' => (int)$eq['id'],
+                    'equipid' => (int)$eq['equipid'],
+                    'etype' => (int)$eq['type'],
+                    'name' => $eq['name'],
+                    'type' => (int)$eq['type'],
+                    'level' => (int)$eq['level'],
+                    'quality' => (int)$eq['quality'],
+                    'gid' => 0,
+                    'needlevel' => 1,
+                    'available' => 1,
+                    'hammer' => 0,
+                    'hammer_quality' => 0,
+                    'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
+                    'bonus' => $bonus,
+                ]);
+                $eqIdx++;
+            }
         }
+
+        $heroInfo = self::formatHeroData($general, $equipped, $uid);
 
         return [
             'status' => 1,
-            'info' => [
-                'id' => $realGid,
-                'name' => $general['name'],
-                'level' => $stats['level'],
-                'hp' => $stats['hp'],
-                'allblood' => $stats['allblood'],
-                'attack' => $stats['attack'],
-                'defense' => $stats['defense'],
-                'speed' => $stats['speed'],
-                'exp' => (int)$general['exp'],
-                'levelupexp' => self::getLevelUpExp($stats['level']),
-                'equip' => $equipSlots,
-                'stats' => $stats,
-            ],
-            'equipments' => $equipSlots,
+            'info' => $heroInfo,
+            'equipments' => $unequipped,
         ];
+    }
+
+    /**
+     * 格式化武将完整协议数据 (包含 heropop.js 依赖的 talent, skill, eid1~eid4 等)
+     *
+     * @param array<string, mixed> $g
+     * @param list<array<string, mixed>> $equipped
+     * @return array<string, mixed>
+     */
+    public static function formatHeroData(array $g, array $equipped, int $uid): array
+    {
+        $gid = (int)$g['id'];
+        $stats = self::calculateGeneralStats($g, $equipped);
+        $level = $stats['level'];
+
+        $equipSlot = [];
+        $eids = [1 => '0', 2 => '0', 3 => '0', 4 => '0'];
+
+        foreach ($equipped as $eq) {
+            $type = (int)$eq['type'];
+            $eqItem = [
+                'id' => (int)$eq['id'],
+                'equipid' => (int)$eq['equipid'],
+                'name' => $eq['name'],
+                'type' => $type,
+                'level' => (int)$eq['level'],
+                'quality' => (int)$eq['quality'],
+                'hammer' => 0,
+                'hammer_quality' => 0,
+                'bonus' => self::calculateEquipBonus($eq),
+            ];
+            $equipSlot[$type] = $eqItem;
+            if ($type >= 1 && $type <= 4) {
+                $eids[$type] = $eqItem;
+            }
+        }
+
+        return [
+            'id' => $gid,
+            'uid' => $uid,
+            'generalid' => (int)($g['generalid'] ?? 1),
+            'name' => $g['name'],
+            'level' => $level,
+            'exp' => (int)$g['exp'],
+            'levelupexp' => self::getLevelUpExp($level),
+            'image' => (int)($g['image'] ?? $g['generalid'] ?? 1),
+            'quality' => (int)($g['quality'] ?? 3),
+            'type' => (int)($g['type'] ?? 1),
+            'turn' => (int)($g['turn'] ?? 0),
+            'isturn' => ($level >= 100) ? 1 : 0,
+            'star' => (int)($g['star'] ?? 1),
+            'achID' => 0,
+            'achList' => [],
+            'pos' => (int)$g['pos'],
+            'goout' => (int)$g['pos'] > 0 ? 1 : 0,
+            'wuli' => 85,
+            'wuliup' => (int)($g['wuliup'] ?? 0),
+            'zhili' => 70,
+            'zhiliup' => (int)($g['zhiliup'] ?? 0),
+            'tili' => 90,
+            'tiliup' => (int)($g['tiliup'] ?? 0),
+            'hp' => $stats['hp'],
+            'allblood' => $stats['allblood'],
+            'attack' => $stats['attack'],
+            'defense' => $stats['defense'],
+            'speed' => $stats['speed'],
+            'skillid' => (int)($g['skillid'] ?? 1),
+            'talentid' => (int)($g['talentid'] ?? 1),
+            'talent' => self::getGeneralTalent($g),
+            'skill' => self::getGeneralSkill($g),
+            'eid1' => $eids[1],
+            'eid2' => $eids[2],
+            'eid3' => $eids[3],
+            'eid4' => $eids[4],
+            'mid0' => 0,
+            'mid1' => 0,
+            'mid2' => 0,
+            'mid3' => 0,
+            'mid4' => 0,
+            'equip' => $equipSlot,
+            'stats' => $stats,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $g
+     * @return array{id: int, name: string, blood: int, description: string}
+     */
+    public static function getGeneralTalent(array $g): array
+    {
+        $talents = [
+            1 => ['id' => 1, 'name' => '坚强', 'blood' => 1, 'description' => '受到直接物理伤害降低5%'],
+            2 => ['id' => 2, 'name' => '勇猛', 'blood' => 1, 'description' => '普通物理攻击伤害提升10%'],
+            3 => ['id' => 3, 'name' => '神速', 'blood' => 1, 'description' => '出手先攻速度提升15点'],
+            4 => ['id' => 4, 'name' => '智囊', 'blood' => 1, 'description' => '策略攻击防御综合提升10%'],
+            5 => ['id' => 5, 'name' => '破军', 'blood' => 1, 'description' => '无双暴击概率提升10%'],
+            6 => ['id' => 6, 'name' => '百战', 'blood' => 1, 'description' => '气血生命值上限提升15%'],
+        ];
+
+        $name = (string)($g['name'] ?? '');
+        $id = match ($name) {
+            '张飞' => 2,
+            '赵云' => 3,
+            '关羽' => 5,
+            '诸葛亮' => 4,
+            default => (int)($g['talentid'] ?? 1),
+        };
+
+        return $talents[$id] ?? $talents[1];
+    }
+
+    /**
+     * @param array<string, mixed> $g
+     * @return array{id: int, name: string, description: string}
+     */
+    public static function getGeneralSkill(array $g): array
+    {
+        $skills = [
+            1 => ['id' => 1, 'name' => '会心一击', 'description' => '积攒怒气释放强力一击，造成150%战法伤害'],
+            2 => ['id' => 2, 'name' => '万夫莫敌', 'description' => '咆哮怒吼横扫千军，对横排敌方造成160%群体震慑'],
+            3 => ['id' => 3, 'name' => '龙胆穿心', 'description' => '白马银枪直刺中路，必定暴击并破除敌军格挡'],
+            4 => ['id' => 4, 'name' => '青龙偃月', 'description' => '神刀劈砍降下雷霆万钧，重创敌将并提升自身韧性'],
+            5 => ['id' => 5, 'name' => '卧龙天火', 'description' => '借东风降下神火天降，对敌军全阵型进行法术覆盖'],
+        ];
+
+        $name = (string)($g['name'] ?? '');
+        $id = match ($name) {
+            '张飞' => 2,
+            '赵云' => 3,
+            '关羽' => 4,
+            '诸葛亮' => 5,
+            default => (int)($g['skillid'] ?? 1),
+        };
+
+        return $skills[$id] ?? $skills[1];
     }
 
     /**
