@@ -1595,11 +1595,15 @@
                 this.makeArrow(offset, null, isright);
             }
             
+            var fired = false;
             var fireTrigger = function(e) {
+                if (fired) return false;
+                fired = true;
                 if (e) {
-                    e.preventDefault();
-                    e.stopPropagation();
+                    try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
                 }
+                $('#guide_target').unbind('click touchend');
+                $('#guide_arrow').unbind('click touchend');
                 dom.trigger(eventName, []);
                 if (eventName !== 'click') {
                     dom.trigger('click', []);
@@ -1609,12 +1613,15 @@
                 }
                 guide.hide();
                 if (callback) {
-                    callback();
+                    var cb = callback;
+                    callback = null;
+                    cb();
                 }
+                return false;
             };
 
-            $('#guide_target').unbind('click touchend').one('click touchend', fireTrigger);
-            $('#guide_arrow').unbind('click touchend').one('click touchend', fireTrigger);
+            $('#guide_target').unbind('click touchend').bind('click touchend', fireTrigger);
+            $('#guide_arrow').unbind('click touchend').bind('click touchend', fireTrigger);
             this.cleanFullmask(); //清除可能存在的全屏mask
 
         },
@@ -1652,26 +1659,32 @@
                 this.makeArrow(offset);
             }
             
-            dom.unbind('click touchend').one('click touchend',
-            function(e) {
-                e.preventDefault();
-                guide.hide();
-                if (callback) {
-                    callback();
+            var pointFired = false;
+            var onPointTrigger = function(e) {
+                if (pointFired) return false;
+                pointFired = true;
+                if (e) {
+                    try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
                 }
-            });
-            //这里这样写就不会二次触发了，因为不管是不是touchend时间one时间肯定可以触发
+                dom.unbind('click touchend');
+                $('#guide_arrow').unbind('click touchend');
+                guide.hide();
+                if (eventName) {
+                    dom.trigger(eventName, []);
+                    if (eventName !== 'click') dom.trigger('click');
+                    if (eventName !== 'touchend') dom.trigger('touchend');
+                }
+                if (callback) {
+                    var cb = callback;
+                    callback = null;
+                    cb();
+                }
+                return false;
+            };
+
+            dom.unbind('click touchend').bind('click touchend', onPointTrigger);
             if (eventName) {
-                $('#guide_arrow').unbind('click touchend').one('click touchend',
-                function(e) {
-                    dom.trigger(eventName,[]);
-                    if (eventName != 'touchend') {
-                        dom.trigger('touchend');
-                    }
-                    if (eventName != 'click') {
-                        dom.trigger('click');
-                    }
-                });
+                $('#guide_arrow').unbind('click touchend').bind('click touchend', onPointTrigger);
             }
             this.cleanFullmask(); //清除可能存在的全屏mask
         },
@@ -1786,19 +1799,27 @@
                 npc_page.find('.npc').attr('class', 'npc');
             }
             npc_page.find('.word').html(word);
-            var touchRender = function() {
-                npc_page.hide();
-                npc_page = null;
-                if (callback) {
-                    callback();
-                    callback = null;
+            var fired = false;
+            var touchRender = function(e) {
+                if (fired) return false;
+                fired = true;
+                if (e) {
+                    try { e.preventDefault(); e.stopPropagation(); } catch(err) {}
                 }
+                var page = $('#guide_npc_page');
+                page.hide();
+                page.unbind('click touchend');
+                if (callback) {
+                    var cb = callback;
+                    callback = null;
+                    cb();
+                }
+                return false;
             };
             npc_page.show();
             setTimeout(function() {
-                npc_page.unbind('click touchend').one('click touchend', touchRender);
-            },
-            500);
+                $('#guide_npc_page').unbind('click touchend').bind('click touchend', touchRender);
+            }, 300);
             guide.cleanFullmask();
         },
 
