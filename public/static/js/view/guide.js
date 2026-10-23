@@ -1570,13 +1570,30 @@
             }
         },
 
+        // 准确计算目标在 960x768 设计坐标系下的真实偏移 (消除 CSS zoom 二次缩放导致的坐标跑偏)
+        getDomOffset: function(dom) {
+            if (!dom || dom.length === 0) return { left: 0, top: 0, width: 0, height: 0 };
+            var el = dom[0] || dom;
+            var rect = el.getBoundingClientRect();
+            var b = document.body;
+            var bRect = b.getBoundingClientRect();
+            var z = parseFloat(b.style.zoom) || 1;
+
+            return {
+                left: Math.round((rect.left - bRect.left) / z),
+                top: Math.round((rect.top - bRect.top) / z),
+                width: Math.round(rect.width / z),
+                height: Math.round(rect.height / z)
+            };
+        },
+
         create: function(eventName, dom, hidemask, callback, arrowInParent, isright) {
             guide.hide();
             if (dom == null || dom.length <= 0) {
                 console.log('箭头指向没有找到目标');
                 return false;
             }
-            var offset = dom.offset();
+            var offset = this.getDomOffset(dom);
 
             // 如果指向每日活动
             if (dom.attr('id') == 'header_activity_btn_wrap') {
@@ -1650,7 +1667,7 @@
                     "height": dom.height()
                 };
             } else {
-                var offset = dom.offset();
+                var offset = this.getDomOffset(dom);
             }
             //创建箭头
             if (inScroller == true) {
@@ -1692,15 +1709,15 @@
 
         makeMask: function(offset) {
             var body_dom = $('body');
-            var body = body_dom.offset();
+            var width = Math.max(960, parseInt(body_dom.css('width')) || 960);
+            var height = Math.max(768, parseInt(body_dom.css('height')) || 768);
 
             var html = '';
-            html += '<div id="guide_rect" class="guide_rect" style="width:' + body.width + 'px;height:' + body.height + 'px;left:0px;top:0px;"></div>';
+            html += '<div id="guide_rect" class="guide_rect" style="width:' + width + 'px;height:' + height + 'px;left:0px;top:0px;"></div>';
             html += '<div id="guide_target" class="guide_rect" style="width:' + offset.width + 'px;height:' + offset.height + 'px;left:' + offset.left + 'px;top:' + offset.top + 'px;z-index:91;"></div>';
             
             body_dom.append(html);
 
-            body = null;
             body_dom = null;
         },
 
