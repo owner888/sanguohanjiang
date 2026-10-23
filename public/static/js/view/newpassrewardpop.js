@@ -98,13 +98,24 @@
 
             //领取按钮
             this.e.find('#newpassreward_scroller').undelegate('touchend').delegate('.lotteryenablebtn', 'touchend', function(e) {
-                var id = $(this).attr('uid');
+                if (xGame.checkLock()) {
+                    return false;
+                }
+                var btn = $(this);
+                btn.removeClass('lotteryenablebtn').addClass('lotterydisbtn');
+                var id = btn.attr('uid');
                 var render = function(res) {
+                    xGame.unlock();
                     switch(parseInt(res.status)) {
                         case 1:
                             self.updateListInfo(res, id);
                             break;
+                        case 3:
+                            self.e.find('.box').find('#btn' + id).removeClass('lotteryenablebtn').addClass('lotterydisbtn').html(lang('warena_have_fetch'));
+                            xGame.toast.show(res.msg);
+                            break;
                         default:
+                            btn.removeClass('lotterydisbtn').addClass('lotteryenablebtn');
                             xGame.toast.show(res.msg);
                             break;
                     }
@@ -116,6 +127,8 @@
                     'id': id
                 }, render);
                 render = null;
+                e.preventDefault();
+                e.stopPropagation();
             });
 
             this.e.show();

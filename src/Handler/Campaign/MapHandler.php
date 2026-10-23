@@ -649,6 +649,12 @@ final class MapHandler
             return ['status' => -1, 'msg' => '参数错误'];
         }
 
+        $lockKey = "lock:newreward:{$uid}:{$id}";
+        if (Redis::get($lockKey) !== null) {
+            return ['status' => -3, 'msg' => '操作太频繁了，请稍候'];
+        }
+        Redis::set($lockKey, '1', 2);
+
         $reward = DB::table('mission_newreward')->where('id', $id)->whereNull('deleted_at')->first();
         if ($reward === null) {
             return ['status' => -2, 'msg' => '奖励信息不存在'];
@@ -699,13 +705,17 @@ final class MapHandler
                 break;
         }
 
-        // 写入领取记录
-        DB::table('mission_newreward_log')->insert([
-            'uid' => $uid,
-            'levelid' => $levelId,
-            'missid' => $missId,
-            'dateline' => time(),
-        ]);
+        // 写入领取记录 (并发唯一键安全捕获)
+        try {
+            DB::table('mission_newreward_log')->insert([
+                'uid' => $uid,
+                'levelid' => $levelId,
+                'missid' => $missId,
+                'dateline' => time(),
+            ]);
+        } catch (\Throwable $e) {
+            return ['status' => 3, 'msg' => '已经领取过该奖励'];
+        }
 
         Redis::del('player:' . $uid);
 
