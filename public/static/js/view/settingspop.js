@@ -91,6 +91,32 @@
                 });
                 code_btn = null;
             }
+
+            // 重置当前账号 (从头重新体验新手引导)
+            var reset_btn = that.e.find('#reset_account_btn');
+            if (reset_btn.length > 0) {
+                reset_btn.unbind('click touchend').bind('click touchend', function() {
+                    xGame.confirm.show('重置账号', '确认重置当前账号从头体验新手引导吗？进度将重归1级。', 2, function() {
+                        $('#worldloading').show();
+                        loadContents({
+                            'c': 'member',
+                            'm': 'reset_account'
+                        }, function(res) {
+                            localStorage.clear();
+                            sessionStorage.clear();
+                            location.reload();
+                        }, false, function() {
+                            localStorage.clear();
+                            sessionStorage.clear();
+                            location.reload();
+                        });
+                    }, function() {
+                        xGame.confirm.hide();
+                    }, '确认重置', '取消');
+                    return false;
+                });
+                reset_btn = null;
+            }
             if(that.isPlatform('91') || that.isPlatform('djn')) {
                 var plafrom91_btn = that.e.find('#platform91_btn');
                 plafrom91_btn.css('display', 'inline-block');
@@ -413,6 +439,7 @@
                 this.e.find('#change_btn').unbind('click touchend');
                 this.e.find('#help_btn').unbind('click touchend');
                 this.e.find('#music_btn').unbind('click touchend');
+                this.e.find('#reset_account_btn').unbind('click touchend');
                 this.e.remove();
                 this.e = null;
             }

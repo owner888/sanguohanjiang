@@ -242,6 +242,105 @@ final class MemberHandler
     }
 
     /**
+     * 重置当前账号进度至 1 级初始新手状态: c=member&m=reset_account
+     */
+    public static function reset_account(Context $ctx): array
+    {
+        $uid = self::resolveUid($ctx);
+
+        if ($uid > 0) {
+            // 1. 重置 member 基础字段
+            DB::table('member')->where('uid', $uid)->update([
+                'level' => 1,
+                'exp' => 0,
+                'maxexp' => 100,
+                'silver' => 88888,
+                'gold' => 9999,
+                'reputation' => 100,
+                'act' => 100,
+                'maxact' => 100,
+                'missionsite' => 2,
+                'missionlevel' => 1,
+                'missionstage' => 1,
+                'missionid' => 1,
+                'guide' => 0,
+                'guidestep' => 0,
+                'guidestop' => 0,
+            ]);
+
+            // 2. 清空并重建关联动态数据
+            DB::table('map')->where('uid', $uid)->delete();
+            DB::table('equipment')->where('uid', $uid)->delete();
+            DB::table('general')->where('uid', $uid)->delete();
+            DB::table('matrix')->where('uid', $uid)->delete();
+
+            // 3. 重新插入初始主公将领
+            $genId = DB::table('general')->insert([
+                'uid' => $uid,
+                'generalid' => 1,
+                'name' => '新主公' . $uid,
+                'level' => 1,
+                'exp' => 0,
+                'pos' => 2,
+                'matrix_id' => 1,
+                'status' => 1,
+            ]);
+
+            // 初始装备
+            DB::table('equipment')->insert([
+                'uid' => $uid,
+                'equipid' => 101,
+                'name' => '青铜剑',
+                'type' => 1,
+                'quality' => 1,
+                'level' => 1,
+                'generalid' => 0,
+                'number' => 1,
+                'saleprice' => 50,
+            ]);
+
+            DB::table('equipment')->insert([
+                'uid' => $uid,
+                'equipid' => 201,
+                'name' => '青铜甲',
+                'type' => 2,
+                'quality' => 1,
+                'level' => 1,
+                'generalid' => 0,
+                'number' => 1,
+                'saleprice' => 50,
+            ]);
+
+            // 初始鱼鳞阵
+            DB::table('matrix')->insert([
+                'uid' => $uid,
+                'mid' => 1,
+                'level' => 1,
+                'position1' => 0,
+                'position2' => $genId,
+                'position3' => 0,
+                'position4' => 0,
+                'position5' => 0,
+                'position6' => 0,
+                'position7' => 0,
+                'position8' => 0,
+                'position9' => 0,
+            ]);
+
+            // 4. 清空 Redis 缓存
+            Redis::del('player:' . $uid);
+            Redis::del('mainquest:task_id:' . $uid);
+            Redis::del("chat_last_read:{$uid}");
+        }
+
+        return [
+            'status' => 1,
+            'message' => '账号重置成功，已重回1级初始新手状态',
+            'msg' => '账号重置成功，已重回1级初始新手状态',
+        ];
+    }
+
+    /**
      * 原子安全扣除玩家货币/资源 (委托至 Member 领域模型)
      */
     public static function deductCurrency(int $uid, int $silver = 0, int $gold = 0, int $act = 0): bool
