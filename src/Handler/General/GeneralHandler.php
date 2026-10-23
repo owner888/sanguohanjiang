@@ -214,6 +214,8 @@ final class GeneralHandler
 
         foreach ($equipped as $eq) {
             $type = (int)$eq['type'];
+            $bonus = self::calculateEquipBonus($eq);
+            $powerup = $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']);
             $eqItem = [
                 'id' => (int)$eq['id'],
                 'equipid' => (int)$eq['equipid'],
@@ -221,9 +223,13 @@ final class GeneralHandler
                 'type' => $type,
                 'level' => (int)$eq['level'],
                 'quality' => (int)$eq['quality'],
+                'needlevel' => 1,
+                'available' => 1,
+                'newquality' => 0,
+                'powerup' => $powerup,
                 'hammer' => 0,
                 'hammer_quality' => 0,
-                'bonus' => self::calculateEquipBonus($eq),
+                'bonus' => $bonus,
             ];
             $equipSlot[$type] = $eqItem;
             if ($type >= 1 && $type <= 4) {

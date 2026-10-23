@@ -599,8 +599,10 @@
                     'color': helper.getItemColor(data.quality)
                 }).html(data.name);
                 dom.find('.hero_equi').attr('class','hero_equi q' + data.quality);
-                dom.find('#equi_lv').children('span').text(data.needlevel).css('color', data.available == 0 ? 'red': '#000000');
-                dom.find('#strong_lv').children('span').text(data.level);
+                var needLvSpan = dom.find('#equi_lv').children('span');
+                needLvSpan.text(data.needlevel != null ? data.needlevel : 1);
+                needLvSpan.css('color', data.available == 0 ? 'red': '#000000');
+                dom.find('#strong_lv').children('span').text(data.level != null ? data.level : 1);
                 dom.find('#atk_type').html(helper.getItemPowerName(parseInt(data.type)) + '：<span>' + data.powerup + '</span>');
                 dom.find('#equi_type').children('span').text(helper.getItemVocation(data.type));
 
