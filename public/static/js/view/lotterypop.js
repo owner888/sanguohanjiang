@@ -33,7 +33,8 @@
 
                 switch (parseInt(res.status)) {
                 case 1:
-                    that.fillData(res.list, res.log.info, res.buy_times, res.buy_times_limit);
+                    var logInfo = (res.log && res.log.info) ? res.log.info : { lavenumber: 3, buy_lavenumber: 0, total_num: 3, price: 10, day: 1 };
+                    that.fillData(res.list || [], logInfo, res.buy_times || 0, res.buy_times_limit || 10);
                     break;
                 default:
                     xGame.toast.show(lang('undefined_error'));

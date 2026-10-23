@@ -1635,11 +1635,17 @@ final class GameApiTest extends TestCase
         // 1. 查看大转盘
         $res = $this->request('lottery', 'index');
         $this->assertSame(1, $res['status']);
-        $this->assertCount(8, $res['sectors']);
+        $this->assertCount(8, $res['list']);
+        $this->assertArrayHasKey('log', $res);
+        $this->assertArrayHasKey('info', $res['log']);
+        $this->assertArrayHasKey('total_num', $res['log']['info']);
 
         // 2. 旋转转盘
         $roll = $this->request('lottery', 'action');
         $this->assertSame(1, $roll['status']);
+        $this->assertArrayHasKey('info', $roll);
+        $this->assertArrayHasKey('id', $roll['info']);
+        $this->assertArrayHasKey('gettype', $roll['info']);
         $this->assertArrayHasKey('prize_name', $roll);
     }
 
