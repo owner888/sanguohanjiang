@@ -986,6 +986,8 @@
 
         sotw: function(res) {
             var that = this;
+            res.list = res.list || {};
+            res.player = res.player || { level: 1, nickname: '', rank: 1, country: '' };
             //组装公共信息
             var html = '';
             for (var i = 1; i <= 8; i++) {
