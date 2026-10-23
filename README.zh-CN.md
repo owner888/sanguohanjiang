@@ -143,7 +143,7 @@
 - `c=map&m=get_mission_list`：据点敌人阵容与关卡敌将数据
 - `c=map&m=mission`：战前敌将情报与布阵确认弹窗
 - `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发
-- `c=map&m=get_newreward_index|get_newreward`：战役势力关卡据点通关奖励宝箱查询与领取
+- `c=map&m=get_newreward_index|get_newreward|get_newresult`：战役势力据点关卡宝箱、整势力通关大礼奖励领取与防重校验
 - `c=general&m=index`：玩家武将列表、穿戴装备与属性计算
 - `c=matrix&m=index`：九宫格战位阵法管理与上阵站位调换
 - `c=pack&m=index`：背包道具、消耗品与装备仓储

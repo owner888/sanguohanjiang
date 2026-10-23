@@ -96,11 +96,19 @@ final class WebSocketHandler
         }
 
         match ($action) {
+            'ping' => self::handlePing($ctx),
             'auth' => self::handleAuth($ctx),
             'chat' => self::handleChat($ctx),
             'marquee' => self::handleMarquee($ctx),
             default => $ctx->error("未知的事件类型: {$action}", 404),
         };
+    }
+
+    public static function handlePing(Context $ctx): void
+    {
+        $ctx->emit('pong', [
+            'time' => time(),
+        ]);
     }
 
     public static function handleAuth(Context $ctx): void

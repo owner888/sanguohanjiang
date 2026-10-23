@@ -143,7 +143,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=map&m=get_mission_list`: Enemy nodes and warlord defense lineups
 - `c=map&m=mission`: Pre-battle enemy intelligence and lineup preparation dialog
 - `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation
-- `c=map&m=get_newreward_index|get_newreward`: Campaign node milestone completion reward chests & claim handling
+- `c=map&m=get_newreward_index|get_newreward|get_newresult`: Campaign node milestone chests & chapter clear grand reward claims
 - `c=general&m=index`: Player hero inventory, equipment, and attribute calculations
 - `c=matrix&m=index`: 9-grid tactical battle formation & hero slot updates
 - `c=pack&m=index`: Bag items, consumables, and gear management

@@ -169,6 +169,13 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $claim['status']);
         $this->assertArrayHasKey('reward', $claim);
         $this->assertSame(2, $claim['reward']['is_get']); // 变为已领取状态
+
+        // 战役势力通关大礼领取测试 (c=map&m=get_newresult)
+        $shiliReward = $this->request('map', 'get_newresult', ['id' => 1]);
+        $this->assertSame(1, $shiliReward['status']);
+        $this->assertArrayHasKey('item', $shiliReward);
+        $this->assertArrayHasKey('name', $shiliReward['item']);
+        $this->assertSame(1, $shiliReward['gettype']);
     }
 
     public function testBattleSimulationAction(): void

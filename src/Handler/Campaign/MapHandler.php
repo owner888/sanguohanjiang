@@ -754,4 +754,109 @@ final class MapHandler
             'msg' => '领取成功',
         ];
     }
+
+    /**
+     * 领取战役整势力通关大奖: c=map&m=get_newresult
+     */
+    public static function get_newresult(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $levelId = (int)($ctx->input('id', $ctx->input('levelid', 1)));
+        if ($levelId <= 0) {
+            $levelId = 1;
+        }
+
+        $lockKey = "lock:shili_reward:{$uid}:{$levelId}";
+        if (Redis::get($lockKey) !== null) {
+            return ['status' => -3, 'message' => '操作太频繁了，请稍候'];
+        }
+        Redis::set($lockKey, '1', 2);
+
+        $claimKey = "user_shili_claimed:{$uid}:{$levelId}";
+        if (Redis::get($claimKey) !== null) {
+            return ['status' => -3, 'message' => '该势力通关大奖已领取过'];
+        }
+
+        // 根据战役势力配置对应通关神兵大礼
+        $rewards = [
+            1 => [
+                'gettype' => 1,
+                'rewardnum' => 1,
+                'item' => [
+                    'id' => 101,
+                    'equipid' => 101,
+                    'name' => '百炼青钢剑',
+                    'quality' => 3,
+                    'type' => 1,
+                    'description' => '通关黄巾之乱获得的精炼名兵，削铁如泥！',
+                ],
+            ],
+            2 => [
+                'gettype' => 1,
+                'rewardnum' => 1,
+                'item' => [
+                    'id' => 102,
+                    'equipid' => 102,
+                    'name' => '西凉锁子甲',
+                    'quality' => 3,
+                    'type' => 2,
+                    'description' => '通关董卓之乱缴获的坚固战甲，刀枪不入！',
+                ],
+            ],
+            3 => [
+                'gettype' => 1,
+                'rewardnum' => 1,
+                'item' => [
+                    'id' => 103,
+                    'equipid' => 103,
+                    'name' => '修罗疾风披风',
+                    'quality' => 4,
+                    'type' => 3,
+                    'description' => '决战虎牢关大捷封赏的宝贵披风！',
+                ],
+            ],
+        ];
+
+        $targetReward = $rewards[$levelId] ?? [
+            'gettype' => 1,
+            'rewardnum' => 1,
+            'item' => [
+                'id' => 104,
+                'equipid' => 104,
+                'name' => '天命校尉兵符',
+                'quality' => 3,
+                'type' => 4,
+                'description' => '扫平诸侯叛军封赏的精锐兵符！',
+            ],
+        ];
+
+        // 装备真实入库
+        if ((int)$targetReward['gettype'] === 1 && isset($targetReward['item']['name'])) {
+            $itemCfg = $targetReward['item'];
+            DB::table('equipment')->insert([
+                'uid' => $uid,
+                'equipid' => (int)($itemCfg['equipid'] ?? 101),
+                'name' => (string)$itemCfg['name'],
+                'type' => (int)($itemCfg['type'] ?? 1),
+                'quality' => (int)($itemCfg['quality'] ?? 3),
+                'level' => 1,
+                'generalid' => 0,
+                'number' => 1,
+                'saleprice' => 500,
+            ]);
+        }
+
+        // 标记已领取
+        Redis::set($claimKey, '1', 86400 * 365);
+        DB::table('member_field')->where('uid', $uid)->update(['newresult' => 0]);
+        Redis::del('player:' . $uid);
+
+        return [
+            'status' => 1,
+            'gettype' => $targetReward['gettype'],
+            'item' => $targetReward['item'],
+            'rewardnum' => $targetReward['rewardnum'],
+            'message' => '通关大礼领取成功',
+        ];
+    }
 }

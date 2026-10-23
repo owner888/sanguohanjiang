@@ -120,6 +120,8 @@
             this.baseDelay = 1000;     // 初始重连延迟 1s
             this.maxDelay = 16000;     // 最大重连延迟 16s
             this.reconnectTimer = null;
+            this.heartbeatTimer = null;
+            this.heartbeatInterval = 20000; // 每 20 秒发送一次心跳保活
 
             // 事件订阅字典
             this.listeners = {};
@@ -161,11 +163,30 @@
             }
         }
 
+        startHeartbeat() {
+            this.stopHeartbeat();
+            this.heartbeatTimer = setInterval(() => {
+                if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+                    this.send({ action: 'ping' });
+                }
+            }, this.heartbeatInterval);
+        }
+
+        stopHeartbeat() {
+            if (this.heartbeatTimer) {
+                clearInterval(this.heartbeatTimer);
+                this.heartbeatTimer = null;
+            }
+        }
+
         setupHandlers() {
             this.ws.onopen = () => {
                 this.isConnected = true;
                 this.reconnectAttempts = 0;
                 console.log('[GameWS] 连接成功:', this.url);
+
+                // 启动定期心跳保活机制，防止服务端 sweep 超时关闭
+                this.startHeartbeat();
 
                 // 登录鉴权
                 if (this.token || this.uid) {
@@ -182,6 +203,11 @@
             this.ws.onmessage = (event) => {
                 try {
                     const msg = JSON.parse(event.data);
+
+                    // 心跳响应静默吞吐
+                    if (msg.type === 'pong' || msg.action === 'pong') {
+                        return;
+                    }
 
                     // 全服跑马灯大喇叭事件自动触发 UI 滚动
                     if (msg.type === 'marquee' && msg.data) {
@@ -208,6 +234,7 @@
 
             this.ws.onclose = (event) => {
                 this.isConnected = false;
+                this.stopHeartbeat();
                 console.warn(`[GameWS] 连接断开 (code: ${event.code})`);
                 this.emit('close', event);
 
@@ -268,6 +295,7 @@
          */
         close() {
             this.isManualClosed = true;
+            this.stopHeartbeat();
             if (this.reconnectTimer) {
                 clearTimeout(this.reconnectTimer);
                 this.reconnectTimer = null;

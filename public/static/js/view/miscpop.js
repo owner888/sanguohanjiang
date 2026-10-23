@@ -3420,8 +3420,21 @@
 
                     /* 把宝箱打开 */
                     var box_callback = function() { //callback处理
-                        box_dom.remove();
-                        box_dom = null;
+                        if (box_dom) {
+                            box_dom.remove();
+                            box_dom = null;
+                        }
+                        if (!res || !res.item) {
+                            res = res || {};
+                            res.gettype = res.gettype || 1;
+                            res.rewardnum = res.rewardnum || 1;
+                            res.item = {
+                                id: 101,
+                                name: lang('reputation') || '通关宝赏',
+                                description: '恭喜主公大破敌军，威震华夏！',
+                                quality: 2
+                            };
+                        }
                         //debug
                         //res.item = {"id":1, "name":"小李飞刀", "quality":1, "desc":'test'};
                         //通过奖励
