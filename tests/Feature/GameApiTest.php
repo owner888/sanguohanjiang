@@ -1431,6 +1431,16 @@ final class GameApiTest extends TestCase
         $res = $this->request('muster', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
+        $this->assertNotEmpty($res['first']);
+        $this->assertArrayHasKey('skill', $res['first']);
+        $this->assertArrayHasKey('talent', $res['first']);
+        $this->assertArrayHasKey('name', $res['first']['skill']);
+
+        // 2. 查看单名将领详情 (c=muster&m=get_general_info)
+        $firstGid = (int)$res['first']['id'];
+        $info = $this->request('muster', 'get_general_info', ['gid' => $firstGid]);
+        $this->assertSame(1, $info['status']);
+        $this->assertSame($firstGid, $info['info']['id']);
 
         // 挑选一个未出征的后备武将进行退役
         $freeGid = 0;
@@ -1442,7 +1452,7 @@ final class GameApiTest extends TestCase
         }
 
         if ($freeGid > 0) {
-            // 2. 遣散该武将退役 (软删除并领安家费)
+            // 3. 遣散该武将退役 (软删除并领安家费)
             $sale = $this->request('muster', 'sale_general', ['id' => $freeGid]);
             $this->assertSame(1, $sale['status']);
             $this->assertGreaterThan(0, $sale['severance_pay']);

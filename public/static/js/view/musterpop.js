@@ -257,8 +257,10 @@
 
             /* 绑定右侧数据*/
             that.updateGooutNum();
-            that.nowViewId = res.first.id;
-            that.buildRight(res.first);
+            if (res.first && res.first.id) {
+                that.nowViewId = res.first.id;
+                that.buildRight(res.first);
+            }
         },
 
         updateGooutNum: function() {
