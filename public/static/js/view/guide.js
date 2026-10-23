@@ -474,13 +474,20 @@
             },
 
             // 801 - 900：将领
-            801 : function() { //手滑动
-                //点击版
-                //guide.create('touchend', $('#heropop').find('#hero_dress').find('.pop_btn_middle'));
-                //滑动版
+            801 : function() {
                 var heropop_wrap = $('#heropop_wrap');
-                guide.create('touchend', $('#hero_dress .btn'));
-                guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
+                if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
+                    heropop.displayFirstItem('.unequip');
+                }
+                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
+                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                    guide.create('touchend', dressBtn.first());
+                    guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
+                } else {
+                    guide.hide();
+                    guide.cleanFullmask();
+                    guide.show(802);
+                }
                 heropop_wrap = null;
             },
             802 : function() { //点关闭
@@ -494,9 +501,18 @@
             },
             811 : function() { //滑动
                 var heropop_wrap = $('#heropop_wrap');
-                heropop.displayFirstItem('.unequip');
-                guide.create('touchend', $('#hero_dress .btn'));
-                guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
+                if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
+                    heropop.displayFirstItem('.unequip');
+                }
+                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
+                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                    guide.create('touchend', dressBtn.first());
+                    guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
+                } else {
+                    guide.hide();
+                    guide.cleanFullmask();
+                    guide.show(812);
+                }
                 heropop_wrap = null;
             },
             812 : function() { //点关闭
@@ -511,9 +527,18 @@
             },
             821 : function() { //拖动披风
                 var heropop_wrap = $('#heropop_wrap');
-                heropop.displayFirstItem('.unequip');
-                guide.create('touchend', $('#hero_dress .btn'));
-                guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
+                if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
+                    heropop.displayFirstItem('.unequip');
+                }
+                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
+                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                    guide.create('touchend', dressBtn.first());
+                    guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
+                } else {
+                    guide.hide();
+                    guide.cleanFullmask();
+                    guide.show(822);
+                }
                 heropop_wrap = null;
             },
             822 : function() { //点关闭
@@ -532,8 +557,17 @@
             },
             832 : function() { //滑动
                 var heropop_wrap = $('#heropop_wrap');
-                heropop.displayFirstItem('.unequip');
-                guide.create('touchend', $('#hero_dress .btn'));
+                if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
+                    heropop.displayFirstItem('.unequip');
+                }
+                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
+                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                    guide.create('touchend', dressBtn.first());
+                } else {
+                    guide.hide();
+                    guide.cleanFullmask();
+                    guide.show(833);
+                }
                 heropop_wrap = null;
             },
             833 : function() { //点关闭
@@ -551,8 +585,17 @@
             },
             842 : function() { //滑动
                 var heropop_wrap = $('#heropop_wrap');
-                heropop.displayFirstItem('.unequip');
-                guide.create('touchend', $('#hero_dress .btn'));
+                if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
+                    heropop.displayFirstItem('.unequip');
+                }
+                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
+                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                    guide.create('touchend', dressBtn.first());
+                } else {
+                    guide.hide();
+                    guide.cleanFullmask();
+                    guide.show(843);
+                }
                 heropop_wrap = null;
             },
             843 : function() { //点关闭
@@ -1604,6 +1647,11 @@
                 return false;
             }
             var offset = this.getDomOffset(dom);
+            if (offset.width === 0 || offset.height === 0) {
+                console.log('引导目标不可见或尺寸为0，跳过全屏遮罩');
+                guide.cleanFullmask();
+                return false;
+            }
 
             // 如果指向每日活动
             if (dom.attr('id') == 'header_activity_btn_wrap') {

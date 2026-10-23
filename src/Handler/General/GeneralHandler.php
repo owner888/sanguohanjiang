@@ -72,6 +72,21 @@ final class GeneralHandler
 
         // 查询该玩家所有已穿戴装备 (过滤软删除)
         $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
+        if (empty($allEquips)) {
+            // 初始化新手入门装备放入背包 (generalid=0)
+            DB::table('equipment')->insert([
+                'uid' => $uid,
+                'equipid' => 101,
+                'name' => '青铜剑',
+                'type' => 1,
+                'quality' => 1,
+                'level' => 1,
+                'generalid' => 0,
+                'number' => 1,
+                'saleprice' => 50,
+            ]);
+            $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
+        }
         $equipsByGeneral = [];
         foreach ($allEquips as $eq) {
             $gid = (int)$eq['generalid'];

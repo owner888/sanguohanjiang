@@ -447,6 +447,38 @@ final class MapHandler
                         'mission' => $missionId,
                         'dateline' => time(),
                     ]);
+                    // 首通据点奖励入库
+                    $dropEquipId = match ($missionId) {
+                        1 => 101,
+                        2 => 102,
+                        3 => 103,
+                        default => 0,
+                    };
+                    $dropEquipName = match ($missionId) {
+                        1 => '青铜剑',
+                        2 => '皮甲',
+                        3 => '行军披风',
+                        default => '',
+                    };
+                    $dropEquipType = match ($missionId) {
+                        1 => 1,
+                        2 => 2,
+                        3 => 3,
+                        default => 0,
+                    };
+                    if ($dropEquipId > 0) {
+                        DB::table('equipment')->insert([
+                            'uid' => $uid,
+                            'equipid' => $dropEquipId,
+                            'name' => $dropEquipName,
+                            'type' => $dropEquipType,
+                            'quality' => 1,
+                            'level' => 1,
+                            'generalid' => 0,
+                            'number' => 1,
+                            'saleprice' => 50,
+                        ]);
+                    }
                 }
             } else {
                 DB::table('member')->where('uid', $uid)->update([
