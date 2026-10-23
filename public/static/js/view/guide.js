@@ -8,16 +8,17 @@
             1 : function() { //首次进入，曲阳
                 $('#header').find('.rightside_wrap').hide();
                 // 容灾校正：确保引导处于势力地图(missionsite=2)，避免在大地图找不到.guanqia1而卡死遮罩
-                if (($('#mapworld_page').find('.guanqia1').length == 0 || player.info.missionsite != 2) && typeof mapWorld !== 'undefined' && mapWorld.loadShiliMap) {
+                if (($('#mapworld_page').find('.guanqia1, #guanqia1').length == 0 || player.info.missionsite != 2) && typeof mapWorld !== 'undefined' && mapWorld.loadShiliMap) {
                     player.info.missionsite = 2;
                     mapWorld.loadShiliMap(1);
                 }
                 guide.showNpc(lang('guide1'), function () {
-                    guide.createFullmask();
-                    guide.anim2bottom(function() {
-                        guide.cleanFullmask();
-                        guide.create('click', $('#mapworld_page').find('.guanqia1'));
-                    });
+                    guide.cleanFullmask();
+                    var target = $('.guanqia1, #guanqia1');
+                    if (target.length === 0) {
+                        target = $('#mapworld_page').find('.guanqia1, #guanqia1');
+                    }
+                    guide.create('click', target);
                 });
                 if (player.missionThread != null) {
                     clearInterval(player.missionThread);
@@ -1745,32 +1746,55 @@
         },
 
         anim2top: function(callback) {
-            var body_height = $('body').height();
-            var height = isIPhone5 ? 852 : 768;
-            if (body_height < height) {
-                $('#scroller').animate({
-                    "translate3d": '0px, 0px, 0px'
-                },
-                300, 'ease-in', callback);
+            if (!callback) return;
+            var called = false;
+            var safeCall = function() {
+                if (!called) {
+                    called = true;
+                    callback();
+                }
+            };
+            setTimeout(safeCall, 350);
+
+            var body_height = $('body').height() || 0;
+            var height = (typeof isIPhone5 !== 'undefined' && isIPhone5) ? 852 : 768;
+            if (body_height > 0 && body_height < height) {
+                try {
+                    $('#scroller').animate({
+                        "translate3d": '0px, 0px, 0px'
+                    }, 300, 'ease-in', safeCall);
+                } catch(e) {
+                    safeCall();
+                }
             } else {
-                guide.move2top(callback);
+                safeCall();
             }
-            body_height = null;
         },
 
         anim2bottom: function(callback) {
-            var body_height = $('body').height();
-            var height = isIPhone5 ? 852 : 768;
+            if (!callback) return;
+            var called = false;
+            var safeCall = function() {
+                if (!called) {
+                    called = true;
+                    callback();
+                }
+            };
+            setTimeout(safeCall, 350);
+
+            var body_height = $('body').height() || 0;
+            var height = (typeof isIPhone5 !== 'undefined' && isIPhone5) ? 852 : 768;
             if (body_height > 0 && body_height < height) {
                 var moveposition = height - body_height;
-                $('#scroller').animate({
-                    "translate3d": '0px, -' + moveposition + 'px, 0px'
-                },
-                300, 'ease-in', callback);
-                moveposition = null;
-                body_height = null;
-            } else if (body_height >= height) {
-                callback();
+                try {
+                    $('#scroller').animate({
+                        "translate3d": '0px, -' + moveposition + 'px, 0px'
+                    }, 300, 'ease-in', safeCall);
+                } catch(e) {
+                    safeCall();
+                }
+            } else {
+                safeCall();
             }
         },
 
