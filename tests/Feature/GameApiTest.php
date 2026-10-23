@@ -1466,6 +1466,17 @@ final class GameApiTest extends TestCase
         }
     }
 
+    public function testActivitySystem(): void
+    {
+        $res = $this->request('activity', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertArrayHasKey('list', $res);
+        $this->assertArrayHasKey('logined', $res['list']);
+        $this->assertArrayHasKey('boss', $res['list']);
+        $this->assertArrayHasKey('popo', $res['list']['logined']);
+        $this->assertArrayHasKey('popo', $res['list']['boss']);
+    }
+
     public function testBusinessSystem(): void
     {
         // 1. 查看四海通商

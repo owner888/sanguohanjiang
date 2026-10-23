@@ -150,6 +150,7 @@
 - `c=strengthen&m=index`：铁匠铺装备强化升级与成功率计算
 - `c=tavern&m=index`：酒馆将领招募与会客商人
 - `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`：校场武将挂机演武训练、突飞猛进与扫荡、8大训练位进阶解锁及武将转生
+- `c=activity&m=index`：每日精彩活动列表总览、开放时段区间判定与签到/Boss红点气泡
 - `c=chat&m=read|send`：世界与国家频道实时消息流
 - `c=mainquest&m=index`：主线任务进度与里程碑领奖
 - `c=shop&m=index`：商城道具与军令体力购买

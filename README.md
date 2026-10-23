@@ -150,6 +150,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=strengthen&m=index`: Equipment blacksmith enhancement & rate checking
 - `c=tavern&m=index`: General recruitment tavern & guest trade
 - `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`: Martial training grounds, rapid leaps & sweeps, 8-slot unlocks & reincarnation
+- `c=activity&m=index`: Daily special activities overview, schedule windows, and sign-in/boss popo notifications
 - `c=chat&m=read|send`: World and country real-time messaging
 - `c=mainquest&m=index`: Main storyline quest milestones and rewards
 - `c=shop&m=index`: Item mall & stamina purchasing

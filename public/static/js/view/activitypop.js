@@ -51,11 +51,11 @@
             });
 
             // 显示提示图标
-            if (res.list.logined.popo == 1) {
+            if (res.list && res.list.logined && res.list.logined.popo == 1) {
                 that.e.find('#activity_logined').children('.popo').show();
             }
             //世界boss提示图标
-            if (res.list.boss.popo == 1) {
+            if (res.list && res.list.boss && res.list.boss.popo == 1) {
                 that.e.find('#activity_boss').children('.popo').show();
             }
             //var arr = ['lottery', 'treasure', 'boss', 'drink','tower'];
