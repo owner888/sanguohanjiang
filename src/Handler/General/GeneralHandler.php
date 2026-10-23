@@ -378,9 +378,38 @@ final class GeneralHandler
         // 装配新装备
         DB::table('equipment')->where('id', $eid)->update(['generalid' => $gid]);
 
-        // 获取最新穿戴属性
-        $allEquipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->get();
-        $stats = self::calculateGeneralStats($general, $allEquipped);
+        // 获取最新穿戴属性与背包装备
+        $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
+        $equipped = [];
+        $unequipped = [];
+        $eqIdx = 1;
+        foreach ($allEquips as $item) {
+            if ((int)$item['generalid'] === $gid) {
+                $equipped[] = $item;
+            } elseif ((int)$item['generalid'] === 0) {
+                $bonus = self::calculateEquipBonus($item);
+                $unequipped[(string)$eqIdx] = array_merge($item, [
+                    'id' => (int)$item['id'],
+                    'equipid' => (int)$item['equipid'],
+                    'etype' => (int)$item['type'],
+                    'name' => $item['name'],
+                    'type' => (int)$item['type'],
+                    'level' => (int)$item['level'],
+                    'quality' => (int)$item['quality'],
+                    'gid' => 0,
+                    'needlevel' => 1,
+                    'available' => 1,
+                    'hammer' => 0,
+                    'hammer_quality' => 0,
+                    'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
+                    'bonus' => $bonus,
+                ]);
+                $eqIdx++;
+            }
+        }
+
+        $stats = self::calculateGeneralStats($general, $equipped);
+        $heroData = self::formatHeroData($general, $equipped, $uid);
 
         return [
             'status' => 1,
@@ -388,6 +417,8 @@ final class GeneralHandler
             'gid' => $gid,
             'eid' => $eid,
             'stats' => $stats,
+            'info' => $heroData,
+            'equipments' => $unequipped,
         ];
     }
 
@@ -426,8 +457,37 @@ final class GeneralHandler
         DB::table('equipment')->where('id', $eid)->update(['generalid' => 0]);
 
         $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->first();
-        $allEquipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->get();
-        $stats = $general ? self::calculateGeneralStats($general, $allEquipped) : [];
+        $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
+        $equipped = [];
+        $unequipped = [];
+        $eqIdx = 1;
+        foreach ($allEquips as $item) {
+            if ((int)$item['generalid'] === $gid) {
+                $equipped[] = $item;
+            } elseif ((int)$item['generalid'] === 0) {
+                $bonus = self::calculateEquipBonus($item);
+                $unequipped[(string)$eqIdx] = array_merge($item, [
+                    'id' => (int)$item['id'],
+                    'equipid' => (int)$item['equipid'],
+                    'etype' => (int)$item['type'],
+                    'name' => $item['name'],
+                    'type' => (int)$item['type'],
+                    'level' => (int)$item['level'],
+                    'quality' => (int)$item['quality'],
+                    'gid' => 0,
+                    'needlevel' => 1,
+                    'available' => 1,
+                    'hammer' => 0,
+                    'hammer_quality' => 0,
+                    'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
+                    'bonus' => $bonus,
+                ]);
+                $eqIdx++;
+            }
+        }
+
+        $stats = $general ? self::calculateGeneralStats($general, $equipped) : [];
+        $heroData = $general ? self::formatHeroData($general, $equipped, $uid) : [];
 
         return [
             'status' => 1,
@@ -435,6 +495,8 @@ final class GeneralHandler
             'gid' => $gid,
             'eid' => $eid,
             'stats' => $stats,
+            'info' => $heroData,
+            'equipments' => $unequipped,
         ];
     }
 }

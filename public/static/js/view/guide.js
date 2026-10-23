@@ -479,8 +479,9 @@
                 if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
                     heropop.displayFirstItem('.unequip');
                 }
-                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
-                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                var dressBtn = $('#hero_dress .btn');
+                var isVisible = $('#hero_dress').css('display') !== 'none' && dressBtn.length > 0;
+                if (isVisible) {
                     guide.create('touchend', dressBtn.first());
                     guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
                 } else {
@@ -504,8 +505,9 @@
                 if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
                     heropop.displayFirstItem('.unequip');
                 }
-                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
-                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                var dressBtn = $('#hero_dress .btn');
+                var isVisible = $('#hero_dress').css('display') !== 'none' && dressBtn.length > 0;
+                if (isVisible) {
                     guide.create('touchend', dressBtn.first());
                     guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
                 } else {
@@ -530,8 +532,9 @@
                 if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
                     heropop.displayFirstItem('.unequip');
                 }
-                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
-                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                var dressBtn = $('#hero_dress .btn');
+                var isVisible = $('#hero_dress').css('display') !== 'none' && dressBtn.length > 0;
+                if (isVisible) {
                     guide.create('touchend', dressBtn.first());
                     guide.showRepeat(heropop_wrap, lang('guide801'), 180, 420);
                 } else {
@@ -560,8 +563,9 @@
                 if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
                     heropop.displayFirstItem('.unequip');
                 }
-                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
-                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                var dressBtn = $('#hero_dress .btn');
+                var isVisible = $('#hero_dress').css('display') !== 'none' && dressBtn.length > 0;
+                if (isVisible) {
                     guide.create('touchend', dressBtn.first());
                 } else {
                     guide.hide();
@@ -588,8 +592,9 @@
                 if (typeof heropop !== 'undefined' && heropop.displayFirstItem) {
                     heropop.displayFirstItem('.unequip');
                 }
-                var dressBtn = $('#hero_dress:visible .btn, #hero_dress .btn');
-                if (dressBtn.length > 0 && dressBtn.is(':visible')) {
+                var dressBtn = $('#hero_dress .btn');
+                var isVisible = $('#hero_dress').css('display') !== 'none' && dressBtn.length > 0;
+                if (isVisible) {
                     guide.create('touchend', dressBtn.first());
                 } else {
                     guide.hide();

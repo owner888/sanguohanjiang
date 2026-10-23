@@ -852,6 +852,7 @@
         /*显示左边玩家信息，以及道具装备状况*/
         buildBottomLeft: function(data, equipments) {
             var that = this;
+            if (!data) return;
 
             //先清空当前界面所有道具
             var hero_wrap_dom = $('#heropop_wrap');
@@ -1092,6 +1093,9 @@
         /* 查看某个武将(当装备或卸下时) */
         reviewHero: function(res) {
             this.clearDetailBox();
+            if (!res || !res.info) {
+                return;
+            }
 
             this.nowHero = res.info; //当前将领数据
             this.buildBottomLeft(res.info, res.equipments);
