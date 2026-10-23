@@ -510,4 +510,206 @@ final class MapHandler
         }
         return $process;
     }
+
+    /**
+     * 获取战役势力通关奖励列表: c=map&m=get_newreward_index
+     */
+    public static function get_newreward_index(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $levelId = (int)($ctx->input('levelid', 1));
+        if ($levelId <= 0) {
+            $levelId = 1;
+        }
+
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $curLevel = max(1, (int)($member['missionlevel'] ?? 1));
+        $curStage = max(1, (int)($member['missionstage'] ?? 1));
+
+        // 查询奖励配置
+        $rewardConfigs = DB::table('mission_newreward')
+            ->where('levelid', $levelId)
+            ->whereNull('deleted_at')
+            ->orderBy('missid', 'asc')
+            ->get();
+
+        if (empty($rewardConfigs)) {
+            // 若该势力暂未配置，回退到 1 号势力配置
+            $rewardConfigs = DB::table('mission_newreward')
+                ->where('levelid', 1)
+                ->whereNull('deleted_at')
+                ->orderBy('missid', 'asc')
+                ->get();
+        }
+
+        // 查询该玩家在该势力下的已领取记录
+        $claimedLogs = DB::table('mission_newreward_log')
+            ->where('uid', $uid)
+            ->where('levelid', $levelId)
+            ->whereNull('deleted_at')
+            ->get();
+
+        $claimedMap = [];
+        foreach ($claimedLogs as $log) {
+            $claimedMap[(int)$log['missid']] = true;
+        }
+
+        $isLevelCleared = ($curLevel > $levelId);
+
+        $list = [];
+        foreach ($rewardConfigs as $cfg) {
+            $cfgId = (int)$cfg['id'];
+            $missId = (int)$cfg['missid'];
+            $reType = (int)$cfg['re_type'];
+
+            // 是否已领取: 0不能领取, 1可领取, 2已领取
+            if (isset($claimedMap[$missId])) {
+                $isGet = 2;
+            } elseif ($isLevelCleared || $curStage >= $missId) {
+                $isGet = 1;
+            } else {
+                $isGet = 0;
+            }
+
+            $item = [
+                'id' => $cfgId,
+                'levelid' => $levelId,
+                'missid' => $missId,
+                'mname' => (string)$cfg['mname'],
+                're_type' => $reType,
+                're_name' => (string)$cfg['re_name'],
+                're_num' => (int)$cfg['re_num'],
+                're_value' => (int)$cfg['re_value'],
+                'is_get' => $isGet,
+                'info' => [
+                    'id' => $cfgId,
+                    'image' => (int)$cfg['re_value'] ?: 1,
+                    'name' => (string)$cfg['re_name'],
+                    'quality' => 3,
+                ],
+                'general' => [
+                    'id' => (int)$cfg['re_value'] ?: 1,
+                    'name' => (string)$cfg['re_name'],
+                    'image' => (int)$cfg['re_value'] ?: 1,
+                    'quality' => 3,
+                ],
+            ];
+
+            $list[] = $item;
+        }
+
+        return [
+            'status' => 1,
+            'list' => $list,
+            'message' => 'ok',
+        ];
+    }
+
+    /**
+     * 领取通关奖励: c=map&m=get_newreward
+     */
+    public static function get_newreward(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $id = (int)($ctx->input('id', 0));
+
+        if ($id <= 0) {
+            return ['status' => -1, 'msg' => '参数错误'];
+        }
+
+        $reward = DB::table('mission_newreward')->where('id', $id)->whereNull('deleted_at')->first();
+        if ($reward === null) {
+            return ['status' => -2, 'msg' => '奖励信息不存在'];
+        }
+
+        $levelId = (int)$reward['levelid'];
+        $missId = (int)$reward['missid'];
+
+        // 验证是否已领取
+        $already = DB::table('mission_newreward_log')
+            ->where('uid', $uid)
+            ->where('levelid', $levelId)
+            ->where('missid', $missId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if ($already !== null) {
+            return ['status' => 3, 'msg' => '已经领取过该奖励'];
+        }
+
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        if ($member === null) {
+            return ['status' => 0, 'msg' => '玩家数据不存在'];
+        }
+
+        // 发放奖励
+        $reType = (int)$reward['re_type'];
+        $reNum = (int)$reward['re_num'];
+        $newGold = (int)$member['gold'];
+        $newSilver = (int)$member['silver'];
+
+        switch ($reType) {
+            case 1: // 元宝
+                $newGold += $reNum;
+                DB::table('member')->where('uid', $uid)->update(['gold' => $newGold]);
+                break;
+            case 2: // 银两
+                $newSilver += $reNum;
+                DB::table('member')->where('uid', $uid)->update(['silver' => $newSilver]);
+                break;
+            case 5: // 原魂/将魂
+                $newSoul = (int)($member['soul'] ?? 0) + $reNum;
+                DB::table('member')->where('uid', $uid)->update(['soul' => $newSoul]);
+                break;
+            default:
+                $newSilver += $reNum;
+                DB::table('member')->where('uid', $uid)->update(['silver' => $newSilver]);
+                break;
+        }
+
+        // 写入领取记录
+        DB::table('mission_newreward_log')->insert([
+            'uid' => $uid,
+            'levelid' => $levelId,
+            'missid' => $missId,
+            'dateline' => time(),
+        ]);
+
+        Redis::del('player:' . $uid);
+
+        // 检查该势力下是否还有未领取的奖励
+        $allRewards = DB::table('mission_newreward')
+            ->where('levelid', $levelId)
+            ->whereNull('deleted_at')
+            ->get();
+
+        $allLogs = DB::table('mission_newreward_log')
+            ->where('uid', $uid)
+            ->where('levelid', $levelId)
+            ->whereNull('deleted_at')
+            ->count();
+
+        $hasRemaining = count($allRewards) > $allLogs;
+
+        $rewardData = [
+            'id' => $id,
+            'levelid' => $levelId,
+            'missid' => $missId,
+            'mname' => $reward['mname'],
+            're_type' => $reType,
+            're_name' => $reward['re_name'],
+            're_num' => $reNum,
+            'all_gold' => $newGold,
+            'is_get' => 2,
+        ];
+
+        return [
+            'status' => 1,
+            'popo' => $hasRemaining ? 1 : 0,
+            'reward' => $rewardData,
+            'gold' => $newGold,
+            'silver' => $newSilver,
+            'msg' => '领取成功',
+        ];
+    }
 }

@@ -73,6 +73,8 @@ CREATE TABLE `zc_sanguo_member_field` (
     `practiceall` INT NOT NULL DEFAULT 2,
     `practicenow` INT NOT NULL DEFAULT 0,
     `practicetime` INT UNSIGNED NOT NULL DEFAULT 0,
+    `freeleap` INT NOT NULL DEFAULT 10,
+    `leaptimes` INT NOT NULL DEFAULT 0,
     `rank` INT NOT NULL DEFAULT 1,
     `newresult` INT NOT NULL DEFAULT 0,
     `gift` INT NOT NULL DEFAULT 0,
@@ -262,5 +264,53 @@ VALUES
     (5, '长安', '黄巾叛军', 0, 9000, 45, 5),
     (6, '中原·濮阳', '黄巾叛军', 0, 6000, 30, 3)
 ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
+
+-- -------------------------------------------------------------
+-- 15. 关卡据点通关奖励配置表与领取记录表
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_mission_newreward`;
+CREATE TABLE `zc_sanguo_mission_newreward` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `levelid` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '战役势力ID',
+    `missid` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '通关据点/关卡序号',
+    `mname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '关卡名称',
+    `re_type` INT NOT NULL DEFAULT 1 COMMENT '奖励类型 (1:元宝, 2:银币, 5:原魂, 8:装备, 12:武将)',
+    `re_name` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '奖励展示名',
+    `re_num` INT NOT NULL DEFAULT 1 COMMENT '奖励数量',
+    `re_value` INT NOT NULL DEFAULT 0 COMMENT '奖励关联ID',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    KEY `idx_levelid` (`levelid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='关卡据点通关奖励配置表';
+
+DROP TABLE IF EXISTS `zc_sanguo_mission_newreward_log`;
+CREATE TABLE `zc_sanguo_mission_newreward_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `uid` INT UNSIGNED NOT NULL,
+    `levelid` INT UNSIGNED NOT NULL DEFAULT 1,
+    `missid` INT UNSIGNED NOT NULL DEFAULT 1,
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0,
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_uid_lvl_miss` (`uid`, `levelid`, `missid`),
+    KEY `idx_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家通关奖励领取记录表';
+
+INSERT INTO `zc_sanguo_mission_newreward` (`id`, `levelid`, `missid`, `mname`, `re_type`, `re_name`, `re_num`, `re_value`) VALUES
+(1, 1, 1, '大兴山', 2, '银两', 5000, 0),
+(2, 1, 2, '青州', 1, '元宝', 50, 0),
+(3, 1, 3, '广宗', 5, '将魂', 100, 0),
+(4, 1, 4, '巨鹿', 1, '元宝', 100, 0),
+(5, 1, 5, '张梁', 2, '银两', 10000, 0),
+(6, 1, 6, '张角', 1, '元宝', 200, 0),
+(7, 2, 1, '汜水关', 2, '银两', 10000, 0),
+(8, 2, 2, '华雄', 1, '元宝', 80, 0),
+(9, 2, 3, '虎牢关', 5, '将魂', 200, 0),
+(10, 2, 4, '吕布', 1, '元宝', 150, 0),
+(11, 2, 5, '洛阳', 2, '银两', 20000, 0),
+(12, 2, 6, '董卓', 1, '元宝', 300, 0)
+ON DUPLICATE KEY UPDATE `mname` = VALUES(`mname`);
 
 SET FOREIGN_KEY_CHECKS = 1;

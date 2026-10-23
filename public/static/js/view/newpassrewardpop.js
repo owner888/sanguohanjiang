@@ -83,12 +83,16 @@
             //绑定滑动门左右按钮
             this.e.find('#scroller_btn_left').unbind('touchend').bind('touchend',
             function() {
-                self.rewardScroller.scrollToPage('prev', 0);
+                if (self.rewardScroller && self.rewardScroller.pagesX && self.rewardScroller.pagesX.length > 0) {
+                    self.rewardScroller.scrollToPage('prev', 0);
+                }
                 return false;
             });
             this.e.find('#scroller_btn_right').unbind('touchend').bind('touchend',
             function() {
-                self.rewardScroller.scrollToPage('next', 0);
+                if (self.rewardScroller && self.rewardScroller.pagesX && self.rewardScroller.pagesX.length > 0) {
+                    self.rewardScroller.scrollToPage('next', 0);
+                }
                 return false;
             });
 

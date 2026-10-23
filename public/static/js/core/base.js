@@ -997,31 +997,38 @@ if (true || _dateline >= 1387468800) {
             }
 
             e.css({
+                'animation': keyframes + ' ' + time,
                 '-webkit-animation': keyframes + ' ' + time,
+                'animation-fill-mode': 'both',
                 '-webkit-animation-fill-mode': 'both'
             });
 
-            timeseconeds = parseFloat(time.replace('s', '')) * 1000 + 100;//'0.5s' => 500 + 100(这100是为执行留出富余时间)
+            var timeseconeds = parseFloat(time.replace('s', '')) * 1000 + 100;//'0.5s' => 500 + 100(这100是为执行留出富余时间)
             //单独新增一个定时器，防止动画卡死没有回调
             var animTimer = setTimeout(function() {
-                console.log(keyframes + '动画超时，强制触发事件');
                 animTimer = null;
                 if(e) {
-                    e.trigger('webkitAnimationEnd',[]);
+                    e.trigger('animationend', []);
+                    e.trigger('webkitAnimationEnd', []);
                 }
             }, timeseconeds);
 
             var fn = function() {
-
-                e.css('-webkit-animation', '');
+                e.css({
+                    'animation': '',
+                    '-webkit-animation': ''
+                });
                 if (callback) {
                     callback();
                 }
                 e = null;
-                clearTimeout(animTimer);
+                if (animTimer) {
+                    clearTimeout(animTimer);
+                    animTimer = null;
+                }
             };
 
-            return e.unbind('webkitAnimationEnd').one('webkitAnimationEnd', fn);
+            return e.unbind('webkitAnimationEnd animationend').one('webkitAnimationEnd animationend', fn);
         },
 
         doAnimate2: function(e, className, time, times, callback) {

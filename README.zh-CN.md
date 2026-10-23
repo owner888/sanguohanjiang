@@ -143,12 +143,13 @@
 - `c=map&m=get_mission_list`：据点敌人阵容与关卡敌将数据
 - `c=map&m=mission`：战前敌将情报与布阵确认弹窗
 - `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发
+- `c=map&m=get_newreward_index|get_newreward`：战役势力关卡据点通关奖励宝箱查询与领取
 - `c=general&m=index`：玩家武将列表、穿戴装备与属性计算
 - `c=matrix&m=index`：九宫格战位阵法管理与上阵站位调换
 - `c=pack&m=index`：背包道具、消耗品与装备仓储
 - `c=strengthen&m=index`：铁匠铺装备强化升级与成功率计算
 - `c=tavern&m=index`：酒馆将领招募与会客商人
-- `c=practice&m=index`：校场武将挂机训练与突飞猛进
+- `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`：校场武将挂机演武训练、突飞猛进与扫荡、8大训练位进阶解锁及武将转生
 - `c=chat&m=read|send`：世界与国家频道实时消息流
 - `c=mainquest&m=index`：主线任务进度与里程碑领奖
 - `c=shop&m=index`：商城道具与军令体力购买

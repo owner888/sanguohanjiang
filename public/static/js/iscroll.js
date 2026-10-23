@@ -960,6 +960,7 @@ iScroll.prototype = {
 	},
 
 	scrollTo: function (x, y, time, relative) {
+		if (x === undefined || y === undefined) return;
 		var that = this,
 			step = x,
 			i, l;
@@ -1000,6 +1001,7 @@ iScroll.prototype = {
 		if (that.options.onScrollStart) that.options.onScrollStart.call(that);
 
 		if (that.options.snap) {
+			if (!that.pagesX || !that.pagesX.length) return;
 			pageX = pageX == 'next' ? that.currPageX+1 : pageX == 'prev' ? that.currPageX-1 : pageX;
 			pageY = pageY == 'next' ? that.currPageY+1 : pageY == 'prev' ? that.currPageY-1 : pageY;
 

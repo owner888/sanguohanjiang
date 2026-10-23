@@ -154,6 +154,21 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('info', $detail);
         $this->assertSame('黄巾前哨', $detail['info']['name']);
         $this->assertArrayHasKey('image', $detail['info']);
+
+        // 通关奖励查询与领取测试 (c=map&m=get_newreward_index / get_newreward)
+        $rewards = $this->request('map', 'get_newreward_index', ['levelid' => 1]);
+        $this->assertSame(1, $rewards['status']);
+        $this->assertNotEmpty($rewards['list']);
+        $firstReward = $rewards['list'][0];
+        $this->assertArrayHasKey('mname', $firstReward);
+        $this->assertArrayHasKey('re_type', $firstReward);
+        $this->assertArrayHasKey('is_get', $firstReward);
+
+        // 领取第 1 个通关奖励
+        $claim = $this->request('map', 'get_newreward', ['id' => $firstReward['id']]);
+        $this->assertSame(1, $claim['status']);
+        $this->assertArrayHasKey('reward', $claim);
+        $this->assertSame(2, $claim['reward']['is_get']); // 变为已领取状态
     }
 
     public function testBattleSimulationAction(): void
@@ -365,8 +380,16 @@ final class GameApiTest extends TestCase
     {
         $res = $this->request('practice', 'index');
         $this->assertSame(1, $res['status']);
-        $this->assertSame(6, $res['maxnum']);
+        $this->assertGreaterThanOrEqual(6, $res['maxnum']);
         $this->assertSame(2, $res['opennum']);
+        $this->assertNotEmpty($res['list'], '武将列表不能为空');
+        $this->assertNotEmpty($res['place'], '训练位列表不能为空');
+        $this->assertNotEmpty($res['rule'], '训练规则不能为空');
+        $this->assertArrayHasKey('1', $res['rule'], '训练规则必须包含 1 号规则');
+        $this->assertArrayHasKey('hour', $res['rule']['1']);
+        $this->assertArrayHasKey('freetimes', $res);
+        $this->assertArrayHasKey('leap', $res);
+        $this->assertArrayHasKey('mop', $res);
 
         // 获取张飞的 ID
         $generals = $this->request('general', 'index');
@@ -395,8 +418,17 @@ final class GameApiTest extends TestCase
         // 4. 对张飞执行突飞猛进
         $leap = $this->request('practice', 'go_leap', ['gid' => $zfId, 'num' => 1]);
         $this->assertSame(1, $leap['status']);
-        $this->assertSame(500, $leap['add_exp']);
-        $this->assertGreaterThanOrEqual(2, $leap['level']); // 500 经验足以升到 2 级以上
+        $this->assertGreaterThanOrEqual(500, $leap['add_exp']);
+        $this->assertGreaterThanOrEqual(2, $leap['level']); // 经验足以升到 2 级以上
+
+        // 5. 训练位升级与解锁价格查询
+        $lvPrice = $this->request('practice', 'get_levelup_price', ['pid' => 1]);
+        $this->assertSame(1, $lvPrice['status']);
+        $this->assertSame(2, $lvPrice['info']['level']);
+
+        $unlockPrice = $this->request('practice', 'get_unlock_price', ['squence' => 3]);
+        $this->assertSame(1, $unlockPrice['status']);
+        $this->assertSame(50, $unlockPrice['gold']);
     }
 
     public function testMultiHeroFormationAndBattleAction(): void

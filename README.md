@@ -143,12 +143,13 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=map&m=get_mission_list`: Enemy nodes and warlord defense lineups
 - `c=map&m=mission`: Pre-battle enemy intelligence and lineup preparation dialog
 - `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation
+- `c=map&m=get_newreward_index|get_newreward`: Campaign node milestone completion reward chests & claim handling
 - `c=general&m=index`: Player hero inventory, equipment, and attribute calculations
 - `c=matrix&m=index`: 9-grid tactical battle formation & hero slot updates
 - `c=pack&m=index`: Bag items, consumables, and gear management
 - `c=strengthen&m=index`: Equipment blacksmith enhancement & rate checking
 - `c=tavern&m=index`: General recruitment tavern & guest trade
-- `c=practice&m=index`: Martial training grounds, slots, and rapid exp leaps
+- `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`: Martial training grounds, rapid leaps & sweeps, 8-slot unlocks & reincarnation
 - `c=chat&m=read|send`: World and country real-time messaging
 - `c=mainquest&m=index`: Main storyline quest milestones and rewards
 - `c=shop&m=index`: Item mall & stamina purchasing
