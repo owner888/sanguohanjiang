@@ -18,7 +18,7 @@ return [
     ],
     'server_base_port' => (int)(getenv('SERVER_BASE_PORT') ?: 18100),
     'assets' => [
-        'version'    => getenv('ASSET_VERSION') ?: '20261024_1',
+        'version'    => getenv('ASSET_VERSION') ?: '20261024_2',
         'static_url' => getenv('STATIC_URL') ?: 'static/',
         'cdn_url'    => getenv('CDN_URL') ?: 'static/',
         'api_url'    => getenv('API_URL') ?: 'index.php',
