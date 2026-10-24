@@ -16,11 +16,11 @@ use OmniPHP\WebSocket\Broadcaster;
 final class TreasuremapHandler
 {
     public const array MAP_LEVELS = [
-        1 => ['star' => 1, 'name' => '残破羊皮古卷', 'cost_refresh' => 3000, 'reward_silver' => 8000, 'reward_gold' => 0],
-        2 => ['star' => 2, 'name' => '西域古墓星象图', 'cost_refresh' => 5000, 'reward_silver' => 15000, 'reward_gold' => 10],
-        3 => ['star' => 3, 'name' => '南蛮巫王宝藏密卷', 'cost_refresh' => 8000, 'reward_silver' => 30000, 'reward_gold' => 20],
-        4 => ['star' => 4, 'name' => '始皇地宫九龙分金图', 'cost_refresh' => 15000, 'reward_silver' => 60000, 'reward_gold' => 50],
-        5 => ['star' => 5, 'name' => '传国玉玺龙脉藏宝图', 'cost_refresh' => 30000, 'reward_silver' => 120000, 'reward_gold' => 100],
+        1 => ['star' => 1, 'name' => '残破羊皮古卷', 'cost_refresh' => 3000, 'sale_price' => 12000, 'levelup_price' => 5, 'reward_silver' => 8000, 'reward_gold' => 0],
+        2 => ['star' => 2, 'name' => '西域古墓星象图', 'cost_refresh' => 5000, 'sale_price' => 30000, 'levelup_price' => 10, 'reward_silver' => 15000, 'reward_gold' => 10],
+        3 => ['star' => 3, 'name' => '南蛮巫王宝藏密卷', 'cost_refresh' => 8000, 'sale_price' => 80000, 'levelup_price' => 20, 'reward_silver' => 30000, 'reward_gold' => 20],
+        4 => ['star' => 4, 'name' => '始皇地宫九龙分金图', 'cost_refresh' => 15000, 'sale_price' => 200000, 'levelup_price' => 50, 'reward_silver' => 60000, 'reward_gold' => 50],
+        5 => ['star' => 5, 'name' => '传国玉玺龙脉藏宝图', 'cost_refresh' => 30000, 'sale_price' => 500000, 'levelup_price' => 0, 'reward_silver' => 120000, 'reward_gold' => 100],
     ];
 
     /**
@@ -33,6 +33,15 @@ final class TreasuremapHandler
     }
 
     /**
+     * 获取玩家藏宝图当前碎片部位 (1: 上, 2: 中, 3: 下)
+     */
+    public static function getUserMapPart(int $uid): int
+    {
+        $cached = Redis::get('user_treasure_part:' . $uid);
+        return ($cached !== null && is_numeric($cached)) ? max(1, min(3, (int)$cached)) : 1;
+    }
+
+    /**
      * 藏宝图主界面: c=treasuremap&m=index
      */
     public static function index(Context $ctx): array
@@ -40,6 +49,7 @@ final class TreasuremapHandler
         $uid = MemberHandler::resolveUid($ctx);
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
         $star = self::getUserMap($uid);
+        $part = self::getUserMapPart($uid);
         $cfg = self::MAP_LEVELS[$star] ?? self::MAP_LEVELS[1];
 
         // 查询玩家当前组队状态 (来自 Redis 缓存)
@@ -50,12 +60,15 @@ final class TreasuremapHandler
         $allTeams = Redis::getJson('treasure_public_teams') ?: [];
         $teamList = array_values($allTeams);
 
-        // 玩家当前持有的藏宝图碎片对象
+        // 玩家当前持有的藏宝图碎片对象 (补齐 levelup_price, sale_price, ismax)
         $myMap = [
             'id' => 1,
             'name' => $cfg['name'],
-            'type' => 1, // 1: 上部, 2: 中部, 3: 下部
+            'type' => $part,
             'quality' => $star,
+            'sale_price' => (int)$cfg['sale_price'],
+            'levelup_price' => ($star >= 5) ? 0 : (int)$cfg['levelup_price'],
+            'ismax' => ($star >= 5) ? 1 : 0,
         ];
 
         return [
@@ -86,6 +99,7 @@ final class TreasuremapHandler
         $uid = MemberHandler::resolveUid($ctx);
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
         $star = self::getUserMap($uid);
+        $part = self::getUserMapPart($uid);
         $cfg = self::MAP_LEVELS[$star] ?? self::MAP_LEVELS[1];
         $nickname = (string)($member['nickname'] ?? ('主公' . $uid));
 
@@ -98,7 +112,7 @@ final class TreasuremapHandler
                     'uid' => $uid,
                     'nickname' => $nickname,
                     'name' => $cfg['name'],
-                    'type' => 1,
+                    'type' => $part,
                 ],
             ],
         ];
@@ -187,73 +201,80 @@ final class TreasuremapHandler
     }
 
     /**
-     * 升级藏宝图: c=treasuremap&m=levelup
+     * 升级藏宝图品级: c=treasuremap&m=levelup
      */
     public static function levelup(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
         $curStar = self::getUserMap($uid);
+        $curPart = self::getUserMapPart($uid);
 
         if ($curStar >= 5) {
-            return ['status' => 0, 'message' => '藏宝图已达最高 5 星！'];
+            return ['status' => 2, 'message' => '藏宝图已达最高品质！'];
         }
 
-        $costGold = 10;
+        $cfg = self::MAP_LEVELS[$curStar] ?? self::MAP_LEVELS[1];
+        $costGold = (int)$cfg['levelup_price'];
+
         if (!MemberHandler::deductCurrency($uid, gold: $costGold)) {
-            return ['status' => -1, 'message' => '元宝不足，升级需要 10 元宝'];
+            return ['status' => 3, 'message' => "元宝不足，升级品级需要 {$costGold} 元宝"];
         }
 
-        $newStar = $curStar + 1;
+        $newStar = min(5, $curStar + 1);
         Redis::set('user_treasure_map:' . $uid, (string)$newStar, 86400 * 7);
+
+        $newCfg = self::MAP_LEVELS[$newStar];
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+
+        $mapObj = [
+            'id' => 1,
+            'name' => $newCfg['name'],
+            'type' => $curPart,
+            'quality' => $newStar,
+            'sale_price' => (int)$newCfg['sale_price'],
+            'levelup_price' => ($newStar >= 5) ? 0 : (int)$newCfg['levelup_price'],
+            'ismax' => ($newStar >= 5) ? 1 : 0,
+        ];
 
         return [
             'status' => 1,
+            'map' => $mapObj,
+            'gold' => (int)($member['gold'] ?? 0),
             'star' => $newStar,
-            'message' => "升级成功！藏宝图升至 {$newStar} 星！",
+            'message' => "升级成功！藏宝图升至 {$newStar} 阶【{$newCfg['name']}】！",
         ];
     }
 
     /**
-     * 寻龙分金刷新宝图星级: c=treasuremap&m=refresh
+     * 寻龙分金刷新宝图部位: c=treasuremap&m=refresh
      */
     public static function refresh(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
         $curStar = self::getUserMap($uid);
+        $curPart = self::getUserMapPart($uid);
 
-        if ($curStar >= 5) {
-            return ['status' => 0, 'message' => '藏宝图已达至高 5 星绝世龙脉！'];
+        $costGold = 2; // 老客户端刷新价格固定为 2 元宝
+        if (!MemberHandler::deductCurrency($uid, gold: $costGold)) {
+            return ['status' => 2, 'message' => "元宝不足，刷新部件需要 {$costGold} 元宝"];
         }
 
-        $cfg = self::MAP_LEVELS[$curStar];
-        $costSilver = (int)$cfg['cost_refresh'];
+        // 随机切换至其他部件 (1 上, 2 中, 3 下)
+        $candidates = array_values(array_diff([1, 2, 3], [$curPart]));
+        $newPart = $candidates[array_rand($candidates)];
+        Redis::set('user_treasure_part:' . $uid, (string)$newPart, 86400 * 7);
 
-        if (!MemberHandler::deductCurrency($uid, silver: $costSilver)) {
-            return ['status' => -1, 'message' => "银两不足，勘探寻宝需要 {$costSilver} 银两"];
-        }
-
-        // 成功升级星级 (70% 概率升星，30% 保留)
-        $up = (mt_rand(1, 100) <= 70);
-        $newStar = $up ? $curStar + 1 : $curStar;
-
-        Redis::set('user_treasure_map:' . $uid, (string)$newStar, 86400 * 7);
-        $newCfg = self::MAP_LEVELS[$newStar];
-
-        if ($newStar >= 5) {
-            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "龙脉出世！主公【{$pName}】寻龙分金，成功探出 5 星绝世宝图【{$newCfg['name']}】！",
-                'type' => 'system_broadcast',
-            ]);
-        }
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $cfg = self::MAP_LEVELS[$curStar] ?? self::MAP_LEVELS[1];
 
         return [
             'status' => 1,
-            'star' => $newStar,
-            'map_name' => $newCfg['name'],
-            'upgraded' => $up ? 1 : 0,
-            'message' => $up ? "分金定穴大成！藏宝图升至 {$newStar} 星【{$newCfg['name']}】！" : '勘探暂未精进，宝图星级保持不变',
+            'type' => $newPart,
+            'gold' => (int)($member['gold'] ?? 0),
+            'star' => $curStar,
+            'map_name' => $cfg['name'],
+            'upgraded' => 1,
+            'message' => '部件刷新成功！',
         ];
     }
 
@@ -266,29 +287,27 @@ final class TreasuremapHandler
         $star = self::getUserMap($uid);
         $cfg = self::MAP_LEVELS[$star] ?? self::MAP_LEVELS[1];
 
-        $rewardSilver = (int)$cfg['reward_silver'];
-        $rewardGold = (int)$cfg['reward_gold'];
+        $salePrice = (int)$cfg['sale_price'];
 
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $newSilver = (int)($member['silver'] ?? 0) + $rewardSilver;
-        $newGold = (int)($member['gold'] ?? 0) + $rewardGold;
-
-        DB::table('member')->where('uid', $uid)->update([
-            'silver' => $newSilver,
-            'gold' => $newGold,
-        ]);
+        // 增加卖出收益银两
+        MemberHandler::addCurrency($uid, silver: $salePrice);
 
         // 重置回 1 星
         Redis::set('user_treasure_map:' . $uid, '1', 86400 * 7);
         Redis::del('player:' . $uid);
 
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+
         return [
             'status' => 1,
-            'silver' => $rewardSilver,
-            'gold' => $rewardGold,
-            'all_silver' => $newSilver,
-            'all_gold' => $newGold,
-            'message' => "古宝出土！发掘收获银两 {$rewardSilver}" . ($rewardGold > 0 ? "、元宝 {$rewardGold}" : '') . "！",
+            'map' => [], // 卖出后变为空数组 []，让前端正确展示无图状态
+            'num' => 0,
+            'add_silver' => $salePrice,
+            'silver' => (int)($member['silver'] ?? 0),
+            'gold' => (int)($member['gold'] ?? 0),
+            'reward_silver' => $cfg['reward_silver'],
+            'reward_gold' => $cfg['reward_gold'],
+            'message' => "成功卖出藏宝图，获得 {$salePrice} 银两！",
         ];
     }
 }

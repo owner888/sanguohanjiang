@@ -294,23 +294,29 @@
         /*藏宝图信息*/
         buildmap: function() {
             var that = this;
-            if ($.isArray(that.map) == false) {
+            if (that.map && $.isArray(that.map) == false && that.map.name) {
                 //还有藏宝图
-                that.e.find('#mapdetail_wrap').find('.mapshow').find('.name').html(that.map.name + '(<span id="maptype">' + that.get_type(that.map.type) + '</span>)').attr('class', 'name desc' + that.map.quality);
+                var mapName = that.map.name || '';
+                var mapType = (that.map.type != null) ? that.map.type : 1;
+                var mapQuality = (that.map.quality != null) ? that.map.quality : 1;
+                var lvPrice = (that.map.levelup_price != null) ? that.map.levelup_price : 5;
+                var salePrice = (that.map.sale_price != null) ? that.map.sale_price : 12000;
+
+                that.e.find('#mapdetail_wrap').find('.mapshow').find('.name').html(mapName + '(<span id="maptype">' + that.get_type(mapType) + '</span>)').attr('class', 'name desc' + mapQuality);
                 that.e.find('#mapdetail_wrap').find('.mapshow').find('em').css({
-                    'background': 'url(' + staticUrl + 'img/pop/treasuremappop_map_' + parseInt(that.map.quality) + '.jpg' + ') 0 0 no-repeat'
+                    'background': 'url(' + staticUrl + 'img/pop/treasuremappop_map_' + parseInt(mapQuality) + '.jpg' + ') 0 0 no-repeat'
                 });
-                that.e.find('#mapdetail_wrap').find('#refresh').html(that.refresh + lang('gold'));
+                that.e.find('#mapdetail_wrap').find('#refresh').html((that.refresh || 2) + lang('gold'));
                 if (parseInt(that.map.ismax) == 1) {
                     //最高等级藏宝图，不能升级
                     that.e.find('#mapdetail_wrap').find('#up').html(0 + lang('gold'));
                     that.e.find('#mapdetail_wrap').find('.up').attr('class', 'pop_btn_middle_disable btn up');
                     that.e.find('#mapdetail_wrap').find('.up').unbind().html(lang('grade_is_full'));
                 } else {
-                    that.e.find('#mapdetail_wrap').find('#up').html(that.map.levelup_price + lang('gold'));
+                    that.e.find('#mapdetail_wrap').find('#up').html(lvPrice + lang('gold'));
                     that.e.find('#mapdetail_wrap').find('.up').html(lang('grade_lvup'));
                 }
-                that.e.find('#mapdetail_wrap').find('#save').html(that.map.sale_price);
+                that.e.find('#mapdetail_wrap').find('#save').html(salePrice);
                 that.e.find('#mapdetail_wrap').find('.mapshow').show();
                 //that.e.find('#no_number_wrap').hide();
             } else {
@@ -423,8 +429,10 @@
                     xGame.toast.show(lang('wait_for_treasuremap_lvup'));
                     break;
                 case 1:
-                    res.map.type = that.map.type;
-                    that.map = res.map;
+                    if (res.map) {
+                        res.map.type = (that.map && that.map.type) ? that.map.type : (res.map.type || 1);
+                        that.map = res.map;
+                    }
                     that.buildmap();
                     player.updateinfo({
                         'gold': res.gold
