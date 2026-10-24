@@ -97,9 +97,13 @@ final class WebSocketHandler
 
         match ($action) {
             'ping' => self::handlePing($ctx),
-            'auth' => self::handleAuth($ctx),
+            'auth', 'login' => self::handleAuth($ctx),
             'chat' => self::handleChat($ctx),
             'marquee' => self::handleMarquee($ctx),
+            'teamlist' => self::handleTeamList($ctx),
+            'createTeam' => self::handleCreateTeam($ctx),
+            'jointeam' => self::handleJoinTeam($ctx),
+            'exitteam', 'fireteam' => self::handleExitTeam($ctx),
             default => $ctx->error("未知的事件类型: {$action}", 404),
         };
     }
@@ -108,6 +112,101 @@ final class WebSocketHandler
     {
         $ctx->emit('pong', [
             'time' => time(),
+        ]);
+    }
+
+    public static function handleTeamList(Context $ctx): void
+    {
+        $fid = (int)($ctx->input('id', 1));
+        $teams = Redis::getJson("elite_teams:{$fid}") ?: [];
+        $ctx->emit('teamlist', [
+            'list' => array_values($teams),
+            'firstkill' => 0,
+            'exp' => 500,
+            'itemname' => '百炼强化玄铁',
+            'quality' => 3,
+            'getrate' => 100,
+        ]);
+    }
+
+    public static function handleCreateTeam(Context $ctx): void
+    {
+        $uid = $ctx->uid() ?: 1;
+        $fid = (int)($ctx->input('id', 1));
+        $type = (int)($ctx->input('type', 1));
+        $topteam = (bool)($ctx->input('topteam', false));
+
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $nickname = (string)($member['nickname'] ?? ('主公' . $uid));
+
+        $teamId = $uid;
+        $team = [
+            'teamid' => $teamId,
+            'name' => "{$nickname}的队伍",
+            'num' => 1,
+            'countryid' => 0,
+            'countryname' => '',
+            'leader' => $uid,
+            'topteam' => $topteam ? 1 : 0,
+            'list' => [
+                ['uid' => $uid, 'nickname' => $nickname, 'level' => (int)($member['level'] ?? 1), 'order' => 1],
+            ],
+        ];
+
+        $teams = Redis::getJson("elite_teams:{$fid}") ?: [];
+        $teams[$teamId] = $team;
+        Redis::setJson("elite_teams:{$fid}", $teams, 86400);
+
+        $ctx->emit('teamdetail', $team);
+        Broadcaster::broadcast('teamlist', [
+            'list' => array_values($teams),
+        ]);
+    }
+
+    public static function handleJoinTeam(Context $ctx): void
+    {
+        $uid = $ctx->uid() ?: 1;
+        $fid = (int)($ctx->input('id', 1));
+        $teamId = (int)($ctx->input('teamid', 0));
+
+        $teams = Redis::getJson("elite_teams:{$fid}") ?: [];
+        if (!isset($teams[$teamId])) {
+            $ctx->emit('error', ['message' => '队伍不存在']);
+            return;
+        }
+
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $nickname = (string)($member['nickname'] ?? ('主公' . $uid));
+
+        $team = $teams[$teamId];
+        $team['num'] = count($team['list']) + 1;
+        $team['list'][] = [
+            'uid' => $uid,
+            'nickname' => $nickname,
+            'level' => (int)($member['level'] ?? 1),
+            'order' => $team['num'],
+        ];
+
+        $teams[$teamId] = $team;
+        Redis::setJson("elite_teams:{$fid}", $teams, 86400);
+
+        $ctx->emit('teamdetail', $team);
+        Broadcaster::broadcast('teamlist', [
+            'list' => array_values($teams),
+        ]);
+    }
+
+    public static function handleExitTeam(Context $ctx): void
+    {
+        $uid = $ctx->uid() ?: 1;
+        $fid = (int)($ctx->input('id', 1));
+        $teams = Redis::getJson("elite_teams:{$fid}") ?: [];
+        unset($teams[$uid]);
+        Redis::setJson("elite_teams:{$fid}", $teams, 86400);
+
+        $ctx->emit('exitteam', ['status' => 1]);
+        Broadcaster::broadcast('teamlist', [
+            'list' => array_values($teams),
         ]);
     }
 

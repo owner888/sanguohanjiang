@@ -93,10 +93,11 @@ final class MatrixHandler
         // 获取用户所有武将并标注其出战状态 (包含 image, quality 等展示字段)
         $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
         $generalList = [];
+        $gIdx = 1;
         foreach ($generals as $g) {
             $gid = (int)$g['id'];
             $pos = (int)($g['pos'] ?? 0);
-            $generalList[] = [
+            $generalList[(string)$gIdx] = [
                 'id' => $gid,
                 'generalid' => (int)($g['generalid'] ?? 1),
                 'name' => (string)$g['name'],
@@ -106,6 +107,7 @@ final class MatrixHandler
                 'pos' => $pos,
                 'goout' => ($pos > 0 && in_array($gid, $onBattleGids, true)) ? 1 : 0,
             ];
+            $gIdx++;
         }
 
         $list = [];

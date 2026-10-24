@@ -193,7 +193,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=sacredtree&m=index|watering`: Money-growing sacred tree cultivation, canopy watering, and gold/silver harvests
 - `c=flop&m=index|turnover`: Nine-grid card flips, card turnovers, and golden jackpot awards
 - `c=challenge&m=index|action`: Hero trial arenas, master duels (Ma Chao, Zhao Yun, Guan Yu), and arena honors
-- `c=elite&m=index|action`: Elite campaigns (Daxing, Wancheng, Hulao), guaranteed drops, and equipment blueprints
+- `c=elite&m=index|action|get_server`: Multi-hero elite campaigns, native WebSocket real-time teaming, and battle spoils
 - `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`: Warlord muster platform, expedition dispatches, resting states, hero intelligence, and severance pay claims
 - `c=business&m=index|go_business|buy|refresh`: Four Seas commerce, merchant fleet caravans (Luoyang, Chengdu, Jianye), and trade profits
 - `c=gambling&m=index|buy|cut|sell`: Treasure bowl gambling, rough stone cuts, and pawnshop silver liquidations

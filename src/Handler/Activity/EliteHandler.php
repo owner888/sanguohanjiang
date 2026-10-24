@@ -23,6 +23,25 @@ final class EliteHandler
     ];
 
     /**
+     * 获取多人副本 WebSocket 实时服务地址: c=elite&m=get_server
+     */
+    public static function get_server(Context $ctx): array
+    {
+        $appConfig = require dirname(__DIR__, 3) . '/config/app.php';
+        $wsPort = $appConfig['ws']['public_port'] ?? 18101;
+        $host = $ctx->request()->host();
+        $hostName = explode(':', $host)[0] ?: '127.0.0.1';
+        $proto = ($ctx->request()->header('x-forwarded-proto') === 'https') ? 'wss:' : 'ws:';
+        $wsUrl = "{$proto}//{$hostName}:{$wsPort}";
+
+        return [
+            'status' => 1,
+            'url' => $wsUrl,
+            'message' => 'ok',
+        ];
+    }
+
+    /**
      * 精英副本主界面: c=elite&m=index
      */
     public static function index(Context $ctx): array

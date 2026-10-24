@@ -193,7 +193,7 @@
 - `c=sacredtree&m=index|watering`：聚宝通天摇钱神树、灵泉灌溉浇水成长与金叶玉果元宝银饷掉落收割
 - `c=flop&m=index|turnover`：九宫翻牌夺宝、金边卡牌翻转揭秘与至尊元宝大奖
 - `c=challenge&m=index|action`：英雄试炼擂台巅峰单挑、挑战守擂名将（马超/赵云/关羽）夺取擂主荣耀
-- `c=elite&m=index|action`：精英关卡战役（精英大兴山/宛城/虎牢关）、九宫格推演与必掉珍稀装备图纸
+- `c=elite&m=index|action|get_server`：多人精英副本战役（精英大兴山/宛城/虎牢关）、原生 WebSocket 组队通信与战利品结算
 - `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`：点将台大营名册、出征派遣、下阵休息、将领详情与闲置武将退役遣散（软删除管理）
 - `c=business&m=index|go_business|buy|refresh`：四海通商行商经商（洛阳/成都/建业/襄阳）、商市行情采购与暴利返航折现
 - `c=gambling&m=index|buy|cut|sell`：金银宝盆博彩、原石抛光雕琢与聚宝盆估价翻倍典当

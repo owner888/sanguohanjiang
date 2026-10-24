@@ -185,16 +185,16 @@
 
             var that = this;
             var html = '';
-            var atatar = null;
+            var avatar = null;
+            if (!hero) hero = {};
             
             for (var i = 1; i <= 8; i++) {
-                
-                if (hero[i] == null) {
+                avatar = (hero[i] !== undefined) ? hero[i] : (hero[i - 1] !== undefined ? hero[i - 1] : null);
+                if (avatar == null) {
                     html += '<li class="hero_item touch_item"></li>';
                     continue;
                 }
 
-                avatar = hero[i];
                 that.heroData[avatar.id] = avatar;
 
                 html += '<li class="hero_item touch_item" id="hero'+ avatar.id +'" heroId="'+ avatar.id +'">';
@@ -357,7 +357,8 @@
                     li.addClass('block').addClass('canMove');
                 } else {
                     li.addClass('on').addClass('canMove').attr('heroid', item);
-                    html = '<span class="pic" style="background-image:url('+ xGame.avatar(that.heroData[item].image) +')"></span>';
+                    var heroImg = (that.heroData && that.heroData[item] && that.heroData[item].image) ? that.heroData[item].image : (player.info ? player.info.gender : 1);
+                    html = '<span class="pic" style="background-image:url('+ xGame.avatar(heroImg) +')"></span>';
                     html += '<em class="hand hand'+ hand +'"></em>';
                     li.html(html);
                     hand ++;

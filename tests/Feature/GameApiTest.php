@@ -1459,12 +1459,17 @@ final class GameApiTest extends TestCase
 
     public function testEliteSystem(): void
     {
-        // 1. 查看精英副本
+        // 1. 获取多人副本 WebSocket 实时服务地址 (c=elite&m=get_server)
+        $srv = $this->request('elite', 'get_server');
+        $this->assertSame(1, $srv['status']);
+        $this->assertNotEmpty($srv['url']);
+
+        // 2. 查看精英副本
         $res = $this->request('elite', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['maps']);
 
-        // 2. 挑战精英大兴山
+        // 3. 挑战精英大兴山
         $battle = $this->request('elite', 'action', ['id' => 1]);
         $this->assertSame(1, $battle['status']);
         $this->assertSame(1, $battle['win']);
