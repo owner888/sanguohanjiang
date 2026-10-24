@@ -169,6 +169,10 @@
             var html = '';
             var n = 0;                                       //判断是会否需要增加li
 
+            res.shop_list = res.shop_list || { list: [] };
+            res.shop_list.list = res.shop_list.list || [];
+            res.member_info = res.member_info || { info: { taxes: 0, contribute: 0, general: 0 } };
+
             html += '<li class="cs_item">';
             for (var i = 0, len = res.shop_list.list.length; i < len; i++) {
                 var resource = res.shop_list.list[i];

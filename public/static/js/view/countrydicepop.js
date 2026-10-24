@@ -116,13 +116,18 @@
                 return false;
             });
 
+            data.last_week = data.last_week || { status: 0 };
+            data.member = data.member || { points: 0, times: 10, cost: 10, dice1: 6, dice2: 6, dice3: 6 };
+            data.list = data.list || [];
+
             that.buildLastWeek(data.last_week);
             //复用
             that.buildMyData(data);
             //初始化骰子
             var i = 1;
             that.e.find('#playdice_wrap').find('.dice_wrap').each(function() {
-                $(this).append(that.createDice(data.member['dice'+i]));
+                var diceVal = (data.member && data.member['dice'+i]) ? data.member['dice'+i] : 6;
+                $(this).append(that.createDice(diceVal));
                 i++;
             });
 
@@ -134,7 +139,7 @@
         },
 
         buildLastWeek: function(last_week) {
-            if(last_week.status == 1) {
+            if(last_week && last_week.status == 1) {
                 this.e.find('#lastweek_data').find('.score').children('span').html(lang('countrydicepop_x_score', [last_week.points]));
                 this.e.find('#lastweek_data').find('.rank').children('span').html(last_week.now_rank);
                 this.e.find('#lastweek_data').find('.reward').children('span').html(last_week.reward);

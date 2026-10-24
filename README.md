@@ -216,6 +216,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=hitegg&m=index|hit_egg`: Golden fortune egg smashings, hammer strikes, and silver/gold crit explosions
 - `c=levelgift&m=index|get_reward`: Lord level-up milestone packages (Levels 5, 10, 20, 30, 40, 50) and growth funds
 - `c=countryshop&m=index|buy`: National prestige tax shops, red artifact blueprints, and military provisions
+- `c=country_taxes_shop&m=index|buy`: National taxes mall, treasury asset claims, and daily quota exchanges
 - `c=equip_forge&m=index|fabrication|resolve`: Celestial gear forges, artifact fabrications, and gear scrap smelting
 - `c=totallogin&m=index|action`: Continuous login festival milestones (Days 1 to 14) and carnival silver/gold bundles
 - `c=epic&m=index|force`: Historical epic campaigns (Baima, Wuchao, Huarong Road) and heroic warlord duels

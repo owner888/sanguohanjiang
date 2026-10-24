@@ -1404,11 +1404,17 @@ final class GameApiTest extends TestCase
         // 1. 查看神骰主界面
         $res = $this->request('dice', 'index');
         $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(1, $res['left_times']);
+        $this->assertArrayHasKey('member', $res);
+        $this->assertArrayHasKey('last_week', $res);
+        $this->assertArrayHasKey('list', $res);
+        $this->assertArrayHasKey('points', $res['member']);
+        $this->assertGreaterThanOrEqual(1, $res['member']['times']);
 
         // 2. 投掷骰子
         $shake = $this->request('dice', 'shake_dice');
         $this->assertSame(1, $shake['status']);
+        $this->assertArrayHasKey('member', $shake);
+        $this->assertArrayHasKey('dices', $shake);
         $this->assertCount(3, $shake['dices']);
         $this->assertGreaterThan(0, $shake['silver']);
     }
@@ -1874,6 +1880,15 @@ final class GameApiTest extends TestCase
         $buy = $this->request('countryshop', 'buy', ['id' => 1]);
         $this->assertSame(1, $buy['status']);
         $this->assertStringContainsString('青龙偃月刀', $buy['goods_name']);
+
+        // 3. 国家税金商城测试 (c=country_taxes_shop&m=index / buy)
+        $taxesShop = $this->request('country_taxes_shop', 'index');
+        $this->assertSame(1, $taxesShop['status']);
+        $this->assertNotEmpty($taxesShop['shop_list']['list']);
+        $this->assertArrayHasKey('member_info', $taxesShop);
+
+        $buyTaxes = $this->request('country_taxes_shop', 'buy', ['id' => 1]);
+        $this->assertSame(1, $buyTaxes['status']);
     }
 
     public function testEquipForgeSystem(): void

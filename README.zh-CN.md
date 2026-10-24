@@ -216,6 +216,7 @@
 - `c=hitegg&m=index|hit_egg`：金蛋纳福大暴击（吉祥金蛋/富贵银蛋/至尊彩蛋）、挥锤破蛋与元宝爆出
 - `c=levelgift&m=index|get_reward`：主公等级成长里程碑礼包（5/10/20/30/40/50级）与成长基金一键领奖
 - `c=countryshop&m=index|buy`：魏蜀吴国家特产商城、官营国税军资与红色绝品神装图纸兑换
+- `c=country_taxes_shop&m=index|buy`：国家税金集市商城、税金资产核算与银两突飞卡军令限额兑换
 - `c=equip_forge&m=index|fabrication|resolve`：天工神兵铸造工坊、神装开炉淬火打造与闲置装备熔炼提取精铁
 - `c=totallogin&m=index|action`：全服开服累登狂欢大礼（1~14天全梯度封赏）、豪华银票元宝礼包一键申领
 - `c=epic&m=index|force`：三国历史天命战纪史诗战役（白马之战/火烧乌巢/华容道劫曹）、九宫格推演决战领赏
