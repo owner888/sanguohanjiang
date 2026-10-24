@@ -265,13 +265,22 @@
                 });
             }
 
-            that.showMatrix(dataOpen);
+            if (!dataOpen) {
+                dataOpen = that.matrixData[1] || matrix[1] || matrix[that.nowMid] || null;
+                if (dataOpen) {
+                    that.nowMid = that.selectMid = dataOpen.mid;
+                }
+            }
+
+            if (dataOpen) {
+                that.showMatrix(dataOpen);
+            }
         },
 
         // 构建九宫格阵法
         showMatrix: function (data) {
-            
             var that = this;
+            if (!data) return;
             that.isMove = false;
 
             that.showMatrixInfo(data);
@@ -299,8 +308,9 @@
 
         // 显示阵法信息
         showMatrixInfo: function (data) {
-            
             var that = this;
+            if (!data) return;
+            data.addition = data.addition || { type: 1, percent: 5, next: 1000 };
             
             // 主要用来显示中间阵法详情
             if (parseInt(data.mid) > 8) {

@@ -13,51 +13,22 @@ use OmniPHP\Cache\Redis;
 final class MatrixHandler
 {
     /**
-     * 经典八大阵法配置字典
+     * 经典阵法配置字典 (1~8为经典八卦阵法，9~11为VIP尊享高级阵法)
      *
      * @var array<int, array<string, mixed>>
      */
     public const array MATRIX_CONFIGS = [
-        1 => [
-            'id' => 1,
-            'name' => '鱼鳞阵',
-            'type' => 1, // 普通物攻
-            'desc' => '全军普通攻击力提升',
-            'base_rate' => 0.05,
-            'growth_rate' => 0.01,
-        ],
-        2 => [
-            'id' => 2,
-            'name' => '锋矢阵',
-            'type' => 2, // 战法攻击
-            'desc' => '全军战法攻击力提升',
-            'base_rate' => 0.05,
-            'growth_rate' => 0.01,
-        ],
-        3 => [
-            'id' => 3,
-            'name' => '鹤翼阵',
-            'type' => 3, // 普通物防
-            'desc' => '全军普通防御力提升',
-            'base_rate' => 0.05,
-            'growth_rate' => 0.01,
-        ],
-        4 => [
-            'id' => 4,
-            'name' => '偃月阵',
-            'type' => 4, // 暴击率
-            'desc' => '全军暴击率提升',
-            'base_rate' => 0.03,
-            'growth_rate' => 0.005,
-        ],
-        5 => [
-            'id' => 5,
-            'name' => '方圆阵',
-            'type' => 5, // 减伤防御
-            'desc' => '全军免伤防御提升',
-            'base_rate' => 0.05,
-            'growth_rate' => 0.01,
-        ],
+        1 => ['id' => 1, 'name' => '鱼鳞阵', 'type' => 1, 'vip' => 0, 'desc' => '全军普通攻击力提升', 'base_rate' => 5, 'growth_rate' => 1],
+        2 => ['id' => 2, 'name' => '锋矢阵', 'type' => 2, 'vip' => 0, 'desc' => '全军战法攻击力提升', 'base_rate' => 5, 'growth_rate' => 1],
+        3 => ['id' => 3, 'name' => '鹤翼阵', 'type' => 3, 'vip' => 0, 'desc' => '全军普通防御力提升', 'base_rate' => 5, 'growth_rate' => 1],
+        4 => ['id' => 4, 'name' => '偃月阵', 'type' => 4, 'vip' => 0, 'desc' => '全军暴击几率提升', 'base_rate' => 3, 'growth_rate' => 0.5],
+        5 => ['id' => 5, 'name' => '方圆阵', 'type' => 5, 'vip' => 0, 'desc' => '全军策略攻击力提升', 'base_rate' => 5, 'growth_rate' => 1],
+        6 => ['id' => 6, 'name' => '雁形阵', 'type' => 6, 'vip' => 0, 'desc' => '全军策略防御力提升', 'base_rate' => 5, 'growth_rate' => 1],
+        7 => ['id' => 7, 'name' => '长蛇阵', 'type' => 7, 'vip' => 0, 'desc' => '全军闪避几率提升', 'base_rate' => 3, 'growth_rate' => 0.5],
+        8 => ['id' => 8, 'name' => '乱剑阵', 'type' => 8, 'vip' => 0, 'desc' => '全军命中几率提升', 'base_rate' => 3, 'growth_rate' => 0.5],
+        9 => ['id' => 9, 'name' => '壁垒阵', 'type' => 3, 'vip' => 7, 'desc' => '全军双防御力提升', 'base_rate' => 10, 'growth_rate' => 2],
+        10 => ['id' => 10, 'name' => '冲锋阵', 'type' => 1, 'vip' => 10, 'desc' => '全军双攻击力提升', 'base_rate' => 15, 'growth_rate' => 2],
+        11 => ['id' => 11, 'name' => '至尊阵', 'type' => 1, 'vip' => 13, 'desc' => '全军双攻双防全面极致提升', 'base_rate' => 20, 'growth_rate' => 3],
     ];
 
     /**
@@ -119,38 +90,57 @@ final class MatrixHandler
             }
         }
 
-        // 获取用户所有武将并标注其出战状态
-        $generals = DB::table('general')->where('uid', $uid)->get();
+        // 获取用户所有武将并标注其出战状态 (包含 image, quality 等展示字段)
+        $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
         $generalList = [];
         foreach ($generals as $g) {
             $gid = (int)$g['id'];
-            $pos = (int)$g['pos'];
+            $pos = (int)($g['pos'] ?? 0);
             $generalList[] = [
                 'id' => $gid,
-                'generalid' => (int)$g['generalid'],
-                'name' => $g['name'],
-                'level' => (int)$g['level'],
+                'generalid' => (int)($g['generalid'] ?? 1),
+                'name' => (string)$g['name'],
+                'quality' => (int)($g['quality'] ?? 3),
+                'image' => (int)($g['image'] ?? $g['generalid'] ?? 1),
+                'level' => (int)($g['level'] ?? 1),
                 'pos' => $pos,
                 'goout' => ($pos > 0 && in_array($gid, $onBattleGids, true)) ? 1 : 0,
             ];
         }
 
         $list = [];
-        foreach (self::MATRIX_CONFIGS as $cfg) {
-            $mid = (int)$cfg['id'];
-            $addition = 1.0 + $cfg['base_rate'] + ($matrixLevel - 1) * $cfg['growth_rate'];
+        foreach (self::MATRIX_CONFIGS as $mid => $cfg) {
+            $percent = $cfg['base_rate'] + ($matrixLevel - 1) * $cfg['growth_rate'];
+            $additionObj = [
+                'type' => (int)$cfg['type'],
+                'percent' => $percent,
+                'next' => $matrixLevel * 1000,
+            ];
 
-            $list[$mid] = [
+            $item = [
                 'id' => $mid,
                 'mid' => $mid,
+                'sort' => $mid,
                 'name' => $cfg['name'],
                 'level' => $matrixLevel,
                 'type' => (int)$cfg['type'],
+                'vip' => (int)$cfg['vip'],
                 'desc' => $cfg['desc'],
-                'addition' => round($addition, 4),
+                'addition' => $additionObj,
                 'open' => ($mid === $nowMid) ? 1 : 0,
                 'position' => $positions,
+                'position1' => $positions[1] ?? 0,
+                'position2' => $positions[2] ?? 0,
+                'position3' => $positions[3] ?? 0,
+                'position4' => $positions[4] ?? 0,
+                'position5' => $positions[5] ?? 0,
+                'position6' => $positions[6] ?? 0,
+                'position7' => $positions[7] ?? 0,
+                'position8' => $positions[8] ?? 0,
+                'position9' => $positions[9] ?? 0,
             ];
+
+            $list[$mid] = $item;
         }
 
         return [
