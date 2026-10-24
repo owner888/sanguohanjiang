@@ -133,6 +133,10 @@
         }
 
         initDefaultUrl() {
+            if (typeof window !== 'undefined' && window.HJ_CONFIG && window.HJ_CONFIG.wsUrl) {
+                this.url = window.HJ_CONFIG.wsUrl;
+                return;
+            }
             if (typeof window !== 'undefined' && window.location) {
                 const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                 const host = window.location.hostname || '127.0.0.1';

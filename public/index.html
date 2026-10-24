@@ -66,28 +66,10 @@
 
 <link rel="stylesheet" type="text/css" href="static/css/core.css">
 
-<script type="text/javascript">
-// 全局外链 CDN 劫持重定向：杜绝任何历史遗留失效域名引起 net::ERR_NAME_NOT_RESOLVED
-(function() {
-    try {
-        var originalSrcProp = Object.getOwnPropertyDescriptor(HTMLImageElement.prototype, 'src');
-        if (originalSrcProp && originalSrcProp.set) {
-            Object.defineProperty(HTMLImageElement.prototype, 'src', {
-                set: function(val) {
-                    if (typeof val === 'string' && val.indexOf('img2.hanjiangsanguo.com/hjimg/') !== -1) {
-                        val = val.replace(/http:\/\/img2\.hanjiangsanguo\.com\/hjimg\/pop\//g, 'static/img/pop/')
-                                 .replace(/http:\/\/img2\.hanjiangsanguo\.com\/hjimg\//g, 'static/img/');
-                    }
-                    originalSrcProp.set.call(this, val);
-                },
-                get: function() {
-                    return originalSrcProp.get.call(this);
-                }
-            });
-        }
-    } catch (e) {}
-})();
+<!-- 全局统一运行时环境与资源配置模块 (支持 API、静态资源、独立 CDN 统一集中配置) -->
+<script type="text/javascript" charset="utf-8" src="config.js?v=20261024_1"></script>
 
+<script type="text/javascript">
 // 桌面端鼠标事件自动桥接为移动端 touch 事件，让 PC 浏览器鼠标点击 100% 触发游戏按钮
 (function() {
     var lastFired = 0;

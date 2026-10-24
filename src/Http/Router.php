@@ -34,7 +34,58 @@ final class Router
         $isApi = $path === '/index.php' || str_ends_with($path, '.php') || $request->get('c') !== null;
 
         if (!$isApi) {
-            // 1. 静态文件直出 (autoload 动态注入端口兼容，其余统一走 OmniPHP 官方 StaticServer)
+            // 1. 动态生成配置中心 config.js (权威服务端配置与当前访问环境自适应绑定)
+            if ($path === '/config.js' || str_ends_with($path, 'config.js')) {
+                $appConfig = require dirname(__DIR__, 2) . '/config/app.php';
+                $host = $request->host();
+                $hostName = explode(':', $host)[0] ?: '127.0.0.1';
+                $wsPort = $appConfig['ws']['public_port'] ?? 18101;
+                $proto = ($request->header('x-forwarded-proto') === 'https') ? 'wss:' : 'ws:';
+                $defaultWs = "{$proto}//{$hostName}:{$wsPort}";
+
+                $assets = $appConfig['assets'] ?? [];
+                $version = $assets['version'] ?? '20261024_1';
+                $staticUrl = $assets['static_url'] ?? 'static/';
+                $cdnUrl = $assets['cdn_url'] ?? $staticUrl;
+                $apiUrl = $assets['api_url'] ?? 'index.php';
+
+                $jsContent = <<<JS
+/**
+ * 悍将三国 - 全局集中配置中心 (由服务端 config/app.php 统一动态注入驱动)
+ */
+(function(window) {
+    'use strict';
+    window.HJ_CONFIG = {
+        version: '{$version}',
+        apiUrl: '{$apiUrl}',
+        staticUrl: '{$staticUrl}',
+        cdnUrl: '{$cdnUrl}',
+        wsUrl: '{$defaultWs}',
+        cdn: function(p) {
+            if (!p) return '';
+            if (/^https?:\/\//i.test(p) || p.indexOf('//') === 0) return p;
+            var base = this.cdnUrl.replace(/\/+$/, '');
+            return base + '/' + p.replace(/^\/+/, '');
+        },
+        static: function(p) {
+            if (!p) return '';
+            if (/^https?:\/\//i.test(p) || p.indexOf('//') === 0) return p;
+            var base = this.staticUrl.replace(/\/+$/, '');
+            return base + '/' + p.replace(/^\/+/, '');
+        }
+    };
+    window.staticUrl = window.HJ_CONFIG.staticUrl;
+    window.cdnUrl = window.HJ_CONFIG.cdnUrl;
+})(typeof window !== 'undefined' ? window : this);
+JS;
+                $connection->send(new WorkermanResponse(200, [
+                    'Content-Type' => 'application/javascript; charset=utf-8',
+                    'Cache-Control' => 'no-cache',
+                ], $jsContent));
+                return;
+            }
+
+            // 2. 静态文件直出 (autoload 动态注入端口兼容，其余统一走 OmniPHP 官方 StaticServer)
             if (str_ends_with($path, 'autoload.js')) {
                 $realFile = realpath($this->publicPath . $path);
                 if ($realFile !== false && is_file($realFile)) {

@@ -10,10 +10,9 @@ var isPhonegap = typeof cordova != 'undefined';
 /* 移动设备判定（index.html 内联脚本在其后执行，这里自行计算，避免 undefined） */
 window.HJ_IS_MOBILE = window.HJ_IS_MOBILE || /Android|iPhone|iPad|iPod|IEMobile|Opera Mini|Mobile/i.test(navigator.userAgent)
     || (navigator.maxTouchPoints > 1 && /Macintosh/.test(navigator.userAgent)); /* iPadOS 桌面 UA */
-/* 本地静态文件地址
- * 如果是PC/H5版本，资源已全部内置在 static/ 目录，无需外链
- */
-var staticUrl = 'static/'; /* 本地加载静态文件，无需外部依赖与跨域 */
+/* 本地静态文件与 CDN 地址 (统一对齐 window.HJ_CONFIG 全局配置中心) */
+var staticUrl = (typeof window !== 'undefined' && window.HJ_CONFIG && window.HJ_CONFIG.staticUrl) ? window.HJ_CONFIG.staticUrl : 'static/';
+var cdnUrl = (typeof window !== 'undefined' && window.HJ_CONFIG && window.HJ_CONFIG.cdnUrl) ? window.HJ_CONFIG.cdnUrl : staticUrl;
 /* 地图资源版本号：由 cos_upload.py --texts 按 img/map 内容指纹自动注入
    （占位符 __HJ_MAP_VER__）。素材走 30 天长缓存，同名覆盖玩家看不到新图，
    加版本号后只要地图文件有改动，URL 就变、浏览器自动重下，无需玩家清缓存。

@@ -1459,31 +1459,28 @@ if (true || _dateline >= 1387468800) {
             return id;
         },
 
+        /* 统一解析 CDN / 静态资源 URL (由 window.HJ_CONFIG 全局配置驱动) */
+        cdn: function(path) {
+            if (!path) return '';
+            if (typeof window !== 'undefined' && window.HJ_CONFIG && typeof window.HJ_CONFIG.cdn === 'function') {
+                return window.HJ_CONFIG.cdn(path);
+            }
+            return (typeof staticUrl !== 'undefined' ? staticUrl : 'static/') + path.replace(/^\/+/, '');
+        },
+
         /* 获取头像地址 */
         avatar: function(imageid, full) {
-            //this.log('获取将领形象图片:' + imageid);
             var avatarurl = '';
             imageid = this.fixImageId('avatar', imageid);
-            if (this.checkImgLocal(imageid)) {
-                avatarurl = staticUrl + 'img/avatar/' + (full == true ? 'a' + imageid + '.jpg': imageid + '.png');
-            } else { //ximg
-                //avatarurl = ximg(staticUrl + 'img/plugin/avatar_' + (full == true ? 'a' + imageid + '.jpg': imageid + '.png'));
-                avatarurl = staticUrl + 'img/avatar/' + (full == true ? 'a' + imageid + '.jpg': imageid + '.png'); // 本地化：原外链 CDN 已失效
-            }
+            avatarurl = this.cdn('img/avatar/' + (full == true ? 'a' + imageid + '.jpg' : imageid + '.png'));
             return avatarurl;
         },
 
         /* miniavatar */
         miniavatar: function(imageid) {
-            //this.log('获取将领形象图片:' + imageid);
             var avatarurl = '';
             imageid = this.fixImageId('miniavatar', imageid);
-            if (this.checkImgLocal(imageid)) {
-                avatarurl = staticUrl + 'img/avatar/miniavatar' + imageid + '.png';
-            } else { //ximg
-                //avatarurl = ximg(staticUrl + 'img/plugin/miniavatar' + imageid + '.png');
-                avatarurl = staticUrl + 'img/avatar/miniavatar' + imageid + '.png'; // 本地化
-            }
+            avatarurl = this.cdn('img/avatar/miniavatar' + imageid + '.png');
             return avatarurl;
         },
 
@@ -1538,21 +1535,17 @@ if (true || _dateline >= 1387468800) {
             if (!id || id <= 0) { id = 1; }
             // 本地化：本地包只有 1..71，超出部分回退到取模占位图（原外链 CDN 已失效）
             if (id > 71) { id = (id % 71) + 1; }
-            return staticUrl + 'img/item/' + id + '.png';
+            return this.cdn('img/item/' + id + '.png');
         },
         
         //获取宝石地址
         gem: function(type,quality) {
-            var url = '';
-            url = staticUrl + 'img/pop/gem_' + type + quality + '.png'; // 本地化
-            return url;
+            return this.cdn('img/pop/gem_' + type + quality + '.png');
         },
 
         // 获取大师头像地址
         master: function (imageid) {
-
-            var url = staticUrl + 'img/pop/master' + imageid + '.png'; // 本地化
-            return url;
+            return this.cdn('img/pop/master' + imageid + '.png');
         },
 
         // 获取装备精华地址
