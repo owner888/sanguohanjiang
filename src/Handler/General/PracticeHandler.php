@@ -301,6 +301,10 @@ final class PracticeHandler
 
         Redis::del('player:' . $uid);
 
+        $practiceAll = max(2, (int)($field['practiceall'] ?? 2));
+        $emptySlots = $practiceAll - $practicingCount;
+        $practiceTimeCd = ($emptySlots > 0) ? 0 : $durationSeconds;
+
         return [
             'status' => 1,
             'info' => [
@@ -312,7 +316,7 @@ final class PracticeHandler
                 'cost' => $rule['cost'],
                 'paytype' => $rule['paytype'],
                 'cd' => $durationSeconds,
-                'practicetime' => $durationSeconds,
+                'practicetime' => $practiceTimeCd,
                 'gold' => $remainGold,
                 'silver' => $remainSilver,
             ],

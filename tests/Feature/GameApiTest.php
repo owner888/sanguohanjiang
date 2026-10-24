@@ -768,6 +768,14 @@ final class GameApiTest extends TestCase
         // 6. 重复领取俸禄被拦截
         $dupSalary = $this->request('country', 'salary');
         $this->assertSame(0, $dupSalary['status']);
+
+        // 7. 国家大营仓储与俸禄详情 (c=country&m=storage)
+        $storage = $this->request('country', 'storage');
+        $this->assertSame(1, $storage['status']);
+        $this->assertArrayHasKey('salary', $storage);
+        $this->assertArrayHasKey('info', $storage);
+        $this->assertArrayHasKey('donate', $storage);
+        $this->assertArrayHasKey('act', $storage['salary']);
     }
 
     public function testCultivateSystem(): void

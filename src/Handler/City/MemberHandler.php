@@ -136,7 +136,14 @@ final class MemberHandler
                 'status' => 0,
             ],
             'practice' => [
-                'timers' => (int)($field['practicetime'] ?? 0),
+                'timers' => (function() use ($field, $uid): int {
+                    $practiceAll = max(2, (int)($field['practiceall'] ?? 2));
+                    $practicingCount = DB::table('practice')->where('uid', $uid)->where('generalid', '>', 0)->whereNull('deleted_at')->count();
+                    if ($practiceAll > $practicingCount) {
+                        return 0; // 尚有空闲训练位，显示“可训练”，不倒计时
+                    }
+                    return max(0, (int)($field['practicetime'] ?? 0) - time()); // 剩余倒计时秒数
+                })(),
             ],
             'rank' => (int)($field['rank'] ?? 1),
             'newresult' => (int)($field['newresult'] ?? 0),

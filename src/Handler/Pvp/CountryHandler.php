@@ -223,4 +223,89 @@ final class CountryHandler
             'message' => "成功领取今日国家俸禄，获得银两 {$rewardSilver}、声望 {$rewardRep}！",
         ];
     }
+
+    /**
+     * 国家大营府库 / 俸禄与捐献仓储面板: c=country&m=storage
+     */
+    public static function storage(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $myCountry = (int)($member['country'] ?? 0);
+
+        if ($myCountry <= 0) {
+            return [
+                'status' => -1,
+                'message' => '未加入国家，无法进入国家大营',
+            ];
+        }
+
+        $now = time();
+        $lastSalary = Redis::get('country_salary:' . $uid);
+        $get = ($lastSalary !== null && date('Ymd', (int)$lastSalary) === date('Ymd', $now)) ? 1 : 0;
+
+        $level = max(1, (int)($member['level'] ?? 1));
+        $countryLevel = 5;
+
+        $countryData = [
+            'level' => $countryLevel,
+            'exp' => 5000,
+            'levelupexp' => 10000,
+        ];
+
+        $salaryData = [
+            'silver' => 3000 + $level * 500,
+            'act' => 15,
+            'soul' => 100,
+            'jade' => 10,
+        ];
+
+        $infoData = [
+            'allcontribute' => (int)(Redis::get("user_country_contribute:{$uid}") ?? 2000),
+            'level' => $countryLevel,
+            'job' => 1,
+            'rank' => 1,
+            'job_name' => '大将军',
+        ];
+
+        $donateData = [
+            'silver' => 10000,
+            'gold' => 50,
+            'contribute' => 100,
+        ];
+
+        $members = DB::table('member')
+            ->where('country', $myCountry)
+            ->whereNull('deleted_at')
+            ->orderBy('level', 'desc')
+            ->limit(10)
+            ->get();
+
+        $memberList = [];
+        $rank = 1;
+        foreach ($members as $m) {
+            $memberList[] = [
+                'uid' => (int)$m['uid'],
+                'nickname' => (string)($m['nickname'] ?? ('主公' . $m['uid'])),
+                'level' => (int)($m['level'] ?? 1),
+                'job' => 1,
+                'job_name' => ($rank === 1) ? '大将军' : '车骑将军',
+                'rank' => $rank,
+                'contribute' => max(100, 3000 - $rank * 200),
+            ];
+            $rank++;
+        }
+
+        return [
+            'status' => 1,
+            'country' => $countryData,
+            'salary' => $salaryData,
+            'info' => $infoData,
+            'donate' => $donateData,
+            'list' => $memberList,
+            'get' => $get,
+            'islock' => 0,
+            'message' => 'ok',
+        ];
+    }
 }

@@ -192,18 +192,21 @@
         },
 
         fillBarNum: function(data) {
-            this.e.find('#country_bar_num').html(data.exp + '/' + data.levelupexp);
+            data = data || { exp: 0, levelupexp: 1000 };
+            this.e.find('#country_bar_num').html((data.exp || 0) + '/' + (data.levelupexp || 1000));
         },
 
         fillInfoDom: function(data) {
-            this.infoDom.find('#cidom_lv').html(data.level);
-            this.infoDom.find('#cidom_contribution').html(data.allcontribute);
-            this.infoDom.find('#cidom_rank').html(data.rank);
-            this.infoDom.find('#cidom_job').html(data.job_name);
-            this.level = parseInt(data.level);
+            data = data || { level: 1, allcontribute: 0, rank: 1, job_name: '士卒' };
+            this.infoDom.find('#cidom_lv').html(data.level || 1);
+            this.infoDom.find('#cidom_contribution').html(data.allcontribute || 0);
+            this.infoDom.find('#cidom_rank').html(data.rank || 1);
+            this.infoDom.find('#cidom_job').html(data.job_name || '士卒');
+            this.level = parseInt(data.level || 1);
         },
 
         fillRewardDom: function(data) {
+            data = data || {};
             if (data.act != undefined) {
                 this.rewardDom.find('#crdom_jl').html(data.act);
                 this.rewardDom.find('.junling').css('display', 'block');
@@ -225,6 +228,7 @@
         },
 
         fillRule: function(list) {
+            list = list || {};
             if (list.silver != undefined) {
                 this.e.find('#donate_silver_cost').html(list.silver + lang('silver'));
                 this.e.find('#donate_tips').find('.c1').html(list.silver);
@@ -235,7 +239,9 @@
                 this.e.find('#donate_tips').find('.c2').html(list.gold);
             }
 
-            this.e.find('#donate_tips').find('.c3').html(list.contribute);
+            if (list.contribute != undefined) {
+                this.e.find('#donate_tips').find('.c3').html(list.contribute);
+            }
         },
 
         getWan: function(num) {

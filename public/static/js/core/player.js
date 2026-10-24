@@ -1023,6 +1023,10 @@
         },
 
         showPracticeSider: function(time) {
+            time = parseInt(time || 0);
+            if (time > 100000000) {
+                time = Math.max(0, time - Math.floor(Date.now() / 1000));
+            }
 
             if (this.info.practice) {
                 var dom_practice = $('#sider_practice');
