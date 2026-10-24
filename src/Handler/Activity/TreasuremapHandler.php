@@ -126,6 +126,7 @@ final class TreasuremapHandler
 
         return [
             'status' => 1,
+            'list' => array_values($publicTeams),
             'team' => $team,
             'message' => '摸金队伍创建成功！',
         ];
@@ -172,6 +173,7 @@ final class TreasuremapHandler
 
         return [
             'status' => 1,
+            'list' => array_values($publicTeams),
             'team' => $team,
             'message' => '成功加入摸金队伍！',
         ];
@@ -185,9 +187,9 @@ final class TreasuremapHandler
         $uid = MemberHandler::resolveUid($ctx);
         $team = Redis::getJson("treasure_team:{$uid}");
 
+        $publicTeams = Redis::getJson('treasure_public_teams') ?: [];
         if (!empty($team)) {
             $tid = (int)($team['id'] ?? $uid);
-            $publicTeams = Redis::getJson('treasure_public_teams') ?: [];
             unset($publicTeams[$tid]);
             Redis::setJson('treasure_public_teams', $publicTeams, 86400);
         }
@@ -196,6 +198,7 @@ final class TreasuremapHandler
 
         return [
             'status' => 1,
+            'list' => array_values($publicTeams),
             'message' => '已成功退出/解散队伍',
         ];
     }

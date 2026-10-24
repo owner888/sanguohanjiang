@@ -181,39 +181,44 @@
             that.list = that.list || [];
             if (that.list.length > 0) {
                 for (var i = 0; i < that.list.length; i++) {
+                    var item = that.list[i];
+                    if (!item || !item.list || !item.list.length) continue;
                     var top = '';
                     var center = '';
                     var buttom = '';
                     html += '<li>';
-                    html += '<p id="name">' + that.list[i].list[0].nickname + '</p>';
-                    for (var j = 0; j < that.list[i].list.length; j++) {
-                        if (parseInt(that.list[i].list[j].type) == 1) {
-                            top = '<div class="mapbox top">' + lang('part1') + '<span class="bg' + that.list[i].quality + ' own' + that.list[i].quality + '"></span></div>';
-                        } else if (parseInt(that.list[i].list[j].type) == 2) {
-                            center = '<div class="mapbox center">' + lang('part2') + '<span class="bg' + that.list[i].quality + ' own' + that.list[i].quality + '"></span></div>';
-                        } else if (parseInt(that.list[i].list[j].type) == 3) {
-                            buttom = '<div class="mapbox buttom">' + lang('part3') + '<span class="bg' + that.list[i].quality + ' own' + that.list[i].quality + '"></span></div>';
+                    var leaderName = (item.list[0] && item.list[0].nickname) ? item.list[0].nickname : '探险队长';
+                    html += '<p id="name">' + leaderName + '</p>';
+                    var pQuality = item.quality || 1;
+                    for (var j = 0; j < item.list.length; j++) {
+                        var pType = parseInt(item.list[j].type || 1);
+                        if (pType == 1) {
+                            top = '<div class="mapbox top">' + lang('part1') + '<span class="bg' + pQuality + ' own' + pQuality + '"></span></div>';
+                        } else if (pType == 2) {
+                            center = '<div class="mapbox center">' + lang('part2') + '<span class="bg' + pQuality + ' own' + pQuality + '"></span></div>';
+                        } else if (pType == 3) {
+                            buttom = '<div class="mapbox buttom">' + lang('part3') + '<span class="bg' + pQuality + ' own' + pQuality + '"></span></div>';
                         }
                     }
 
                     if (top == '') {
-                        html += '<div class="mapbox top">' + lang('part1') + '<span class="bg' + that.list[i].quality + '"></span></div>';
+                        html += '<div class="mapbox top">' + lang('part1') + '<span class="bg' + pQuality + '"></span></div>';
                     } else {
                         html += top;
                     }
                     if (center == '') {
-                        html += '<div class="mapbox center">' + lang('part2') + '<span class="bg' + that.list[i].quality + '"></span></div>';
+                        html += '<div class="mapbox center">' + lang('part2') + '<span class="bg' + pQuality + '"></span></div>';
                     } else {
                         html += center;
                     }
                     if (buttom == '') {
-                        html += '<div class="mapbox buttom">' + lang('part3') + '<span class="bg' + that.list[i].quality + '"></span></div>';
+                        html += '<div class="mapbox buttom">' + lang('part3') + '<span class="bg' + pQuality + '"></span></div>';
                     } else {
                         html += buttom;
                     }
 
-                    html += '<p class="army">' + lang('team_num') + that.list[i].list.length + '/3</p>';
-                    html += '<button class="btn pop_btn_middle" tid=' + that.list[i].id + '>' + lang('join') + '</button>';
+                    html += '<p class="army">' + lang('team_num') + item.list.length + '/3</p>';
+                    html += '<button class="btn pop_btn_middle" tid=' + item.id + '>' + lang('join') + '</button>';
                     html += '</li>';
                 }
             }
@@ -377,8 +382,8 @@
                         that.num = parseInt(res.num);
                         that.buildmap();
                     }
-                    that.list = res.list;
-                    that.team = res.team;
+                    that.list = res.list || [];
+                    that.team = res.team || [];
                     that.bindAll(1);
                     that.buildlist();
                     that.buildteam();
@@ -480,7 +485,7 @@
                     });
                     that.bindAll();
                     //组装数据
-                    that.list = res.list;
+                    that.list = res.list || [];
                     that.buildlist();
                     break;
                 }
@@ -554,8 +559,8 @@
                     xGame.toast.show(lang('have_team_already'));
                     break;
                 case 1:
-                    that.list = res.list;
-                    that.team = res.team;
+                    that.list = res.list || [];
+                    that.team = res.team || [];
                     that.buildlist();
                     that.buildteam();
                     break;
