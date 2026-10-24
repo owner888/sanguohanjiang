@@ -29,13 +29,21 @@ final class ActivityHandler
         $todayStr = date('Ymd');
         $loginedPopo = (is_array($signData) && ($signData['last_date'] ?? '') === $todayStr) ? 0 : 1;
 
-        // 世界BOSS提示气泡与状态 (12:30-13:00, 20:30-21:00)
-        $curTimeStr = date('Hi');
-        $bossStatus = 1;
-        $bossPopo = 0;
+        // 计算多人副本与世界BOSS的真实活动时段状态 (1:进行中, 2:时间未到, 3:今日已结束)
+        $isAlwaysOpen = (bool)(getenv('DEV_ACTIVITY_ALL_OPEN') ?: false);
 
-        // 精英副本活动时间 (11:00-13:00, 18:00-20:00)
-        $eliteStatus = 1;
+        $eliteStart1 = '12:00';
+        $eliteEnd1   = '14:00';
+        $eliteStart2 = '19:00';
+        $eliteEnd2   = '21:00';
+        $eliteStatus = $isAlwaysOpen ? 1 : self::calculateTimeStatus($eliteStart1, $eliteEnd1, $eliteStart2, $eliteEnd2);
+
+        $bossStart1 = '12:30';
+        $bossEnd1   = '13:00';
+        $bossStart2 = '20:30';
+        $bossEnd2   = '21:00';
+        $bossStatus = $isAlwaysOpen ? 1 : self::calculateTimeStatus($bossStart1, $bossEnd1, $bossStart2, $bossEnd2);
+        $bossPopo   = 0;
 
         $activities = [
             'lottery' => ['status' => 1, 'starttime' => '', 'endtime' => '', 'openlevel' => 0],
@@ -43,10 +51,10 @@ final class ActivityHandler
             'drink' => ['status' => 1, 'starttime' => '', 'endtime' => '', 'openlevel' => 0],
             'boss' => [
                 'status' => $bossStatus,
-                'starttime' => '12:30',
-                'endtime' => '13:00',
-                'starttime2' => '20:30',
-                'endtime2' => '21:00',
+                'starttime' => $bossStart1,
+                'endtime' => $bossEnd1,
+                'starttime2' => $bossStart2,
+                'endtime2' => $bossEnd2,
                 'openlevel' => 46,
                 'popo' => $bossPopo,
             ],
@@ -58,10 +66,10 @@ final class ActivityHandler
             'logined' => ['popo' => $loginedPopo],
             'elite' => [
                 'status' => $eliteStatus,
-                'starttime' => '11:00',
-                'endtime' => '13:00',
-                'starttime2' => '18:00',
-                'endtime2' => '20:00',
+                'starttime' => $eliteStart1,
+                'endtime' => $eliteEnd1,
+                'starttime2' => $eliteStart2,
+                'endtime2' => $eliteEnd2,
             ],
         ];
 
@@ -70,5 +78,44 @@ final class ActivityHandler
             'list' => $activities,
             'message' => 'ok',
         ];
+    }
+
+    /**
+     * 根据当前时间计算活动状态 (1: 进行中, 2: 时间未到, 3: 今日已结束)
+     */
+    public static function calculateTimeStatus(
+        string $start1,
+        string $end1,
+        string $start2 = '',
+        string $end2 = ''
+    ): int {
+        $now = date('H:i');
+
+        // 第一时段进行中
+        if ($now >= $start1 && $now < $end1) {
+            return 1;
+        }
+
+        // 第二时段进行中
+        if ($start2 !== '' && $end2 !== '' && $now >= $start2 && $now < $end2) {
+            return 1;
+        }
+
+        // 第二时段之后：今日已全部结束
+        if ($start2 !== '' && $end2 !== '') {
+            if ($now >= $end2) {
+                return 3;
+            }
+            if ($now >= $end1 && $now < $start2) {
+                return 2; // 两场之间：未到第二场
+            }
+        } else {
+            if ($now >= $end1) {
+                return 3;
+            }
+        }
+
+        // 第一场之前：时间未到
+        return 2;
     }
 }
