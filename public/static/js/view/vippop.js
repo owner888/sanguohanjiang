@@ -141,7 +141,7 @@
                         } else if (res.list[i].right[j].gettype == 5) {
                             rightInfo += '<p class="wuzi jade">' + res.list[i].right[j].getvalue + '</p>';
                         } else if (res.list[i].right[j].gettype == 6) {
-                            rightInfo += '<div class="itembox c_i_bj' + res.list[i].right[j].soul_quality + '"><span style="background-image: url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + res.list[i].right[j].soul_type + res.list[i].right[j].soul_quality + '.png' + '); background-position: 50% 50%; background-repeat: no-repeat no-repeat; "></span></div>';
+                            rightInfo += '<div class="itembox c_i_bj' + res.list[i].right[j].soul_quality + '"><span style="background-image: url(static/img/pop/soul_' + res.list[i].right[j].soul_type + res.list[i].right[j].soul_quality + '.png' + '); background-position: 50% 50%; background-repeat: no-repeat no-repeat; "></span></div>';
                             rightInfo += '<p class="wuzi text soul_name" style="color: ' + helper.getItemColor(res.list[i].right[j].soul_quality) + '">' + res.list[i].right[j].soul_name + '  Lv.' + res.list[i].right[j].soul_level + '</p>';
                             rightInfo += '<p class="wuzi text">' + lang('soul_properties') + ':' + helper.getSoulTypeName(parseInt(res.list[i].right[j].soul_type)) + '+' + res.list[i].right[j].soul_addition + '</p>';
                         } else if (res.list[i].right[j].gettype == 7) {

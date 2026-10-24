@@ -395,7 +395,7 @@
         doFurnaceAnimation: function(index, callback) {
             var that = this;
             var mc = new movieClipClass({
-                "img": 'http://img2.hanjiangsanguo.com/hjimg/pop/furnace_animation'+index+'.png',
+                "img": 'static/img/pop/furnace_animation'+index+'.png',
                 "width": 350,
                 "height": 350,
                 "x": -47,

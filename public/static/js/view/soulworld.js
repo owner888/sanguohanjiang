@@ -1269,7 +1269,7 @@
                             this.canMove['pos' + i] = data['site' + i].info.id;
                         }
 
-                        html += '<span class="isequip" style="background:url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + data['site' + i].info.image + '.png' + ');' + this.eqPosList['pos' + i].style + '" id="soul_span' + data['site' + i].info.id + '" posid="' + i + '" sid="' + data['site' + i].info.id + '" type="' + data['site' + i].info.quality + '" ' + (data['site' + i].islock == 2 ? 'mustlock="true"': '') + '><em>' + helper.getSoulTypeName(parseInt(data['site' + i].info.type)) + '</em></span>';
+                        html += '<span class="isequip" style="background:url(static/img/pop/soul_' + data['site' + i].info.image + '.png' + ');' + this.eqPosList['pos' + i].style + '" id="soul_span' + data['site' + i].info.id + '" posid="' + i + '" sid="' + data['site' + i].info.id + '" type="' + data['site' + i].info.quality + '" ' + (data['site' + i].islock == 2 ? 'mustlock="true"': '') + '><em>' + helper.getSoulTypeName(parseInt(data['site' + i].info.type)) + '</em></span>';
                     } else {
                         if (data['site' + i].islock == 0) {
                             this.canMove['pos' + i] = 'block';
@@ -1311,7 +1311,7 @@
                 if (i + 1 + (data.page - 1) * 12 <= data.all) {
                     if (data.list[i] != undefined) {
                         html += '<li class="soul_t' + data.list[i].quality + '" sid="' + data.list[i].id + '" id="soulS' + data.list[i].id + '"></li>';
-                        html1 += '<span class="isunequip" style="background:url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + data.list[i].image + '.png' + ');' + this.uneqPosList['pos' + (i + 1)].style + '" id="soul_span' + data.list[i].id + '" posid="' + (i + 1) + '" sid="' + data.list[i].id + '" type="' + data.list[i].quality + '" ><em>' + helper.getSoulTypeName(parseInt(data.list[i].type)) + '</em></span>';
+                        html1 += '<span class="isunequip" style="background:url(static/img/pop/soul_' + data.list[i].image + '.png' + ');' + this.uneqPosList['pos' + (i + 1)].style + '" id="soul_span' + data.list[i].id + '" posid="' + (i + 1) + '" sid="' + data.list[i].id + '" type="' + data.list[i].quality + '" ><em>' + helper.getSoulTypeName(parseInt(data.list[i].type)) + '</em></span>';
                     } else {
                         html += '<li class="block"></li>';
                     }
@@ -1416,7 +1416,7 @@
             this.rbDom.find('ul').find('#soulS' + this.ssid).addClass('soul_ts');
 
             this.rtDom.find('#soul_name').html(data.name + '<em id="soul_level" style="color:' + helper.getItemColor(data.quality) + ';" >Lv.' + data.level + '</em>').css('color', helper.getItemColor(data.quality));
-            this.rtDom.find('#selected_soul').attr('class', 'soul_t' + data.quality + ' soul_ts').find('span').css('background', 'url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + data.image + '.png' + ') 50% 50% no-repeat');
+            this.rtDom.find('#selected_soul').attr('class', 'soul_t' + data.quality + ' soul_ts').find('span').css('background', 'url(static/img/pop/soul_' + data.image + '.png' + ') 50% 50% no-repeat');
 
             if (data.levelup.price > this.leftSoulNum) {
                 this.rtDom.find('#soul_lvneed').attr('class', 'buzu');
@@ -1617,7 +1617,7 @@
             var soulDom = that.compositeDom.find('#composite_result');
 
             if (soul != null) {
-                soulDom.children('.img').css('background-image', 'url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + soul.image + '.png' + ')');
+                soulDom.children('.img').css('background-image', 'url(static/img/pop/soul_' + soul.image + '.png' + ')');
                 soulDom.children('.name').html(helper.getSoulTypeName(parseInt(soul.type)));
             } else {
                 soulDom.children('.img').css('background-image', '');

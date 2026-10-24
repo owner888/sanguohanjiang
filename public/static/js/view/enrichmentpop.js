@@ -143,7 +143,7 @@
                     if (reward.type == 1) {
                         html += '<div class="reward ptype' + (j + 1) + '"><span class="reward_showgold"></span><em class="reward_num">x'+ reward.value +'</em><button bid="' + (i + 1) + '" class="btn '+ rewardclass +'">' + lang('get_reward') + '</button></div>'; 
                     } else if (reward.type == 2) {
-                        html += '<div class="reward ptype' + (j + 1) + '"><span class="reward_showsoul"  bid="' + j + '" hid="' + i + '" style="background-image:url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + reward.info.image +'.png)"></span><button bid="' + (i + 1) + '" class="btn '+ rewardclass +'">' + lang('get_reward') + '</button></div>'; 
+                        html += '<div class="reward ptype' + (j + 1) + '"><span class="reward_showsoul"  bid="' + j + '" hid="' + i + '" style="background-image:url(static/img/pop/soul_' + reward.info.image +'.png)"></span><button bid="' + (i + 1) + '" class="btn '+ rewardclass +'">' + lang('get_reward') + '</button></div>'; 
                     } else if (reward.type == 3) {
                         html += '<div class="reward ptype' + (j + 1) + '"><span class="reward_showitem"  bid="' + j + '" hid="' + i + '" style="background-image: url(' + xGame.itemurl(reward.info.id) + ');"></span><button bid="' + (i + 1) + '" class="btn '+ rewardclass +'">' + lang('get_reward') + '</button></div>'; 
                     }

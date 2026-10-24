@@ -635,7 +635,7 @@
                     html += '<span class="img" style="background-position:' + helper.getHorsePostion('small', item.info.id) + ';"></span>';
 
                 } else if(parseInt(item.type) == 31) { //将魂
-                    html += '<span class="img" style="background-image: url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + item.info.image + '.png' + ');"></span>';
+                    html += '<span class="img" style="background-image: url(static/img/pop/soul_' + item.info.image + '.png' + ');"></span>';
 
                 } else {
                     html += '<span class="img"></span>';     

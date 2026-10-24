@@ -240,7 +240,7 @@
                     html += '</div>';
                 } else if (gettype == 9) {
                     html += '<div class="reward reward' + i + ' rtype' + gettype + '">';
-                    html += '<span class="item" style="background-image: url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + data.soul[i].image + '.png' + ');"></span>';
+                    html += '<span class="item" style="background-image: url(static/img/pop/soul_' + data.soul[i].image + '.png' + ');"></span>';
                     html += '<b style="color: ' + helper.getItemColor(data.soul[i].quality) + '">' + data.soul[i].name + '</b>';
                     html += '</div>';
                 } else if (gettype == 10) {
@@ -369,7 +369,7 @@
                     html += '</span>';
                 } else if (gettype == 9) {
                     html += '<span class="reward_down pos' + i + ' rtype' + gettype + '">';
-                    html += '<em class="item" style="background-image: url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + data.soul[i].image + '.png' + ');"></em>';
+                    html += '<em class="item" style="background-image: url(static/img/pop/soul_' + data.soul[i].image + '.png' + ');"></em>';
                     html += '<b style="color: ' + helper.getItemColor(data.soul[i].quality) + '">' + data.soul[i].name + '</b>';
                     html += '</span>';
                 } else if (gettype == 10) {

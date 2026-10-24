@@ -178,7 +178,7 @@
                     if (this.listData[i].chapter == 1) {
                         player += '<li style="background-image:url(' + ximg(staticUrl+'img/pop/palaceheroworld_hero_' + this.listData[i].chapter + '.jpg') + ');"><p><em>' + this.listData[i].nickname + '</em></p></li>';
                     } else {
-                        player += '<li style="background-image:url(http://img2.hanjiangsanguo.com/hjimg/pop/palaceheroworld_hero_' + this.listData[i].chapter + '.jpg);"><p><em>' + this.listData[i].nickname + '</em></p></li>';
+                        player += '<li style="background-image:url(static/img/pop/palaceheroworld_hero_' + this.listData[i].chapter + '.jpg);"><p><em>' + this.listData[i].nickname + '</em></p></li>';
                     }this.pages += 1;
                 }
             }

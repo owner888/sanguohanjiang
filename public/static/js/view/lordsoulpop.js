@@ -306,7 +306,7 @@
         refreshCurrCell: function(idx, bgimg, offset) {
 
             var cell = this.e.find('#img'+idx);
-            var img = 'http://img2.hanjiangsanguo.com/hjimg/pop/lordsoul' + idx + '.png';
+            var img = 'static/img/pop/lordsoul' + idx + '.png';
             var index = idx-10*this.lordtreeScroller.currPageX;
 
             if (index >= 0 && this.lordsoularray[this.lordtreeScroller.currPageX][index]) {
@@ -395,7 +395,7 @@
 
             //图片
             this.e.find('#right_info').find('.soulimg').remove();
-            var item = '<span class="soulimg" style="background:url(http://img2.hanjiangsanguo.com/hjimg/pop/lordsoul' + id + '.png' +') 9px 9px no-repeat, url('+ staticUrl + 'img/pop/lordsoul_bg2.png' +') 0 0 no-repeat"></span>';
+            var item = '<span class="soulimg" style="background:url(static/img/pop/lordsoul' + id + '.png' +') 9px 9px no-repeat, url('+ staticUrl + 'img/pop/lordsoul_bg2.png' +') 0 0 no-repeat"></span>';
             this.e.find('#right_info').append(item);
             //名字
             this.e.find('#right_info').find('#selectname').html(info.name);
@@ -568,7 +568,7 @@
                     var offsety = 0;
 
                     if (lorditem.open_status == 1) {//技能开启
-                        img = 'http://img2.hanjiangsanguo.com/hjimg/pop/lordsoul' + lorditem.id + '.png';
+                        img = 'static/img/pop/lordsoul' + lorditem.id + '.png';
 
                         if (lorditem.level == lorditem.max_level) {//满级
                             bgimg = staticUrl + 'img/pop/lordsoul_bg3.png';
@@ -578,7 +578,7 @@
                             offsety = 9;
                         }
                     } else if (lorditem.open_status == 0) {//未开启
-                        img = 'http://img2.hanjiangsanguo.com/hjimg/pop/lordsoul' + lorditem.id + '_1.png';
+                        img = 'static/img/pop/lordsoul' + lorditem.id + '_1.png';
                         bgimg = staticUrl + 'img/pop/lordsoul_bg1.png';
                         offsetx = 12;
                         offsety = 9;

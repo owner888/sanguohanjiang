@@ -1534,7 +1534,7 @@
             that.clockDom.hide();
 
             that.levelUpAnim = new movieClipClass({
-                'img': 'http://img2.hanjiangsanguo.com/hjimg/pop/beautypop_levelup_anim.png',
+                'img': 'static/img/pop/beautypop_levelup_anim.png',
                 'width': 500,
                 'height': 400,
                 'x': -50,

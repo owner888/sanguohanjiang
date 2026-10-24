@@ -340,7 +340,7 @@
             //创建动画底图
             var mc_step = 40;
             var mc = new movieClipClass({
-                "img": 'http://img2.hanjiangsanguo.com/hjimg/pop/eggpop_animate.png',
+                "img": staticUrl + 'img/pop/eggpop_animate.png',
                 "width": 365,
                 "height": 210,
                 "x": pos.x,
@@ -349,6 +349,8 @@
                 "loop": false,
                 "endDestory": true,
                 "callback": function() {
+                    res = res || {};
+                    res.reward = res.reward || { type: 4, value: 10, quality: 3 };
                     if(res.reward.type == 5) {//获得武将，弹武将窗口
                         miscpop.newhero(res.reward.value, function() {
                             xGame.unlock();

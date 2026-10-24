@@ -603,7 +603,7 @@
             if (hero_soul.id > 0) {
                 //将魂图片
                 that.towerDom.find('#towerpop_info_wrap').find('#gsoul_pic').attr('class','img q' + hero_soul.quality);
-                that.towerDom.find('#towerpop_info_wrap').find('#gsoul_pic').html('<img src="http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + hero_soul.image + '.png' + '" />');
+                that.towerDom.find('#towerpop_info_wrap').find('#gsoul_pic').html('<img src="static/img/pop/soul_' + hero_soul.image + '.png' + '" />');
                 that.towerDom.find('#towerpop_info_wrap').find('#gsoul_name').css({
                     'color': helper.getItemColor(parseInt(hero_soul.quality))
                 }).html(hero_soul.name);

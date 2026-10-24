@@ -244,7 +244,7 @@
             for (var i = 0; i < res.skill_list.length; i++) {
                 var skill = res.skill_list[i];
                 html += '<li id="skill' + skill.skill_id + '" class="skillitem ' + (n == 0 ? ' selected1': '') + ' '+(skill.open == 0 ? 'dis' : '' ) + '" skillkey="' + i + '">';
-                html += '<span class="skillimg" style="background:url(http://img2.hanjiangsanguo.com/hjimg/pop/collegeskill'+skill.img_id + (skill.open == 0 ? '_1.png' : '.png') + ') center center no-repeat;' + '"></span>';
+                html += '<span class="skillimg" style="background:url(static/img/pop/collegeskill'+skill.img_id + (skill.open == 0 ? '_1.png' : '.png') + ') center center no-repeat;' + '"></span>';
                 html += '<p class="level">LV' + skill.skill_level + '</p>';
 
                 if (skill.open == 0) {
@@ -378,7 +378,7 @@
                 for (var i = 0; i < skill.pre_skill_info.length; i++) {
                     var prevskill = skill.pre_skill_info[i];
                     html += '<li class="prevskillitem">';
-                    html += '<span class="prevskillimg" style="background:url(http://img2.hanjiangsanguo.com/hjimg/pop/collegeskill'+prevskill.pre_skill_id + (prevskill.pre_skill == 1 ? '_1.png' : '.png') +') center center no-repeat; background-size:59px;' + '"></span>';
+                    html += '<span class="prevskillimg" style="background:url(static/img/pop/collegeskill'+prevskill.pre_skill_id + (prevskill.pre_skill == 1 ? '_1.png' : '.png') +') center center no-repeat; background-size:59px;' + '"></span>';
                     html += '<span class="level '+ (prevskill.pre_skill == 1 ? 'gray' : '') + '">' + prevskill.pre_skill_name + '</span>';
                     html += '</li>';
                 }

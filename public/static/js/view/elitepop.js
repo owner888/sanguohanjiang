@@ -734,7 +734,7 @@
             if(fid <= 50) {
                 return staticUrl + 'img/pop/elitepop_field' + fid + '.jpg';
             } else {
-                return 'http://img2.hanjiangsanguo.com/hjimg/pop/elitepop_field' + fid + '.jpg';
+                return 'static/img/pop/elitepop_field' + fid + '.jpg';
             }
         },
 

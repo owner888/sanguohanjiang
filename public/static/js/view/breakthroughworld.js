@@ -1293,7 +1293,7 @@
             var that = this;
          
             var mc = new movieClipClass({
-                "img":'http://img2.hanjiangsanguo.com/hjimg/pop/breakthroughpop_animation' + imgId + '.png',
+                "img":'static/img/pop/breakthroughpop_animation' + imgId + '.png',
                 "width": 600,
                 "height": 600,
                 "scale": 1,

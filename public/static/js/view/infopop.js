@@ -593,7 +593,7 @@
                     var size = 85;
                     var imgsize = 65;
 
-                    var img = 'http://img2.hanjiangsanguo.com/hjimg/pop/lordsoul' + lorditem.id + '.png';
+                    var img = 'static/img/pop/lordsoul' + lorditem.id + '.png';
 
                     if (lorditem.level == lorditem.max_level) {
                         bgimg = staticUrl + 'img/pop/lordsoul_bg3.png';
@@ -604,7 +604,7 @@
                         imgsize = 70;
                         size = 75;
                     } else {
-                        img = 'http://img2.hanjiangsanguo.com/hjimg/pop/lordsoul' + lorditem.id + '_1.png';
+                        img = 'static/img/pop/lordsoul' + lorditem.id + '_1.png';
                         bgimg = staticUrl + 'img/pop/lordsoul_bg1.png';
                         offsetx = 5;
                         offsety = 9;
@@ -695,7 +695,7 @@
             for (var i = 0; i < temparray.length; i++) {
                 var skill = temparray[i];
                 html += '<li id="skill' + skill.skill_id + '" class="skillitem" skillkey="' + i + '">';
-                html += '<span class="skillimg" style="background:url(http://img2.hanjiangsanguo.com/hjimg/pop/collegeskill'+skill.img_id + (skill.open==0 ? '_1.png' : '.png') + ') center center no-repeat;' + '"></span>';
+                html += '<span class="skillimg" style="background:url(static/img/pop/collegeskill'+skill.img_id + (skill.open==0 ? '_1.png' : '.png') + ') center center no-repeat;' + '"></span>';
                 html += '<p class="level">LV' + skill.skill_level + '</p>';
                 html += '</li>';
             }
@@ -829,7 +829,7 @@
                     that.e.find('#soulpos' + i).attr('class', 'open');
                     if (that.souldata['site' + i].info.length != 0) {
                         that.e.find('#soulpos' + i).find('.soul_item').css({
-                            'background': 'url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + that.souldata['site' + i].info.image + '.png)'
+                            'background': 'url(static/img/pop/soul_' + that.souldata['site' + i].info.image + '.png)'
                         });
                         that.e.find('#soulpos' + i).find('.level').html(that.souldata['site' + i].info.level).css({
                             'opacity': 1

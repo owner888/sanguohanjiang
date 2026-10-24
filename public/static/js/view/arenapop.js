@@ -680,7 +680,7 @@
                             html2 += '<span class="img" style="background-image:url('+ xGame.gem(item.info.gem_type, 5) +')"></span>';
                         }
                     } else if (parseInt(item.re_type) == 27) {
-                        html2 += '<span class="img" style="background-size: 60px;background-image:url(http://img2.hanjiangsanguo.com/hjimg/pop/soul_' + item.info.image +'.png)"></span>';
+                        html2 += '<span class="img" style="background-size: 60px;background-image:url(static/img/pop/soul_' + item.info.image +'.png)"></span>';
                             
                     } else {
                         html2 += '<span class="img"></span>';     

@@ -77,7 +77,7 @@
         buildpage: function(res) {
             var that = this;
 
-            var heroimg = 'http://img2.hanjiangsanguo.com/hjimg/pop/godwillpop_bg'+res.version+'.' + appLanguage + '.jpg';
+            var heroimg = 'static/img/pop/godwillpop_bg'+res.version+'.' + appLanguage + '.jpg';
 
             that.e.find('.info').css('background', 'url(' + heroimg + ')');
             //倒计时
