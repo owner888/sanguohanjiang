@@ -154,7 +154,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=chat&m=read|send`: World and country real-time messaging
 - `c=mainquest&m=index`: Main storyline quest milestones and rewards
 - `c=shop&m=index`: Item mall & stamina purchasing
-- `c=arena&m=index`: Military ranking arena & PVP challenges
+- `c=arena&m=index|action|buy_pk_num|get_reward|clear_cd`: Military ranking arena & PVP duels, rank swaps, challenge purchases, and daily salaries
 - `c=tower&m=index|action|sweep`: Trial Soul Tower climbing, boss encounters, floor sweeps, and soul rewards
 - `c=pass_general&m=index|action|reset`: Six-Stage Pass General campaign, legendary warlord duels, and milestone chests
 - `c=soul&m=index|upgrade`: Soul fate constellation slots, soul point upgrades, and permanent hero battle stat empowerment

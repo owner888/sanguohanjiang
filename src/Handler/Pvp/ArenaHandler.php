@@ -348,20 +348,89 @@ final class ArenaHandler
         ]);
 
         $member = DB::table('member')->where('uid', $uid)->first();
+        $totalSilver = (int)($member['silver'] ?? 0);
         if ($member !== null) {
+            $totalSilver += $rewardSilver;
             DB::table('member')->where('uid', $uid)->update([
-                'silver' => (int)$member['silver'] + $rewardSilver,
+                'silver' => $totalSilver,
                 'reputation' => (int)$member['reputation'] + $rewardReputation,
             ]);
             Redis::del('player:' . $uid);
         }
+
+        $newReward = [
+            'intnum' => 50,
+            'silver' => 10000,
+            'reputation' => 100,
+        ];
 
         return [
             'status' => 1,
             'rank' => $rank,
             'reputation' => $rewardReputation,
             'silver' => $rewardSilver,
+            'all_silver' => $totalSilver,
+            'new_reward' => $newReward,
             'message' => '成功领取今日演武排名俸禄',
+        ];
+    }
+
+    /**
+     * 购买演武挑战次数: c=arena&m=buy_pk_num
+     */
+    public static function buy_pk_num(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $type = (int)($ctx->input('t', 0)); // 0: 查价格, 1: 确认购买
+
+        $todayStr = date('Ymd');
+        $boughtKey = "arena_buy_times:{$uid}:{$todayStr}";
+        $boughtTimes = (int)(Redis::get($boughtKey) ?? 0);
+        $price = min(100, 20 + $boughtTimes * 10);
+
+        if ($type === 0) {
+            return [
+                'status' => 1,
+                'price' => $price,
+                'message' => 'ok',
+            ];
+        }
+
+        // type == 1: 购买挑战次数
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        if ((int)($member['gold'] ?? 0) < $price) {
+            return [
+                'status' => -1,
+                'message' => '元宝不足，无法购买挑战次数',
+            ];
+        }
+
+        if (!MemberHandler::deductCurrency($uid, gold: $price)) {
+            return [
+                'status' => -1,
+                'message' => '元宝扣除失败',
+            ];
+        }
+
+        // 挑战次数 + 1
+        $myArena = self::getOrInitArena($uid);
+        $newTimes = (int)($myArena['times'] ?? 0) + 1;
+        DB::table('arena')->where('uid', $uid)->update([
+            'times' => $newTimes,
+        ]);
+
+        Redis::set($boughtKey, (string)($boughtTimes + 1), 86400 * 2);
+        Redis::del('player:' . $uid);
+
+        $freshMember = DB::table('member')->where('uid', $uid)->first();
+        $nextPrice = min(100, 20 + ($boughtTimes + 1) * 10);
+
+        return [
+            'status' => 1,
+            'gold' => (int)($freshMember['gold'] ?? 0),
+            'times' => $newTimes,
+            'price' => $nextPrice,
+            'message' => '演武挑战次数购买成功！',
         ];
     }
 

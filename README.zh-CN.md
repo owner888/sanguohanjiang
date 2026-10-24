@@ -154,7 +154,7 @@
 - `c=chat&m=read|send`：世界与国家频道实时消息流
 - `c=mainquest&m=index`：主线任务进度与里程碑领奖
 - `c=shop&m=index`：商城道具与军令体力购买
-- `c=arena&m=index`：演武榜竞技场挑战与排名争夺
+- `c=arena&m=index|action|buy_pk_num|get_reward|clear_cd`：演武榜竞技场天梯对决、排名互换、挑战次数购买与每日声望俸禄
 - `c=tower&m=index|action|sweep`：将魂星路试炼塔爬塔闯关、守关神兽决战、一键扫荡与将魂结算
 - `c=pass_general&m=index|action|reset`：经典过关斩将单挑六大名将（华雄/颜良/文丑/庞德/典韦/吕布）与通关宝箱开启
 - `c=soul&m=index|upgrade`：将魂星盘八大命格孔位激活、试炼塔将魂消耗升级与攻防血量永久加成

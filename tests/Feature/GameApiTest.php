@@ -626,6 +626,15 @@ final class GameApiTest extends TestCase
         // 再次尝试同日领取被拦截
         $dupReward = $this->request('arena', 'get_reward');
         $this->assertSame(0, $dupReward['status']);
+
+        // 购买演武挑战次数测试 (c=arena&m=buy_pk_num)
+        $price = $this->request('arena', 'buy_pk_num', ['t' => 0]);
+        $this->assertSame(1, $price['status']);
+        $this->assertGreaterThan(0, $price['price']);
+
+        $buy = $this->request('arena', 'buy_pk_num', ['t' => 1]);
+        $this->assertSame(1, $buy['status']);
+        $this->assertGreaterThan(0, $buy['times']);
     }
 
     public function testWebSocketAndBroadcasterSystem(): void
