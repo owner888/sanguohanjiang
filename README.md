@@ -164,6 +164,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=logined&m=index|get_reward`: 1-15 Day consecutive login rewards, daily progression, and streak resets
 - `c=vip&m=index|get_vip_reward|get_gift`: VIP tier privileges, daily VIP salaries, and promotion milestone gift packages
 - `c=vipwage&m=index|get_vip_wage`: VIP daily salary distribution, tiered silver/free leaps/souls claim and status checks
+- `c=vipreward&m=index|get_reward`: VIP repay celebration rewards, milestone promotion packages, and claim validations
 - `c=message&m=index|get_message|send_message|del_message`: Mailbox system, secret pigeon correspondence, and battle reports
 - `c=friend&m=index|add_friend|del_friend`: Social brotherhood system, friend additions, duplicate blocks, and relations
 - `c=mine&m=index|caikuang|zhanling|get_silver|give_up`: Silver mine occupations, idle yield accumulation, and resource harvests

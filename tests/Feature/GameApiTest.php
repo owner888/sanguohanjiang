@@ -835,6 +835,14 @@ final class GameApiTest extends TestCase
 
         $claimWage = $this->request('vipwage', 'get_vip_wage');
         $this->assertSame(1, $claimWage['status']);
+
+        // 6. VIP 回馈狂欢礼包测试 (c=vipreward&m=index / get_reward)
+        $repay = $this->request('vipreward', 'index');
+        $this->assertSame(1, $repay['status']);
+        $this->assertNotEmpty($repay['list']);
+
+        $claimRepay = $this->request('vipreward', 'get_reward', ['id' => 1]);
+        $this->assertSame(1, $claimRepay['status']);
     }
 
     public function testMessageSystem(): void

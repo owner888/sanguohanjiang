@@ -56,8 +56,9 @@
             //1突飞卡，2黄宝石，3紫宝石，4声望
             var type = {1:'tfcard',2:'get2', 3:'get3', 4:'prestige'};
 
-            xGame.updateCd('viprepay', res.cd);
-            that.e.find('.viprepay_info').html('<span>' + res.msg + '</span>');
+            res.list = res.list || [];
+            xGame.updateCd('viprepay', res.cd || 0);
+            that.e.find('.viprepay_info').html('<span>' + (res.msg || '') + '</span>');
             that.e.find('.now_vip').find('em').html('&nbsp;VIP' + player.info.vip);
 
             for(var i = 0; i < res.list.length; i++) {
