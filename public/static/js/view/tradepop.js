@@ -92,14 +92,16 @@
             /*显示商人信息*/
             that.infoDom = that.e.find('#trader_info');
 
-            that.site = data.site;
-            that.siteInfo = data.site_info;
-            that.showMsgByData(that.siteInfo[that.site]);
+            that.site = data.site || 1;
+            that.siteInfo = data.site_info || {};
+            if (that.siteInfo && that.siteInfo[that.site]) {
+                that.showMsgByData(that.siteInfo[that.site]);
+            }
             that.traderDom = that.e.find('#trader_list');
 
             that.siteList = [];
             for (var i = 1; i < 6; i++) {
-                that.siteList.push(data['site' + i]);
+                that.siteList.push(data['site' + i] || 0);
             }
             that.showImgBySiteInfo(data);
             that.showLeftByList(that.siteList);
@@ -108,7 +110,8 @@
             that.ButtonDom = that.e.find('#trade_func');
             if (parseInt(player.info.vip) >= 1) {
                 that.ButtonDom.find('#l').css('display', 'block');
-                that.showCost1(that.siteInfo[that.site].trading);
+                var tradingCost = (that.siteInfo && that.siteInfo[that.site]) ? that.siteInfo[that.site].trading : 20;
+                that.showCost1(tradingCost);
                 that.ButtonDom.find('#l').undelegate('button', 'touchend').delegate('button', 'touchend',
                 function() {
                     if (xGame.checkLock(true)) { //不设置属性
