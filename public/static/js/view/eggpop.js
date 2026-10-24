@@ -123,7 +123,7 @@
             if(res.list && res.list.length > 0) {
                 for(var i = 0; i < res.list.length; i++) {
                     var _dom = that.e.find('#egg' + res.list[i].id);
-                    _dom.find('.desc').append(res.list[i].description);
+                    _dom.find('.desc').html(res.list[i].description || '');
                     
                     if (res.list[i].open == 0) {
                         _dom.find('.pop_btn_middle').children('.price').html('x'+res.list[i].price);

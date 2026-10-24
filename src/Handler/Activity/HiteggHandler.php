@@ -19,9 +19,9 @@ final class HiteggHandler
      * 3 大金蛋基础配置
      */
     public const array EGGS = [
-        1 => ['id' => 1, 'name' => '吉祥如意金蛋', 'price' => 0, 'cost_silver' => 5000, 'cost_gold' => 0, 'silver' => 12000, 'gold' => 10],
-        2 => ['id' => 2, 'name' => '富贵荣华银蛋', 'price' => 20, 'cost_silver' => 15000, 'cost_gold' => 0, 'silver' => 35000, 'gold' => 20],
-        3 => ['id' => 3, 'name' => '至尊天下无双彩蛋', 'price' => 50, 'cost_silver' => 0, 'cost_gold' => 50, 'silver' => 88888, 'gold' => 100],
+        1 => ['id' => 1, 'name' => '吉祥如意金蛋', 'price' => 0, 'cost_silver' => 5000, 'cost_gold' => 0, 'silver' => 12000, 'gold' => 10, 'description' => '有机会获得初级突飞卡、蓝宝石'],
+        2 => ['id' => 2, 'name' => '富贵荣华银蛋', 'price' => 20, 'cost_silver' => 15000, 'cost_gold' => 0, 'silver' => 35000, 'gold' => 20, 'description' => '有机会获得高级突飞卡、金宝石'],
+        3 => ['id' => 3, 'name' => '至尊天下无双彩蛋', 'price' => 50, 'cost_silver' => 0, 'cost_gold' => 50, 'silver' => 88888, 'gold' => 100, 'description' => '有机会获得紫宝石、海量元宝'],
     ];
 
     /**
@@ -38,6 +38,7 @@ final class HiteggHandler
                 'id' => $id,
                 'name' => $egg['name'],
                 'price' => $egg['price'],
+                'description' => $egg['description'],
                 'cd' => 0,
                 'open' => 1,
             ];
