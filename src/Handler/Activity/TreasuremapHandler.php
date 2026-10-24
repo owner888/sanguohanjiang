@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 use OmniPHP\WebSocket\Broadcaster;
 
+/**
+ * 摸金校尉古墓寻宝、罗盘分金升星与藏宝图组队探秘处理器 (DDD Activity Domain)
+ */
 final class TreasuremapHandler
 {
     public const array MAP_LEVELS = [
@@ -27,7 +29,7 @@ final class TreasuremapHandler
     public static function getUserMap(int $uid): int
     {
         $cached = Redis::get('user_treasure_map:' . $uid);
-        return ($cached !== null && is_numeric($cached)) ? max(1, (int)$cached) : 1;
+        return ($cached !== null && is_numeric($cached)) ? max(1, min(5, (int)$cached)) : 1;
     }
 
     /**
@@ -36,17 +38,178 @@ final class TreasuremapHandler
     public static function index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
         $star = self::getUserMap($uid);
         $cfg = self::MAP_LEVELS[$star] ?? self::MAP_LEVELS[1];
 
+        // 查询玩家当前组队状态 (来自 Redis 缓存)
+        $teamData = Redis::getJson("treasure_team:{$uid}");
+        $teamStatus = (!empty($teamData)) ? 1 : 0;
+
+        // 全服寻宝公开队伍列表
+        $allTeams = Redis::getJson('treasure_public_teams') ?: [];
+        $teamList = array_values($allTeams);
+
+        // 玩家当前持有的藏宝图碎片对象
+        $myMap = [
+            'id' => 1,
+            'name' => $cfg['name'],
+            'type' => 1, // 1: 上部, 2: 中部, 3: 下部
+            'quality' => $star,
+        ];
+
         return [
             'status' => 1,
+            'team_status' => $teamStatus,
+            'list' => $teamList,
+            'map' => $myMap,
+            'team' => $teamData ?: [],
+            'refresh_price' => 2,
+            'num' => 1,
+            'add_silver' => 0,
+            'silver' => (int)($member['silver'] ?? 0),
+            // 向下兼容保留原字段
             'star' => $star,
             'map_name' => $cfg['name'],
             'reward_silver' => $cfg['reward_silver'],
             'reward_gold' => $cfg['reward_gold'],
             'refresh_cost' => $cfg['cost_refresh'],
             'message' => 'ok',
+        ];
+    }
+
+    /**
+     * 创建寻宝队伍: c=treasuremap&m=create_team
+     */
+    public static function create_team(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $star = self::getUserMap($uid);
+        $cfg = self::MAP_LEVELS[$star] ?? self::MAP_LEVELS[1];
+        $nickname = (string)($member['nickname'] ?? ('主公' . $uid));
+
+        $teamId = $uid;
+        $team = [
+            'id' => $teamId,
+            'quality' => $star,
+            'list' => [
+                [
+                    'uid' => $uid,
+                    'nickname' => $nickname,
+                    'name' => $cfg['name'],
+                    'type' => 1,
+                ],
+            ],
+        ];
+
+        Redis::setJson("treasure_team:{$uid}", $team, 86400);
+
+        // 登记到公开队伍池
+        $publicTeams = Redis::getJson('treasure_public_teams') ?: [];
+        $publicTeams[$teamId] = $team;
+        Redis::setJson('treasure_public_teams', $publicTeams, 86400);
+
+        return [
+            'status' => 1,
+            'team' => $team,
+            'message' => '摸金队伍创建成功！',
+        ];
+    }
+
+    /**
+     * 加入寻宝队伍: c=treasuremap&m=join_team
+     */
+    public static function join_team(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $tid = (int)($ctx->input('tid', $ctx->input('id', 0)));
+
+        if ($tid <= 0) {
+            return ['status' => 0, 'message' => '目标队伍不存在'];
+        }
+
+        $publicTeams = Redis::getJson('treasure_public_teams') ?: [];
+        if (!isset($publicTeams[$tid])) {
+            return ['status' => -1, 'message' => '该队伍已出发或已解散'];
+        }
+
+        $team = $publicTeams[$tid];
+        if (count($team['list']) >= 3) {
+            return ['status' => 0, 'message' => '该队伍人数已满员'];
+        }
+
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $nickname = (string)($member['nickname'] ?? ('主公' . $uid));
+        $star = self::getUserMap($uid);
+        $cfg = self::MAP_LEVELS[$star] ?? self::MAP_LEVELS[1];
+        $partType = count($team['list']) + 1;
+
+        $team['list'][] = [
+            'uid' => $uid,
+            'nickname' => $nickname,
+            'name' => $cfg['name'],
+            'type' => $partType,
+        ];
+
+        $publicTeams[$tid] = $team;
+        Redis::setJson('treasure_public_teams', $publicTeams, 86400);
+        Redis::setJson("treasure_team:{$uid}", $team, 86400);
+
+        return [
+            'status' => 1,
+            'team' => $team,
+            'message' => '成功加入摸金队伍！',
+        ];
+    }
+
+    /**
+     * 解散或退出寻宝队伍: c=treasuremap&m=exit_team
+     */
+    public static function exit_team(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $team = Redis::getJson("treasure_team:{$uid}");
+
+        if (!empty($team)) {
+            $tid = (int)($team['id'] ?? $uid);
+            $publicTeams = Redis::getJson('treasure_public_teams') ?: [];
+            unset($publicTeams[$tid]);
+            Redis::setJson('treasure_public_teams', $publicTeams, 86400);
+        }
+
+        Redis::del("treasure_team:{$uid}");
+
+        return [
+            'status' => 1,
+            'message' => '已成功退出/解散队伍',
+        ];
+    }
+
+    /**
+     * 升级藏宝图: c=treasuremap&m=levelup
+     */
+    public static function levelup(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $curStar = self::getUserMap($uid);
+
+        if ($curStar >= 5) {
+            return ['status' => 0, 'message' => '藏宝图已达最高 5 星！'];
+        }
+
+        $costGold = 10;
+        if (!MemberHandler::deductCurrency($uid, gold: $costGold)) {
+            return ['status' => -1, 'message' => '元宝不足，升级需要 10 元宝'];
+        }
+
+        $newStar = $curStar + 1;
+        Redis::set('user_treasure_map:' . $uid, (string)$newStar, 86400 * 7);
+
+        return [
+            'status' => 1,
+            'star' => $newStar,
+            'message' => "升级成功！藏宝图升至 {$newStar} 星！",
         ];
     }
 
@@ -74,7 +237,6 @@ final class TreasuremapHandler
         $newStar = $up ? $curStar + 1 : $curStar;
 
         Redis::set('user_treasure_map:' . $uid, (string)$newStar, 86400 * 7);
-
         $newCfg = self::MAP_LEVELS[$newStar];
 
         if ($newStar >= 5) {
@@ -124,7 +286,9 @@ final class TreasuremapHandler
             'status' => 1,
             'silver' => $rewardSilver,
             'gold' => $rewardGold,
-            'message' => "成功发掘开启【{$cfg['name']}】！斩获上古宝藏：银两 {$rewardSilver}" . ($rewardGold > 0 ? "、元宝 {$rewardGold}" : '') . "！",
+            'all_silver' => $newSilver,
+            'all_gold' => $newGold,
+            'message' => "古宝出土！发掘收获银两 {$rewardSilver}" . ($rewardGold > 0 ? "、元宝 {$rewardGold}" : '') . "！",
         ];
     }
 }

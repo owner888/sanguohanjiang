@@ -146,11 +146,11 @@
             var that = this;
 
             //数据保存
-            that.list = res.list;
-            that.team = res.team;
-            that.map = res.map;
-            that.num = parseInt(res.num);
-            that.refresh = parseInt(res.refresh_price);
+            that.list = res.list || [];
+            that.team = res.team || [];
+            that.map = res.map || [];
+            that.num = parseInt(res.num || 0);
+            that.refresh = parseInt(res.refresh_price || 2);
 
             if (parseInt(res.team_status) == -1) {
                 xGame.toast.show(lang('team_has_been_dissolved'));
@@ -178,6 +178,7 @@
             //组装列表数据
             var that = this;
             var html = '';
+            that.list = that.list || [];
             if (that.list.length > 0) {
                 for (var i = 0; i < that.list.length; i++) {
                     var top = '';

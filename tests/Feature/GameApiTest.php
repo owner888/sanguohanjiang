@@ -1257,12 +1257,24 @@ final class GameApiTest extends TestCase
         $res = $this->request('treasuremap', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertGreaterThanOrEqual(1, $res['star']);
+        $this->assertArrayHasKey('list', $res);
+        $this->assertArrayHasKey('map', $res);
+        $this->assertArrayHasKey('team', $res);
 
         // 2. 寻龙分金刷新宝图
         $ref = $this->request('treasuremap', 'refresh');
         $this->assertSame(1, $ref['status']);
 
-        // 3. 发掘挖宝
+        // 3. 创建寻宝队伍 (c=treasuremap&m=create_team)
+        $team = $this->request('treasuremap', 'create_team');
+        $this->assertSame(1, $team['status']);
+        $this->assertNotEmpty($team['team']);
+
+        // 4. 退出/解散队伍 (c=treasuremap&m=exit_team)
+        $exit = $this->request('treasuremap', 'exit_team');
+        $this->assertSame(1, $exit['status']);
+
+        // 5. 发掘挖宝
         $sale = $this->request('treasuremap', 'sale');
         $this->assertSame(1, $sale['status']);
         $this->assertGreaterThan(0, $sale['silver']);
