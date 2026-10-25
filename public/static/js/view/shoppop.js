@@ -51,6 +51,13 @@
         initList: function(data) {
             var that = this;
 
+            data = data || {};
+            data.totals = parseInt(data.totals) || 0;
+            data.list = data.list || {};
+            data.info = data.info || { info: {}, need_viplevel: 0, cd: 0 };
+            data.info.info = data.info.info || {};
+            data.log_list = data.log_list || [];
+
             /* 第一步，把界面先载入，渠道DOM，并绑定好基础事件 */
             that.e = xGame.loadPopTmpl('shop');
             that.e.find('.content').find('.hidebtn').unbind('touchend').one('touchend',
@@ -68,10 +75,11 @@
             /* 第二步 构建数据列表等 */
             var html = '';
             for (var i = 1; i <= data.totals; i++) {
+                if (!data.list[i]) continue;
                 html += '<li id="shopitem' + data.list[i].id + '" class="shoppop_listitem s_i_bj' + data.list[i].quality + (i == 1 ? ' selected': '') + '" itemid="' + data.list[i].id + '"><div class="itempic" style="background-image:url(' + xGame.itemurl(data.list[i].id) + ');' + '"></div>' + that.transfer(data.list[i].need_viplevel) + '</div>';
                 that.krData[data.list[i].name] = parseInt(data.list[i].id);
             }
-            that.sid = data.list[1].id;
+            that.sid = (data.list[1] && data.list[1].id) ? data.list[1].id : 0;
 
             that.ulList = that.e.find('#ul_list'); //给左边容器赋值
             that.ulList.html(html).width(data.totals * 128 + 'px');

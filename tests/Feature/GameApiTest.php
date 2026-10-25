@@ -596,6 +596,17 @@ final class GameApiTest extends TestCase
         $res = $this->request('shop', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('info', $res);
+        $this->assertArrayHasKey('info', $res['info']);
+        $this->assertArrayHasKey('totals', $res);
+        $this->assertArrayHasKey('log_list', $res);
+
+        $detail = $this->request('shop', 'get_info', ['id' => 101]);
+        $this->assertSame(1, $detail['status']);
+        $this->assertArrayHasKey('info', $detail);
+
+        $buyItem = $this->request('shop', 'buy', ['id' => 101]);
+        $this->assertSame(1, $buyItem['status']);
 
         $buyAct = $this->request('shop', 'buy_act');
         $this->assertSame(1, $buyAct['status']);
