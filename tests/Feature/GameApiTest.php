@@ -1398,6 +1398,8 @@ final class GameApiTest extends TestCase
         // 1. 查看青梅煮酒
         $res = $this->request('drink', 'index');
         $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+        $this->assertNotEmpty($res['log']);
         $this->assertNotEmpty($res['wines']);
 
         // 2. 畅饮陈年竹叶青 (type: 1)
@@ -1405,6 +1407,8 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $drink['status']);
         $this->assertSame('陈年竹叶青', $drink['wine_name']);
         $this->assertGreaterThan(0, $drink['silver']);
+        $this->assertArrayHasKey('reward', $drink);
+        $this->assertArrayHasKey('act', $drink['reward']);
     }
 
     public function testDiceSystem(): void

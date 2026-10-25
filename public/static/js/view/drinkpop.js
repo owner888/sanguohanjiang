@@ -55,6 +55,9 @@
             var html1 = '',
             html2 = '';
 
+            res.list = res.list || [];
+            res.log = res.log || [];
+
             for (var i = 0; i < res.list.length; i++) {
                 html1 += '<li>' + lang('cost_%m_get_%s_act', [res.list[i].type, res.list[i].price, res.list[i].act, res.list[i].id]) + '</li>';
             }
