@@ -913,6 +913,9 @@ final class GameApiTest extends TestCase
         $res = $this->request('mine', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['mines']);
+        $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('level', $res);
+        $this->assertSame(1, $res['list'][0]['page']);
 
         // 2. 占领大型富饶银矿 (id: 3)
         $claim = $this->request('mine', 'caikuang', ['id' => 3]);
@@ -1242,6 +1245,12 @@ final class GameApiTest extends TestCase
         $go = $this->request('overseastrade', 'goout', ['fleet_id' => 1]);
         $this->assertSame(1, $go['status']);
         $this->assertSame(1, $go['fleet_id']);
+
+        // 4. 验证商贸刷新接口 (验证 team.allpage)
+        $refresh = $this->request('overseastrade', 'refresh', ['p' => 1]);
+        $this->assertSame(1, $refresh['status']);
+        $this->assertArrayHasKey('team', $refresh);
+        $this->assertSame(1, $refresh['team']['allpage']);
     }
 
     public function testStudfarmSystem(): void

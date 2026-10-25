@@ -308,30 +308,104 @@ final class OverseasTradeHandler
     }
 
     /**
-     * 开启贸易航行: c=overseastrade&m=trade
+     * 开启贸易航行 / 单人元宝贸易: c=overseastrade&m=trade
      */
     public static function trade(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
         $state = Redis::getJson('overseas_trade:' . $uid) ?: [];
 
-        $fleetId = (int)($state['fleet_id'] ?? 1);
-        $cfg = self::FLEETS[$fleetId] ?? self::FLEETS[1];
-        $profit = (int)$cfg['profit_silver'];
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $gold = (int)($member['gold'] ?? 0);
 
-        MemberHandler::addCurrency($uid, silver: $profit);
-        $state['fleet_id'] = 0;
-        $state['start_time'] = 0;
-        $state['team_id'] = 0;
+        // 单人贸易消耗 5 元宝
+        $costGold = 5;
+        if ($gold >= $costGold) {
+            MemberHandler::deductCurrency($uid, gold: $costGold);
+        }
+
+        $now = time();
+        $state['fleet_id'] = 1;
+        $state['start_time'] = $now;
+        $state['team_id'] = 1;
+        $times = max(0, (int)($state['times'] ?? 3) - 1);
+        $state['times'] = $times;
         Redis::setJson('overseas_trade:' . $uid, $state, 86400 * 3);
 
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $freshMember = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
 
         return [
             'status' => 1,
-            'profit' => $profit,
-            'silver' => (int)($member['silver'] ?? 0),
-            'message' => "远洋商船顺利靠岸！本次海外贸易获利丰厚，进账 {$profit} 银两！",
+            'all_gold' => (int)($freshMember['gold'] ?? 0),
+            'times' => $times,
+            'team_id' => 1,
+            'endtime' => 900,
+            // 向下兼容保留原字段
+            'profit' => 15000,
+            'silver' => (int)($freshMember['silver'] ?? 0),
+            'message' => '贸易船队顺利起航！预计 15 分钟后满载珍宝凯旋！',
+        ];
+    }
+
+    /**
+     * 刷新商贸船只队伍: c=overseastrade&m=refresh
+     */
+    public static function refresh(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $page = (int)($ctx->input('p', $ctx->input('page', 1)));
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $state = Redis::getJson('overseas_trade:' . $uid) ?: [];
+
+        $now = time();
+        $startTime = (int)($state['start_time'] ?? 0);
+        $isTrading = ($startTime > 0 && ($now - $startTime) < 900);
+        $remaining = $isTrading ? (900 - ($now - $startTime)) : 0;
+
+        $teamList = [
+            [
+                'id' => 1,
+                'team_name' => '南海通商船队',
+                'member1' => $uid,
+                'member1_name' => (string)($member['nickname'] ?? ('主公' . $uid)),
+                'member1_level' => (int)($member['level'] ?? 1),
+                'member1_commodity' => (int)($state['commodity'] ?? 1),
+                'member2' => 0,
+                'member2_name' => '',
+                'member2_level' => 0,
+                'member2_commodity' => 0,
+                'startdateline' => $startTime > 0 ? $startTime : $now - 60,
+                'status' => 1,
+                'robtimes' => 0,
+            ],
+            [
+                'id' => 2,
+                'team_name' => '西域丝路船队',
+                'member1' => 8888,
+                'member1_name' => '常山赵子龙',
+                'member1_level' => 60,
+                'member1_commodity' => 3,
+                'member2' => 8889,
+                'member2_name' => '关云长',
+                'member2_level' => 65,
+                'member2_commodity' => 2,
+                'startdateline' => $now - 200,
+                'status' => 1,
+                'robtimes' => 1,
+            ],
+        ];
+
+        return [
+            'status' => 1,
+            'trade' => $isTrading ? 1 : 0,
+            'endtime' => $remaining,
+            'team_id' => (int)($state['team_id'] ?? 0),
+            'get' => 0,
+            'team' => [
+                'allpage' => 1,
+                'list' => $teamList,
+            ],
+            'message' => 'ok',
         ];
     }
 

@@ -86,7 +86,7 @@
                 });
             });
             xGame.updateCd('mine', 0);
-            that.page = res.list[0].page;
+            that.page = (res.list && res.list[0] && res.list[0].page) ? res.list[0].page : (parseInt(res.page) || 1);
             that.showPageByPage(res);
 
             that.pagebtnsDom.find('#mine_page_num').html(that.page);
@@ -665,6 +665,8 @@
         /*通过page设置矿的位置*/
         buildMineByPage: function(page, list, log) {
             var that = this;
+            list = $.isArray(list) ? list : helper.array_values(list || []);
+            log = log || null;
             var html = '';
             var preNum;
             /*分别代表每行几个*/

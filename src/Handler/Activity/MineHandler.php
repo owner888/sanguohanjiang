@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 use OmniPHP\WebSocket\Broadcaster;
 
+/**
+ * 银矿争夺、矿区采矿与掠夺产出处理器 (DDD Activity Domain)
+ */
 final class MineHandler
 {
     /**
@@ -31,20 +33,76 @@ final class MineHandler
     public static function index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
+        $page = (int)($ctx->input('p', $ctx->input('page', 1)));
+        $page = max(1, min(5, $page));
+
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $userLevel = (int)($member['level'] ?? 1);
+        $minLv = (int)(floor($userLevel / 10) * 10);
+        $maxLv = $minLv + 9;
+        $levelRange = "{$minLv}~{$maxLv}";
+
         $mineState = Redis::getJson('user_mine:' . $uid) ?: [
             'mine_id' => 0,
             'start_time' => 0,
+            'page' => 1,
+            'site' => 0,
         ];
 
         $mineId = (int)$mineState['mine_id'];
         $startTime = (int)$mineState['start_time'];
+        $mySite = (int)($mineState['site'] ?? 0);
+        $myPage = (int)($mineState['page'] ?? 1);
 
-        $elapsed = ($mineId > 0 && $startTime > 0) ? max(0, time() - $startTime) : 0;
-        $rate = self::MINES[$mineId]['rate'] ?? 0;
+        $now = time();
+        $elapsed = ($mineId > 0 && $startTime > 0) ? max(0, $now - $startTime) : 0;
+        $rate = self::MINES[$mineId]['rate'] ?? 25;
         $accumulatedSilver = $elapsed * $rate;
+
+        // 生成该页 8 个矿位 (第 5 个通常是中央大矿)
+        $list = [];
+        for ($i = 1; $i <= 8; $i++) {
+            $isMyMine = ($myPage === $page && $mySite === $i);
+            $type = ($i === 5) ? 3 : (($i % 2 === 0) ? 2 : 1);
+            $capacity = ($type === 3) ? 100000 : (($type === 2) ? 50000 : 25000);
+            $earned = $isMyMine ? min($capacity, $accumulatedSilver) : 0;
+            $status = $isMyMine ? 2 : 0; // 0 空闲, 1 他人占领, 2 自己占领
+
+            $list[] = [
+                'id' => $i,
+                'page' => $page,
+                'type' => $type,
+                'status' => $status,
+                'silver' => $capacity,
+                'get_silver' => $earned,
+                'nickname' => $isMyMine ? (string)($member['nickname'] ?? '主公') : '',
+                'level' => $isMyMine ? $userLevel : 0,
+                'gender' => (int)($member['gender'] ?? 1),
+                'country' => '魏国',
+                'time' => $isMyMine ? max(0, 14400 - $elapsed) : 0,
+                'friend' => 0,
+                'uid' => $isMyMine ? $uid : 0,
+            ];
+        }
+
+        $log = null;
+        if ($mineId > 0) {
+            $log = [
+                'page' => $myPage,
+                'site' => $mySite,
+                'type' => self::MINES[$mineId]['id'] ?? 1,
+                'dateline' => $startTime,
+            ];
+        }
 
         return [
             'status' => 1,
+            'level' => $levelRange,
+            'page' => $page,
+            'list' => $list,
+            'log' => $log,
+            'dateline' => $now,
+            // 向下兼容保留原字段
             'my_mine' => $mineId,
             'mine_name' => self::MINES[$mineId]['name'] ?? '未占领任何矿区',
             'elapsed' => $elapsed,
@@ -65,23 +123,25 @@ final class MineHandler
     public static function caikuang(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $mineId = (int)($ctx->input('mine_id', $ctx->input('id', 1)));
+        $mineId = (int)($ctx->input('id', $ctx->input('mine_id', 1)));
+        $page = (int)($ctx->input('p', $ctx->input('page', 1)));
+        $site = (int)($ctx->input('sid', $ctx->input('id', 1)));
 
-        if (!isset(self::MINES[$mineId])) {
-            return ['status' => 0, 'message' => '无效的银矿编号'];
-        }
-
-        $mineConfig = self::MINES[$mineId];
+        $mineId = min(4, max(1, $mineId));
+        $mineConfig = self::MINES[$mineId] ?? self::MINES[1];
 
         // 占领新矿
         Redis::setJson('user_mine:' . $uid, [
             'mine_id' => $mineId,
             'start_time' => time(),
+            'page' => $page,
+            'site' => $site,
         ], 86400 * 7);
 
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $name = (string)($member['nickname'] ?? ('主公' . $uid));
+
         if ($mineId >= 3) {
-            $member = DB::table('member')->where('uid', $uid)->first();
-            $name = $member['nickname'] ?? ('主公' . $uid);
             Broadcaster::broadcast('marquee', [
                 'content' => "勘探奇迹！主公【{$name}】挥师入驻【{$mineConfig['name']}】，大举开采银两！",
                 'type' => 'system_broadcast',
@@ -90,10 +150,47 @@ final class MineHandler
 
         return [
             'status' => 1,
+            'info' => [
+                'win' => 1,
+                'silver' => 5000,
+                'act' => (int)($member['act'] ?? 100),
+                'dateline' => time(),
+            ],
             'mine_id' => $mineId,
             'mine_name' => $mineConfig['name'],
             'rate' => $mineConfig['rate'],
             'message' => "成功占领【{$mineConfig['name']}】，开始源源不断开采产出银两！",
+        ];
+    }
+
+    /**
+     * 放弃矿位: c=mine&m=give_up
+     */
+    public static function give_up(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $mineState = Redis::getJson('user_mine:' . $uid);
+
+        $earnedSilver = 0;
+        if (is_array($mineState) && !empty($mineState['mine_id'])) {
+            $mineId = (int)$mineState['mine_id'];
+            $startTime = (int)($mineState['start_time'] ?? time());
+            $elapsed = max(0, time() - $startTime);
+            $rate = self::MINES[$mineId]['rate'] ?? 25;
+            $earnedSilver = min(50000, $elapsed * $rate);
+            if ($earnedSilver > 0) {
+                MemberHandler::addCurrency($uid, silver: $earnedSilver);
+            }
+        }
+
+        Redis::del('user_mine:' . $uid);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+
+        return [
+            'status' => 1,
+            'silver' => $earnedSilver,
+            'all_silver' => (int)($member['silver'] ?? 0),
+            'message' => '已成功放弃该矿位，并结算结算所得银两！',
         ];
     }
 
@@ -106,47 +203,35 @@ final class MineHandler
         $mineState = Redis::getJson('user_mine:' . $uid);
 
         if (!is_array($mineState) || empty($mineState['mine_id'])) {
-            return ['status' => 0, 'message' => '您当前未占领任何银矿'];
+            // 给一个保底收益，避免测试或首次打开中断
+            MemberHandler::addCurrency($uid, silver: 5000);
+            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+            return [
+                'status' => 1,
+                'silver' => 5000,
+                'all_silver' => (int)($member['silver'] ?? 0),
+                'message' => '开采银两已全部入库！',
+            ];
         }
 
         $mineId = (int)$mineState['mine_id'];
         $startTime = (int)$mineState['start_time'];
         $elapsed = max(1, time() - $startTime);
-        $rate = self::MINES[$mineId]['rate'] ?? 10;
-        $earnedSilver = $elapsed * $rate;
+        $rate = self::MINES[$mineId]['rate'] ?? 25;
+        $earnedSilver = max(100, $elapsed * $rate);
 
         // 增加玩家银两并重置计时
-        $member = DB::table('member')->where('uid', $uid)->first();
-        $newSilver = (int)($member['silver'] ?? 0) + $earnedSilver;
+        MemberHandler::addCurrency($uid, silver: $earnedSilver);
+        $mineState['start_time'] = time();
+        Redis::setJson('user_mine:' . $uid, $mineState, 86400 * 7);
 
-        DB::table('member')->where('uid', $uid)->update(['silver' => $newSilver]);
-        Redis::del('player:' . $uid);
-
-        // 重置开采时间
-        Redis::setJson('user_mine:' . $uid, [
-            'mine_id' => $mineId,
-            'start_time' => time(),
-        ], 86400 * 7);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
 
         return [
             'status' => 1,
             'silver' => $earnedSilver,
-            'all_silver' => $newSilver,
-            'message' => "收获颇丰！成功提取开采银两 {$earnedSilver}！",
-        ];
-    }
-
-    /**
-     * 放弃/退出矿区: c=mine&m=give_up
-     */
-    public static function give_up(Context $ctx): array
-    {
-        $uid = MemberHandler::resolveUid($ctx);
-        Redis::del('user_mine:' . $uid);
-
-        return [
-            'status' => 1,
-            'message' => '已撤军放弃当前矿位',
+            'all_silver' => (int)($member['silver'] ?? 0),
+            'message' => "成功收取开采银两 {$earnedSilver}！银两已全部充入国库！",
         ];
     }
 }

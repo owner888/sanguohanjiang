@@ -424,12 +424,13 @@
                 }
                 res.status = parseInt(res.status);
                 if (res.status == 1) {
-                    that.pages = res.team.allpage;
+                    res.team = res.team || { allpage: 1, list: [] };
+                    that.pages = parseInt(res.team.allpage) || 1;
                     if (page != undefined) {
                         that.page = page;
                         that.showMainPageNum(that.page);
                     }
-                    that.budildShip(res.team.list);
+                    that.budildShip(res.team.list || []);
                     
                     
                     //1贸易进行中，2完成贸易，3被抢劫 然后要在各个地方判断变化，没有任何状态是0
