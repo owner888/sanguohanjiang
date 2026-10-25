@@ -1180,9 +1180,13 @@ final class GameApiTest extends TestCase
         $res = $this->request('general_inherit', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('rule', $res);
+        $this->assertArrayHasKey(1, $res['rule']);
+        $this->assertSame('普通继承', $res['rule'][1]['name']);
+        $this->assertArrayHasKey('free_inherit', $res);
 
-        // 3. 预览传承属性
-        $preview = $this->request('general_inherit', 'preview', ['from_gid' => $g1, 'to_gid' => $g2, 'type' => 2]);
+        // 3. 预览至尊完璧传承属性 (type: 4 为 100% 完美传承)
+        $preview = $this->request('general_inherit', 'preview', ['from_gid' => $g1, 'to_gid' => $g2, 'type' => 4]);
         $this->assertSame(1, $preview['status']);
         $this->assertEquals(1.0, $preview['inherit_rate']);
 

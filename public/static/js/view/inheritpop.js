@@ -131,7 +131,7 @@
                 }
                 
                 //2013-8-20 所有都有可能免费
-                that.freeSiteData = res.free_inherit;
+                that.freeSiteData = res.free_inherit || {};
                 
                 //判断是否有免费继承cd
                 if(res.endtime > 0) {
@@ -142,8 +142,8 @@
                     that.cd = 0;
                 }
 
-                that.buildHeroBylist(res.list);
-                that.fillLeftRule(res.rule);
+                that.buildHeroBylist(res.list || {});
+                that.fillLeftRule(res.rule || {});
 
                 that.bindAll();
 
@@ -908,7 +908,10 @@
             if (this.payType == undefined) {
                 this.payType = 1;
             }
-            this.ruleData = list;
+            this.ruleData = list || {};
+            if (!this.ruleData['1']) {
+                this.ruleData['1'] = { id: 1, name: '普通继承', gold: 0, exp: 70, attr: 70 };
+            }
 
             this.ruleData['1'].color = '#fff';
             if (this.ruleData['2'] != undefined) {
