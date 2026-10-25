@@ -50,12 +50,26 @@ final class PackHandler
             $items = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
         }
 
+        // 排序规则：未穿戴装备优先，品阶降序，等级降序
+        usort($items, static function (array $a, array $b): int {
+            $aEquipped = ((int)($a['generalid'] ?? 0) > 0) ? 1 : 0;
+            $bEquipped = ((int)($b['generalid'] ?? 0) > 0) ? 1 : 0;
+            if ($aEquipped !== $bEquipped) {
+                return $aEquipped <=> $bEquipped; // 0 (未穿戴) 优先排前
+            }
+            $aQuality = (int)($a['quality'] ?? 1);
+            $bQuality = (int)($b['quality'] ?? 1);
+            if ($aQuality !== $bQuality) {
+                return $bQuality <=> $aQuality;
+            }
+            return ((int)($b['level'] ?? 1)) <=> ((int)($a['level'] ?? 1));
+        });
+
         $list = [];
-        $idx = 1;
         foreach ($items as $it) {
             $bonus = GeneralHandler::calculateEquipBonus($it);
             $powerup = $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']);
-            $list[$idx] = [
+            $list[] = [
                 'id' => (int)$it['id'],
                 'equipid' => (int)$it['equipid'],
                 'name' => $it['name'],
@@ -72,13 +86,12 @@ final class PackHandler
                 'is_equipped' => (int)$it['generalid'] > 0 ? 1 : 0,
                 'bonus' => $bonus,
             ];
-            $idx++;
         }
 
         return [
             'status' => 1,
             'maxnum' => (int)($member['bagnum'] ?? 20),
-            'list' => $list,
+            'list' => array_values($list),
             'message' => 'ok',
         ];
     }
@@ -125,13 +138,13 @@ final class PackHandler
         if ((int)$item['generalid'] > 0) {
             return [
                 'status' => -2,
-                'message' => '已穿戴装备无法出售，请先卸下',
+                'message' => '已穿戴装备无法出售，请先在将领面板卸下',
             ];
         }
 
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $salePrice = max(10, (int)$item['saleprice']) * max(1, (int)$item['level']);
-        $newSilver = (int)$member['silver'] + $salePrice;
+        $salePrice = max(50, (int)$item['saleprice']) * max(1, (int)$item['level']);
+        $newSilver = (int)($member['silver'] ?? 0) + $salePrice;
 
         // 增加玩家银两并软删除装备 (deleted_at 记录删除时间)
         DB::table('member')->where('uid', $uid)->update(['silver' => $newSilver]);

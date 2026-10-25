@@ -25,8 +25,9 @@
                 }
                 /* 保存数据 */
                 that.data = {};
-                for (var i = 0; i < res.list.length; i++) {
-                    that.data[res.list[i]['id']] = res.list[i];
+                var list = $.isArray(res.list) ? res.list : helper.array_values(res.list || []);
+                for (var i = 0; i < list.length; i++) {
+                    that.data[list[i]['id']] = list[i];
                 }
 
                 /* 第一步，把界面先载入，渠道DOM，并绑定好基础事件 */
@@ -41,7 +42,7 @@
                 });
 
                 /* 第二步 构建数据列表等 */
-                that.buildlist(res.list);
+                that.buildlist(list);
 
                 /* 第四步 展示弹窗 */
                 that.e.show();
@@ -175,8 +176,13 @@
 
         /* 出售某件道具确认框 */
         sellItemConfirm: function(id) {
-            if (this.data[id]) {
-                xGame.confirm.show(lang('notice'), lang('sell_ask', [this.data[id].saleprice]), 2,
+            var item = this.data ? this.data[id] : null;
+            if (item) {
+                if (item.is_equipped == 1 || item.gid > 0) {
+                    xGame.toast.show('已穿戴装备无法出售，请先在将领面板卸下！');
+                    return false;
+                }
+                xGame.confirm.show(lang('notice'), lang('sell_ask', [item.saleprice]), 2,
                 function() {
                     xGame.confirm.hide(function() {
                         packpop.sellItem(id);
@@ -185,7 +191,6 @@
                 function() {
                     xGame.confirm.hide();
                 });
-
             }
         },
 
@@ -266,10 +271,12 @@
                     xGame.toast.show(lang('sell_success', [res.silver]));
                 } else if (res.status == -1) {
                     xGame.toast.show(lang('sell_fail_no_equip'));
+                } else if (res.status == -2) {
+                    xGame.toast.show(res.message || res.msg || '已穿戴装备无法出售，请先在将领面板卸下！');
                 } else if (res.status == -3) {
                     xGame.toast.show(lang('packpop_sell_closed'));
                 } else {
-                    xGame.toast.show(lang('sell_fail_unknown'));
+                    xGame.toast.show(res.message || res.msg || lang('sell_fail_unknown'));
                 }
 
                 that = null;
