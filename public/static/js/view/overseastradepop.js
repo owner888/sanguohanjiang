@@ -109,6 +109,10 @@
             //默认值
             that.myStatus = 0;
             that.myTeamId = 0;
+
+            res.info = res.info || { times: 3, robtimes: 5, team: 0 };
+            res.rob = res.rob || { price: 50, times: 0 };
+            res.team = res.team || { allpage: 1, list: [] };
             
             //只有等于3的时候才显示倒计时,也就代表在贸易中
             if (res.btn_status == 3) {
@@ -128,9 +132,9 @@
             
             that.myTeamId = parseInt(res.info.team);
             that.page = 1;
-            that.pages = parseInt(res.team.allpage);
+            that.pages = parseInt(res.team.allpage || 1);
             that.showMainPageNum(that.page);
-            that.budildShip(res.team.list);
+            that.budildShip(res.team.list || []);
             that.bindAll();
             
             that.goodsData = {

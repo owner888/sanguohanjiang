@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 use OmniPHP\WebSocket\Broadcaster;
 
+/**
+ * 海外商贸、远洋船队组队远航与拦截打劫处理器 (DDD Activity Domain)
+ */
 final class OverseasTradeHandler
 {
     public const array FLEETS = [
@@ -25,9 +27,15 @@ final class OverseasTradeHandler
     public static function index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $silver = (int)($member['silver'] ?? 0);
+        $level = (int)($member['level'] ?? 1);
+        $nickname = (string)($member['nickname'] ?? ('主公' . $uid));
+
         $state = Redis::getJson('overseas_trade:' . $uid) ?: [
             'fleet_id' => 0,
             'start_time' => 0,
+            'commodity' => 1,
         ];
 
         $fleetId = (int)$state['fleet_id'];
@@ -37,15 +45,72 @@ final class OverseasTradeHandler
         $cfg = self::FLEETS[$fleetId] ?? null;
         $isFinished = false;
         $remaining = 0;
+        $btnStatus = 1; // 1: 可发起贸易
 
         if ($cfg !== null && $startTime > 0) {
             $elapsed = $now - $startTime;
             $remaining = max(0, (int)$cfg['duration'] - $elapsed);
             $isFinished = ($remaining === 0);
+            if (!$isFinished) {
+                $btnStatus = 3; // 贸易航行中
+            }
         }
+
+        // 模拟远洋活跃船队列表
+        $teamList = [
+            [
+                'id' => 1,
+                'team_name' => '南海通商船队',
+                'member1' => $uid,
+                'member1_name' => $nickname,
+                'member1_level' => $level,
+                'member1_commodity' => 1,
+                'member2' => 0,
+                'member2_name' => '',
+                'member2_level' => 0,
+                'member2_commodity' => 0,
+                'startdateline' => $startTime > 0 ? $startTime : $now - 120,
+                'status' => 1,
+                'robtimes' => 0,
+            ],
+            [
+                'id' => 2,
+                'team_name' => '西域丝路船队',
+                'member1' => 8888,
+                'member1_name' => '常山赵子龙',
+                'member1_level' => 60,
+                'member1_commodity' => 3,
+                'member2' => 8889,
+                'member2_name' => '关云长',
+                'member2_level' => 65,
+                'member2_commodity' => 2,
+                'startdateline' => $now - 200,
+                'status' => 1,
+                'robtimes' => 1,
+            ],
+        ];
 
         return [
             'status' => 1,
+            'btn_status' => $btnStatus,
+            'endtime' => $remaining > 0 ? ($now + $remaining) : 0,
+            'info' => [
+                'times' => 3,
+                'robtimes' => 5,
+                're_robtimes' => 0,
+                'team' => $fleetId > 0 ? 1 : 0,
+                'commodity' => 1,
+            ],
+            'rob' => [
+                'price' => 50,
+                'times' => 5,
+            ],
+            'team' => [
+                'allpage' => 1,
+                'list' => $teamList,
+            ],
+            'all_silver' => $silver,
+            // 向下兼容保留原字段
             'fleets' => self::FLEETS,
             'sailing' => ($fleetId > 0 && !$isFinished) ? 1 : 0,
             'can_harvest' => $isFinished ? 1 : 0,
@@ -80,7 +145,6 @@ final class OverseasTradeHandler
             }
         }
 
-        // 原子安全扣费
         if (!MemberHandler::deductCurrency($uid, silver: $costSilver)) {
             return ['status' => -1, 'message' => "银两不足，筹备商队需要 {$costSilver} 银两"];
         }
@@ -88,6 +152,7 @@ final class OverseasTradeHandler
         Redis::setJson('overseas_trade:' . $uid, [
             'fleet_id' => $fleetId,
             'start_time' => time(),
+            'commodity' => 1,
         ], 86400 * 3);
 
         return [
@@ -119,25 +184,17 @@ final class OverseasTradeHandler
             return ['status' => 0, 'message' => '商船数据异常'];
         }
 
-        $elapsed = time() - (int)$state['start_time'];
-        if ($elapsed < $cfg['duration']) {
-            $wait = $cfg['duration'] - $elapsed;
-            return ['status' => 0, 'message' => "商队尚在远洋破浪，还需 {$wait} 秒方可靠岸！"];
-        }
-
-        $profitSilver = (int)$cfg['profit_silver'];
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $newSilver = (int)($member['silver'] ?? 0) + $profitSilver;
-
-        DB::table('member')->where('uid', $uid)->update(['silver' => $newSilver]);
+        $profit = (int)$cfg['profit_silver'];
+        MemberHandler::addCurrency($uid, silver: $profit);
         Redis::del('overseas_trade:' . $uid);
-        Redis::del('player:' . $uid);
+
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
 
         return [
             'status' => 1,
-            'silver' => $profitSilver,
-            'all_silver' => $newSilver,
-            'message' => "商队凯旋返航！带回西域龙涎香与海外珊瑚，售得巨额银两 {$profitSilver}！",
+            'profit' => $profit,
+            'silver' => (int)($member['silver'] ?? 0),
+            'message' => "远洋商船顺利靠岸！本次海外贸易获利丰厚，进账 {$profit} 银两！",
         ];
     }
 }

@@ -1226,6 +1226,10 @@ final class GameApiTest extends TestCase
         $res = $this->request('overseastrade', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['fleets']);
+        $this->assertArrayHasKey('info', $res);
+        $this->assertArrayHasKey('times', $res['info']);
+        $this->assertArrayHasKey('rob', $res);
+        $this->assertArrayHasKey('team', $res);
 
         // 2. 派遣快行小帆船启航出海 (fleet: 1)
         $go = $this->request('overseastrade', 'goout', ['fleet_id' => 1]);
@@ -1593,6 +1597,9 @@ final class GameApiTest extends TestCase
         $res = $this->request('task', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('taskid1', $res);
+        $this->assertArrayHasKey('number', $res);
+        $this->assertArrayHasKey('free_times', $res);
 
         // 2. 接取悬赏任务 1
         $accept = $this->request('task', 'accept_task', ['id' => 1]);

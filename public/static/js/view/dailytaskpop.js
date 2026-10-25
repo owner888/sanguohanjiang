@@ -107,6 +107,19 @@
         buildOne: function(data, status, i) {
             var that = this;
 
+            data = data || {
+                type: 1,
+                title: '日常军务',
+                star: 1,
+                description: '每日军务历练',
+                value: 1,
+                plan: 0,
+                silver: 1000,
+                get_num: 0,
+                get_type: 0
+            };
+            status = parseInt(status) || 0;
+
             var html = '';
 
             html += '<span id="dt_img" class="dt_role' + data.type + '" type="' + data.type + '">';
