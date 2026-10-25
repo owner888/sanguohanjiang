@@ -150,7 +150,73 @@ final class TavernHandler
      */
     public static function get_list(Context $ctx): array
     {
-        return self::index($ctx);
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $traderData = self::getUserTraderData($uid);
+
+        $ownedGenerals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
+        $ownedMap = [];
+        foreach ($ownedGenerals as $g) {
+            $ownedMap[(int)$g['generalid']] = true;
+        }
+
+        $barList = [];
+        $idx = 1;
+        foreach (self::HERO_POOL as $gid => $hero) {
+            $isOwn = isset($ownedMap[$gid]) ? 1 : 0;
+            $star = match ((int)$hero['quality']) {
+                5 => 5,
+                4 => 4,
+                default => 3,
+            };
+            $vocation = ($gid === 12) ? 2 : 1; // 诸葛亮为谋士(2)，关张赵为武将(1)
+
+            $barList[$idx] = [
+                'generalid' => $gid,
+                'name' => (string)$hero['name'],
+                'paytype' => min(3, max(1, (int)$hero['quality'] - 2)), // 1 蓝宝石, 2 黄宝石, 3 紫宝石
+                'price' => (int)$hero['quality'] * 5,
+                'isown' => $isOwn,
+                'open' => 1,
+                'need_reputation' => 0,
+                'info' => [
+                    'id' => $gid,
+                    'name' => (string)$hero['name'],
+                    'type' => $vocation,
+                    'image' => 'hero_' . $gid,
+                    'wuli' => (int)$hero['wuli'],
+                    'zhili' => (int)$hero['zhili'],
+                    'tili' => 85,
+                    'star' => $star,
+                    'talent' => [
+                        'name' => '神威',
+                        'description' => "天生神力，基础攻击力大幅提升 {$hero['attack']} 点",
+                    ],
+                    'skill' => [
+                        'name' => (string)$hero['skill'],
+                        'description' => "释放绝技【{$hero['skill']}】，对敌军造成致命轰击！",
+                    ],
+                ],
+            ];
+            $idx++;
+        }
+
+        $jade = [
+            1 => (int)($traderData['get1'] ?? 15),
+            2 => (int)($traderData['get2'] ?? 8),
+            3 => (int)($traderData['get3'] ?? 3),
+        ];
+
+        return [
+            'status' => 1,
+            'page' => 1,
+            'perpage' => 100,
+            'totals' => count($barList),
+            'jade' => $jade,
+            'reputation' => (int)($member['reputation'] ?? 0),
+            'list' => $barList,
+            'message' => 'ok',
+        ];
     }
 
     /**

@@ -215,7 +215,19 @@
 
         fillHeroData: function(id) {
             var that = this;
-            var data = that.heroData[id].info;
+            var hero = (that.heroData && that.heroData[id]) ? that.heroData[id] : {};
+            var data = hero.info || {
+                name: '三国名将',
+                type: 1,
+                wuli: 80,
+                zhili: 80,
+                tili: 80,
+                star: 3,
+                talent: { name: '勇武', description: '战意昂扬' },
+                skill: { name: '破阵', description: '战法暴击' }
+            };
+            data.talent = data.talent || { name: '勇武', description: '战意昂扬' };
+            data.skill = data.skill || { name: '破阵', description: '战法暴击' };
             that.heroDataDom.find('#barpop_vname').html(data.name).attr('class', 'vname' + data.name.length);
             that.heroDataDom.find('#user_ab').attr('class', (data.type == 1 ? 'wj': 'ms') + ' user_ab');
             that.heroDataDom.find('#bar_wuli').html(data.wuli);
@@ -225,11 +237,11 @@
             that.heroDataDom.find('#ab_line1').html('<em>'+lang('tianfu')+'-' + data.talent.name + '：</em>' + data.talent.description);
             that.heroDataDom.find('#ab_line2 .skill_name').html(lang('skill')+'-' + data.skill.name + '：');
             that.heroDataDom.find('#bar_scroll_skill .bl').html(data.skill.description);
-            that.heroDataDom.find('#bar_herocost').attr('class', 'gem' + that.heroData[id].paytype).html(that.heroData[id].price);
+            that.heroDataDom.find('#bar_herocost').attr('class', 'gem' + (hero.paytype || 1)).html(hero.price || 10);
             that.heroDataDom.attr('class','notcard fourL');
             if (that.stype == 4) {
                 that.heroDataDom.addClass('sj');
-                that.heroDataDom.find('#bar_reputation').html(that.heroData[id].need_reputation);
+                that.heroDataDom.find('#bar_reputation').html(hero.need_reputation || 0);
             } else {
                 that.heroDataDom.removeClass('sj');
             }
@@ -569,13 +581,17 @@
 
             for (var i = 1; i <= totals; i++) {
                 if (data[i] != undefined) {
+                    data[i].info = data[i].info || {
+                        image: 'hero_' + data[i].generalid,
+                        type: 1,
+                        name: data[i].name || '名将',
+                    };
                     if (i == 1 && that.heroListDom.find('li.selected').size() == 0) {
                         html += '<li class="hero_detail selected" id="barGid' + data[i].generalid + '" gid="' + data[i].generalid + '">';
                         that.sgid = data[i].generalid;
                     } else {
                         html += '<li class="hero_detail" id="barGid' + data[i].generalid + '" gid="' + data[i].generalid + '">';
                     }
-                    //html += '<img src="' + staticUrl + 'img/avatar/a' + data[i].info.image + '.jpg" />';
                     html += '<img src="' + xGame.avatar(data[i].info.image, true) + '" />';
                     html += '<span class="hero_detail_type">' + helper.getItemVocation(data[i].info.type) + '</span>';
                     html += '<span class="hero_detail_light"></span>';

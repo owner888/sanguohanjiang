@@ -361,6 +361,14 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
 
+        // 测试酒馆名将招募列表 get_list
+        $bar = $this->request('tavern', 'get_list');
+        $this->assertSame(1, $bar['status']);
+        $this->assertGreaterThan(0, $bar['totals']);
+        $this->assertArrayHasKey('jade', $bar);
+        $this->assertArrayHasKey('info', $bar['list'][1]);
+        $this->assertNotEmpty($bar['list'][1]['info']['name']);
+
         // 招募名将张飞 (id: 10, 花费 5000 银两)
         $buy = $this->request('tavern', 'buy', ['id' => 10]);
         $this->assertSame(1, $buy['status']);
