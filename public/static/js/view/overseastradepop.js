@@ -829,11 +829,11 @@
                             
                         }
                         
-                        that.tpage = parseInt(res.page);
-                        that.tpages = parseInt(res.allpage);
+                        that.tpage = parseInt(res.page) || 1;
+                        that.tpages = parseInt(res.allpage) || 1;
                         that.showTeamPage(that.tpage, that.tpages);
-                        that.myTeamId = parseInt(res.teamid);
-                        that.buildTeamList(res.list, res.price);
+                        that.myTeamId = parseInt(res.teamid) || 0;
+                        that.buildTeamList(res.list || {}, res.price || 5);
                         
                         break;
                     case 2:
@@ -1121,6 +1121,8 @@
         },
         
         showTeamPage: function(num1, num2) {
+            num1 = parseInt(num1) || 1;
+            num2 = parseInt(num2) || 1;
             this.teamDom.find('#page_num').html(num1 + '/' + num2);
         },
         

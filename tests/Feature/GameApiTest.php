@@ -1231,7 +1231,14 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('rob', $res);
         $this->assertArrayHasKey('team', $res);
 
-        // 2. 派遣快行小帆船启航出海 (fleet: 1)
+        // 2. 查看国家贸易组队大厅 (验证 page 与 allpage 避免 NaN 翻页)
+        $teams = $this->request('overseastrade', 'get_list_by_country', ['p' => 1]);
+        $this->assertSame(1, $teams['status']);
+        $this->assertSame(1, $teams['page']);
+        $this->assertSame(5, $teams['allpage']);
+        $this->assertArrayHasKey('list', $teams);
+
+        // 3. 派遣快行小帆船启航出海 (fleet: 1)
         $go = $this->request('overseastrade', 'goout', ['fleet_id' => 1]);
         $this->assertSame(1, $go['status']);
         $this->assertSame(1, $go['fleet_id']);
