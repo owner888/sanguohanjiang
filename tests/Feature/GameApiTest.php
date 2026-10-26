@@ -374,6 +374,15 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $buy['status']);
         $this->assertSame('张飞', $buy['name']);
         $this->assertSame(5000, $buy['cost_silver']);
+        $this->assertArrayHasKey('general', $buy);
+        $this->assertSame(10, $buy['general']['generalid']);
+        $this->assertArrayHasKey('jade', $buy);
+
+        // 测试商贾会客贸易
+        $trade = $this->request('tavern', 'trade', ['s' => 1, 'type' => 0]);
+        $this->assertSame(1, $trade['status']);
+        $this->assertArrayHasKey('site', $trade);
+        $this->assertArrayHasKey('addtype', $trade);
 
         // 再次尝试招募张飞，触发唯一性拦截 (status = 4 已拥有该武将)
         $duplicateBuy = $this->request('tavern', 'buy', ['id' => 10]);

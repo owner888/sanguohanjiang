@@ -3871,8 +3871,12 @@
         newhero: function(data, callback, lagtime) {
             var that = this;
 
+            data = data || { generalid: 10, name: '张飞', image: 'hero_10', type: 1, star: 3, wuli: 98, zhili: 45, tili: 85, skill: { name: '万夫莫敌', description: '' }, talent: { name: '神威', description: '' } };
+            data.skill = data.skill || { name: '战法', description: '' };
+            data.talent = data.talent || { name: '神威', description: '' };
+
             var lagtime = lagtime ? lagtime : 2000;
-            lagtime = parseInt(data.generalid) > 5 ? lagtime : 10;
+            lagtime = parseInt(data.generalid || 10) > 5 ? lagtime : 10;
             var that_dom = xGame.loadPopTmpl('newhero');
 
             that_dom.find('#newhero_avatar').css({

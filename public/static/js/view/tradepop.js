@@ -191,8 +191,9 @@
 
         showMsgByData: function(data) {
             var that = this;
-            that.infoDom.find('span').html(data.name);
-            that.infoDom.find('p').html(data.description);
+            data = data || (that.siteInfo ? that.siteInfo[1] : null) || { name: '走方游医', description: '初涉江湖的小商贾' };
+            that.infoDom.find('span').html(data.name || '');
+            that.infoDom.find('p').html(data.description || '');
         },
 
         showCost1: function(money) {
@@ -253,10 +254,10 @@
                     }
 
                     that.isTimeout.push(setTimeout(function() {
-                        that.site = res.site;
+                        that.site = parseInt(res.site) || 1;
                         that.showImgBySiteInfo(res);
                         that.showGem(res.addtype, res.number);
-                        that.showMsgByData(that.siteInfo[that.site]);
+                        that.showMsgByData(that.siteInfo ? that.siteInfo[that.site] : null);
                         //xGame.toast.show('<span class="gem' + res.addtype + '">&nbsp;&nbsp;+&nbsp;&nbsp;' +  res.addnum + '</span>');
                         that.showLeftByList(that.siteList);
                         xGame.unlock();

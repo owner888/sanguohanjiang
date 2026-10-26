@@ -277,8 +277,41 @@ final class TavernHandler
 
         Redis::del('player:' . $uid);
 
+        $star = match ((int)$heroConfig['quality']) {
+            5 => 5,
+            4 => 4,
+            default => 3,
+        };
+        $vocation = ($gid === 12) ? 2 : 1;
+        $payType = min(3, max(1, (int)$heroConfig['quality'] - 2));
+
+        $traderData = self::getUserTraderData($uid);
+        $remainJade = (int)($traderData['get' . $payType] ?? 10);
+
         return [
             'status' => 1,
+            'type' => $payType,
+            'price' => $costSilver,
+            'jade' => $remainJade,
+            'general' => [
+                'generalid' => $gid,
+                'name' => (string)$heroConfig['name'],
+                'type' => $vocation,
+                'image' => 'hero_' . $gid,
+                'star' => $star,
+                'wuli' => (int)$heroConfig['wuli'],
+                'zhili' => (int)$heroConfig['zhili'],
+                'tili' => 85,
+                'talent' => [
+                    'name' => '神威',
+                    'description' => "天生神力，基础攻击力大幅提升 {$heroConfig['attack']} 点",
+                ],
+                'skill' => [
+                    'name' => (string)$heroConfig['skill'],
+                    'description' => "释放绝技【{$heroConfig['skill']}】，对敌军造成致命轰击！",
+                ],
+            ],
+            // 向下兼容保留原字段
             'gid' => $gid,
             'name' => $heroConfig['name'],
             'cost_silver' => $costSilver,
@@ -355,13 +388,21 @@ final class TavernHandler
 
         return [
             'status' => 1,
+            'site' => $nextSite,
             'id' => $nextSite,
+            'addtype' => $gemType,
+            'addnum' => $gemVal,
+            'number' => (int)$traderData['get' . $gemType],
             'cost' => $nextCfg['cost'],
             'trading' => $nextCfg['trading'],
             'silver' => (int)($freshMember['silver'] ?? 0),
             'gold' => (int)($freshMember['gold'] ?? 0),
-            'number' => $traderData['get' . $gemType],
-            'addnum' => $gemVal,
+            'site1' => 1,
+            'site2' => (int)($traderData['site2'] ?? 0),
+            'site3' => (int)($traderData['site3'] ?? 0),
+            'site4' => (int)($traderData['site4'] ?? 0),
+            'site5' => (int)($traderData['site5'] ?? 0),
+            'isfree' => 0,
             'get1' => $traderData['get1'],
             'get2' => $traderData['get2'],
             'get3' => $traderData['get3'],
