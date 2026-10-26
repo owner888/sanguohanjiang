@@ -1848,10 +1848,18 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $entry['status']);
         $this->assertGreaterThan(0, $entry['silver']);
 
-        // 3. 查看军功商城
+        // 3. 查看积分功勋商城
         $shop = $this->request('war', 'point_shop');
         $this->assertSame(1, $shop['status']);
+        $this->assertArrayHasKey('point', $shop);
+        $this->assertNotEmpty($shop['list']);
         $this->assertNotEmpty($shop['goods']);
+
+        // 4. 积分兑换青铜宝匣
+        $buyBox = $this->request('war', 'point_buy', ['id' => 1]);
+        $this->assertSame(1, $buyBox['status']);
+        $this->assertArrayHasKey('point', $buyBox);
+        $this->assertArrayHasKey('silver', $buyBox);
     }
 
     public function testCountryMineSystem(): void

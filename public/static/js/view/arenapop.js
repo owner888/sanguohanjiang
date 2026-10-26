@@ -536,6 +536,7 @@
                     that.lefttimes = res.times;
                     $('#buy_arenatimes_price').html(res.price);
                     $('#buy_arenatimes').html(res.times);
+                    xGame.toast.show('购买成功！演武挑战次数 +1');
                 } else if (res.status == -1) {
                     xGame.goPay(lang('gold_not_enough_for_buying'));
                 } else {

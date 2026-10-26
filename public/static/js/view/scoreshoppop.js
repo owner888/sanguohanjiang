@@ -50,6 +50,9 @@
         initPage: function (res) {
             
             var that = this;
+            res.list = $.isArray(res.list) ? res.list : helper.array_values(res.list || []);
+            var currentPoint = (res.point != null) ? res.point : ((res.points != null) ? res.points : 0);
+
             // 保存数据
             that.data = {};
             for (var i = 0; i < res.list.length; i++) {
@@ -84,7 +87,7 @@
                 e.preventDefault();
             });
 
-            that.score.html(res.point);
+            that.score.html(currentPoint);
             that.buildlist(res.list);
             that.e.show();
             $('#worldloading').hide();
