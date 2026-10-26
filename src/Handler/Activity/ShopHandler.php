@@ -11,96 +11,102 @@ use OmniPHP\Http\Context;
 use OmniPHP\WebSocket\Broadcaster;
 
 /**
- * 装备商城、军令采买与全服消费记录处理器 (DDD Activity Domain)
+ * 兵符商城、军令采买与全服消费记录处理器 (DDD Activity Domain)
  */
 final class ShopHandler
 {
     /**
-     * 商城珍宝道具字典
+     * 六大绝品兵符字典 (type: 5 兵符/通用, 增加生命属性)
      */
     public const array SHOP_ITEMS = [
         1 => [
-            'id' => 101,
-            'name' => '百炼青钢剑',
-            'type' => 1,
+            'id' => 31,
+            'equipid' => 31,
+            'name' => '破军兵符',
+            'type' => 5, // 5: 通用职业，生命属性
             'quality' => 3,
             'shoptype' => 1, // 1 元宝, 2 银两
             'price' => 50,
             'maxtimes' => 10,
             'needlevel' => 1,
             'need_viplevel' => 0,
-            'power' => 120,
-            'description' => '百炼精钢锻造的神兵利刃，削铁如泥，大幅增强攻击力',
+            'power' => 500,
+            'description' => '汉室精铸破军兵符，军威浩荡，大幅增强全军生命上限',
             'position' => 1,
         ],
         2 => [
-            'id' => 102,
-            'name' => '天命校尉兵符',
-            'type' => 4,
+            'id' => 32,
+            'equipid' => 32,
+            'name' => '神射兵符',
+            'type' => 5,
             'quality' => 3,
             'shoptype' => 1,
             'price' => 80,
             'maxtimes' => 10,
-            'needlevel' => 1,
+            'needlevel' => 10,
             'need_viplevel' => 0,
-            'power' => 420,
-            'description' => '受命于天的汉室校尉兵符，蕴含雄厚气血，大幅增加生命上限',
+            'power' => 800,
+            'description' => '百步穿杨神射兵符，固本培元，大幅增强全军生命上限',
             'position' => 2,
         ],
         3 => [
-            'id' => 103,
-            'name' => '玄铁明光铠',
-            'type' => 2,
-            'quality' => 3,
-            'shoptype' => 1,
-            'price' => 60,
-            'maxtimes' => 10,
-            'needlevel' => 1,
-            'need_viplevel' => 0,
-            'power' => 80,
-            'description' => '日月生辉的明光重铠，刀枪不入，固若金汤',
-            'position' => 3,
-        ],
-        4 => [
-            'id' => 104,
-            'name' => '西极烈风骢',
-            'type' => 3,
+            'id' => 33,
+            'equipid' => 33,
+            'name' => '重甲兵符',
+            'type' => 5,
             'quality' => 3,
             'shoptype' => 1,
             'price' => 120,
-            'maxtimes' => 5,
+            'maxtimes' => 10,
             'needlevel' => 20,
-            'need_viplevel' => 1,
-            'power' => 200,
-            'description' => '产自大宛的西域良驹，迅疾如风，神勇非凡',
-            'position' => 4,
+            'need_viplevel' => 0,
+            'power' => 1200,
+            'description' => '坚如磐石重甲兵符，金戈铁马，大幅增强全军生命上限',
+            'position' => 3,
         ],
-        5 => [
-            'id' => 105,
-            'name' => '诸葛兵法残卷',
-            'type' => 4,
+        4 => [
+            'id' => 34,
+            'equipid' => 34,
+            'name' => '疾风兵符',
+            'type' => 5,
             'quality' => 4,
             'shoptype' => 1,
             'price' => 200,
             'maxtimes' => 5,
             'needlevel' => 30,
+            'need_viplevel' => 1,
+            'power' => 2000,
+            'description' => '御风逐电疾风兵符，身轻如燕，大幅增强全军生命上限',
+            'position' => 4,
+        ],
+        5 => [
+            'id' => 35,
+            'equipid' => 35,
+            'name' => '神算兵符',
+            'type' => 5,
+            'quality' => 4,
+            'shoptype' => 1,
+            'price' => 350,
+            'maxtimes' => 5,
+            'needlevel' => 40,
             'need_viplevel' => 2,
-            'power' => 600,
-            'description' => '卧龙先生亲手书写的奇门兵法，内藏排兵布阵之玄机',
+            'power' => 3500,
+            'description' => '料敌先机神算兵符，运筹帷幄，大幅增强全军生命上限',
             'position' => 5,
         ],
         6 => [
-            'id' => 106,
-            'name' => '太公六韬兵书',
-            'type' => 4,
+            'id' => 36,
+            'equipid' => 36,
+            'name' => '鬼谋兵符',
+            'type' => 5,
             'quality' => 5,
             'shoptype' => 1,
-            'price' => 500,
+            'price' => 600,
             'maxtimes' => 3,
-            'needlevel' => 40,
+            'needlevel' => 50,
             'need_viplevel' => 4,
-            'power' => 1200,
-            'description' => '姜太公辅佐周室的不世天书，神鬼莫测，天道乾坤',
+            'power' => 6000,
+            'description' => '神鬼莫测天罡兵符，通天彻地，极大幅度增强全军生命上限',
             'position' => 6,
         ],
     ];
@@ -117,6 +123,7 @@ final class ShopHandler
         foreach (self::SHOP_ITEMS as $pos => $item) {
             $nowList[$pos] = [
                 'id' => (int)$item['id'],
+                'equipid' => (int)$item['id'],
                 'name' => (string)$item['name'],
                 'type' => (int)$item['type'],
                 'quality' => (int)$item['quality'],
@@ -128,10 +135,11 @@ final class ShopHandler
             $totals++;
         }
 
-        // 默认第一件商品的详细信息
+        // 默认选中的第一件商品
         $firstItem = self::SHOP_ITEMS[1];
         $info = [
             'info' => array_merge($firstItem, [
+                'equipid' => (int)$firstItem['id'],
                 'nowmaxtimes' => (int)$firstItem['maxtimes'],
             ]),
             'need_viplevel' => (int)$firstItem['need_viplevel'],
@@ -142,14 +150,14 @@ final class ShopHandler
             [
                 'uid' => 8888,
                 'username' => '常山赵子龙',
-                'itemname' => '天命校尉兵符',
+                'itemname' => '神射兵符',
                 'quality' => 3,
                 'dateline' => '刚刚',
             ],
             [
                 'uid' => 8889,
                 'username' => '关云长',
-                'itemname' => '百炼青钢剑',
+                'itemname' => '破军兵符',
                 'quality' => 3,
                 'dateline' => '2分钟前',
             ],
@@ -160,7 +168,7 @@ final class ShopHandler
             'totals' => $totals,
             'list' => $nowList,
             'info' => $info,
-            'log_list' => array_values($logs),
+            'log_list' => array_slice(array_values($logs), 0, 4), // 限制最多 4 条避免溢出
             'message' => 'ok',
         ];
     }
@@ -170,7 +178,7 @@ final class ShopHandler
      */
     public static function get_info(Context $ctx): array
     {
-        $itemId = (int)($ctx->input('id', 101));
+        $itemId = (int)($ctx->input('id', 31));
 
         $target = null;
         foreach (self::SHOP_ITEMS as $item) {
@@ -187,6 +195,7 @@ final class ShopHandler
         return [
             'status' => 1,
             'info' => array_merge($target, [
+                'equipid' => (int)$target['id'],
                 'nowmaxtimes' => (int)$target['maxtimes'],
             ]),
             'need_viplevel' => (int)$target['need_viplevel'],
@@ -201,7 +210,7 @@ final class ShopHandler
     public static function buy(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $itemId = (int)($ctx->input('id', 101));
+        $itemId = (int)($ctx->input('id', 31));
 
         $target = null;
         foreach (self::SHOP_ITEMS as $item) {
@@ -231,17 +240,17 @@ final class ShopHandler
             MemberHandler::deductCurrency($uid, silver: $price);
         }
 
-        // 发放装备到装备背包
+        // 发放兵符到装备背包
         DB::table('equipment')->insert([
             'uid' => $uid,
             'equipid' => $itemId,
             'name' => $target['name'],
-            'type' => $target['type'],
+            'type' => 4, // 兵符装备类型 4
             'level' => 1,
             'quality' => $target['quality'],
             'generalid' => 0,
             'number' => 1,
-            'saleprice' => 50 * $target['quality'],
+            'saleprice' => 100 * $target['quality'],
         ]);
 
         Redis::del('player:' . $uid);
@@ -257,7 +266,7 @@ final class ShopHandler
             'quality' => $target['quality'],
             'dateline' => '刚刚',
         ]);
-        $logs = array_slice($logs, 0, 10);
+        $logs = array_slice($logs, 0, 4);
         Redis::setJson('global_shop_logs', $logs, 86400 * 7);
 
         return [
@@ -266,7 +275,7 @@ final class ShopHandler
             'gold' => (int)($freshMember['gold'] ?? 0),
             'silver' => (int)($freshMember['silver'] ?? 0),
             'cd' => 0,
-            'message' => "成功购买【{$target['name']}】！装备已放入包裹！",
+            'message' => "成功购买【{$target['name']}】！兵符已收入包裹！",
         ];
     }
 

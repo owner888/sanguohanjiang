@@ -7416,11 +7416,13 @@ position: absolute;
 left: 34px;
 bottom: 0;
 text-align: center;
+overflow: hidden;
 }
 #shoppop .shoppop_bl ul{
 width: 250px;
 height: 295px;
 padding: 5px;
+overflow: hidden;
 }
 #shoppop .shoppop_bl ul li{
 height: 50px;

@@ -133,7 +133,8 @@
             that.initTime(parseInt(data.info.cd));
 
             var html2 = '';
-            for (var i = 0; i < data.log_list.length; i++) {
+            var logCount = Math.min(5, data.log_list.length);
+            for (var i = 0; i < logCount; i++) {
                 if (appLanguage == 'kr') {
                     html2 += '<li><p class="un" uid="' + data.log_list[i].uid + '">' + data.log_list[i].username + '</p><p><em>' + data.log_list[i].dateline + '</em>' + '<b style="color:' + helper.getItemColor(parseInt(data.log_list[i].quality)) + ';">' + data.log_list[i].itemname + '</b>' + (that.krData[data.log_list[i].itemname] > 11 ? '을' : '를') + lang('had_bought') + '</p></li>';
                 } else {
@@ -170,8 +171,9 @@
 
         fillRightInfo: function(info, vip) {
             var that = this;
+            var equipId = info.equipid || info.id;
             that.rightDom.find('.itembox').attr('class', 'itembox s_i_bj' + info.quality).children('span').css({
-                'background': 'url(' + xGame.itemurl(info.equipid) + ') center center no-repeat'
+                'background': 'url(' + xGame.itemurl(equipId) + ') center center no-repeat'
             });
             that.rightDom.find('#iteminfo_p').find('h4').html('<em>' + info.name + '</em>' + (vip > 0 ? '<span id="shopvip">' + lang('only_vip_can_buy', [vip]) + '</span>': '')).css({
                 'color': helper.getItemColor(parseInt(info.quality))

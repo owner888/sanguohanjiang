@@ -609,11 +609,11 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('totals', $res);
         $this->assertArrayHasKey('log_list', $res);
 
-        $detail = $this->request('shop', 'get_info', ['id' => 101]);
+        $detail = $this->request('shop', 'get_info', ['id' => 31]);
         $this->assertSame(1, $detail['status']);
         $this->assertArrayHasKey('info', $detail);
 
-        $buyItem = $this->request('shop', 'buy', ['id' => 101]);
+        $buyItem = $this->request('shop', 'buy', ['id' => 31]);
         $this->assertSame(1, $buyItem['status']);
 
         $buyAct = $this->request('shop', 'buy_act');
