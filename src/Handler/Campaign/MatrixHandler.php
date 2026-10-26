@@ -369,12 +369,25 @@ final class MatrixHandler
 
         Redis::del('player:' . $uid);
 
+        $mid = (int)($ctx->input('mid', $matrix['mid'] ?? 1));
+        $cfg = self::MATRIX_CONFIGS[$mid] ?? self::MATRIX_CONFIGS[1];
+        $percent = $cfg['base_rate'] + ($newLevel - 1) * $cfg['growth_rate'];
+        $nextCost = ($newLevel + 1) * 500;
+
         return [
             'status' => 1,
             'message' => '阵法升级成功',
             'level' => $newLevel,
             'cost_silver' => $costSilver,
             'silver' => $remainSilver,
+            'info' => [
+                'level' => $newLevel,
+                'type' => (int)$cfg['type'],
+                'percent' => round($percent * 100, 1),
+                'next' => $nextCost,
+                'position' => 0,
+                'gold' => (int)($member['gold'] ?? 0),
+            ],
         ];
     }
 }

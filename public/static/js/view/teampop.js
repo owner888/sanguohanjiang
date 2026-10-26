@@ -1006,6 +1006,7 @@
                     xGame.goPay(lang('gold_not_enough_for_lv_team'));
                     break;
                 case 1:
+                    res.info = res.info || { level: res.level || 1, type: 1, percent: 1, next: 0, position: 0, gold: 0 };
                     that.matrixContentDom.find('#matrix_name').find('em').html('(' + res.info.level + lang('lv') + ')');
                     that.matrixContentDom.find('#matrix_info').html(helper.getPowerName(res.info.type) + lang('up_percent', [res.info.percent]));
 

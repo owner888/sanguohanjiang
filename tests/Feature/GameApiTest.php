@@ -218,6 +218,10 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $levelUp['status']);
         $this->assertSame(2, $levelUp['level']);
         $this->assertGreaterThan(0, $levelUp['cost_silver']);
+        $this->assertArrayHasKey('info', $levelUp);
+        $this->assertSame(2, $levelUp['info']['level']);
+        $this->assertArrayHasKey('percent', $levelUp['info']);
+        $this->assertArrayHasKey('next', $levelUp['info']);
 
         // 切换阵法至鹤翼阵 (mid: 3)
         $use = $this->request('matrix', 'use_matrix', ['mid' => 3]);
@@ -1201,6 +1205,13 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey(1, $res['rule']);
         $this->assertSame('普通继承', $res['rule'][1]['name']);
         $this->assertArrayHasKey('free_inherit', $res);
+
+        // 测试获取武将可传承经验与规则
+        $inheritInfo = $this->request('general_inherit', 'get_inherit_info', ['gid' => $g1]);
+        $this->assertSame(1, $inheritInfo['status']);
+        $this->assertArrayHasKey('rule', $inheritInfo);
+        $this->assertArrayHasKey(1, $inheritInfo['rule']);
+        $this->assertArrayHasKey('allexp', $inheritInfo['rule'][1]);
 
         // 3. 预览至尊完璧传承属性 (type: 4 为 100% 完美传承)
         $preview = $this->request('general_inherit', 'preview', ['from_gid' => $g1, 'to_gid' => $g2, 'type' => 4]);

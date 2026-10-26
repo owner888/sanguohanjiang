@@ -90,6 +90,40 @@ final class GeneralInheritHandler
     }
 
     /**
+     * 获取指定武将的继承规则与可传承经验: c=general_inherit&m=get_inherit_info
+     */
+    public static function get_inherit_info(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $gid = (int)($ctx->input('gid', 0));
+
+        $fromGen = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
+        if ($fromGen === null) {
+            $fromGen = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->first();
+        }
+
+        $allExp = (int)($fromGen['exp'] ?? 0);
+
+        $ruleArr = [];
+        foreach (self::INHERIT_RULES as $k => $r) {
+            $ruleArr[$k] = [
+                'id' => (int)$r['id'],
+                'name' => (string)$r['name'],
+                'gold' => (int)$r['gold'],
+                'exp' => (int)$r['exp'],
+                'attr' => (int)$r['attr'],
+                'allexp' => (int)round($allExp * (float)$r['rate']),
+            ];
+        }
+
+        return [
+            'status' => 1,
+            'rule' => $ruleArr,
+            'message' => 'ok',
+        ];
+    }
+
+    /**
      * 传承属性预览: c=general_inherit&m=preview
      */
     public static function preview(Context $ctx): array
