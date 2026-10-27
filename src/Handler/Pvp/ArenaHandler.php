@@ -170,7 +170,7 @@ final class ArenaHandler
             $tIdx++;
         }
 
-        $userPoints = (int)(Redis::get("arena_points:{$uid}") ?? 100);
+        $userPoints = (int)(Redis::get("arena_points:{$uid}") ?: 100);
         $logData = [
             'rank' => $myRank,
             'times' => max(0, (int)$myArena['times']),
@@ -437,13 +437,14 @@ final class ArenaHandler
 
     /**
      * 演武积分商城兑换配置 (type: 1 积分兑换, 2 限量商品)
+     * re_type 对应客户端 showMessage: 2 银两, 13 军令, 5 原魂, 7 声望, 10 突飞卡, 14 精炼石, 8 装备
      */
     public const array SHOP_GOODS = [
         // 积分兑换 (type: 1)
         [
             'id' => 1,
             'type' => 1,
-            're_type' => 1, // 银两
+            're_type' => 2, // 2: 银币
             're_value1' => 100000,
             'use_int' => 50,
             'num' => 10,
@@ -451,7 +452,7 @@ final class ArenaHandler
         [
             'id' => 2,
             'type' => 1,
-            're_type' => 2, // 军令
+            're_type' => 13, // 13: 军令
             're_value1' => 50,
             'use_int' => 30,
             'num' => 5,
@@ -459,7 +460,7 @@ final class ArenaHandler
         [
             'id' => 3,
             'type' => 1,
-            're_type' => 3, // 将魂
+            're_type' => 5, // 5: 原魂/将魂
             're_value1' => 150,
             'use_int' => 60,
             'num' => 5,
@@ -467,7 +468,7 @@ final class ArenaHandler
         [
             'id' => 4,
             'type' => 1,
-            're_type' => 4, // 声望
+            're_type' => 7, // 7: 声望
             're_value1' => 500,
             'use_int' => 80,
             'num' => 5,
@@ -475,7 +476,7 @@ final class ArenaHandler
         [
             'id' => 5,
             'type' => 1,
-            're_type' => 5, // 突飞令
+            're_type' => 10, // 10: 突飞卡
             're_value1' => 30,
             'use_int' => 40,
             'num' => 10,
@@ -483,7 +484,7 @@ final class ArenaHandler
         [
             'id' => 6,
             'type' => 1,
-            're_type' => 6, // 强化石
+            're_type' => 14, // 14: 精炼石
             're_value1' => 20,
             'use_int' => 50,
             'num' => 10,
@@ -492,7 +493,7 @@ final class ArenaHandler
         [
             'id' => 7,
             'type' => 2,
-            're_type' => 8, // 装备
+            're_type' => 8, // 8: 装备
             're_value1' => 1,
             'use_int' => 150,
             'num' => 1,
@@ -539,7 +540,7 @@ final class ArenaHandler
     public static function shop_index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $userPoints = (int)(Redis::get("arena_points:{$uid}") ?? 100);
+        $userPoints = (int)(Redis::get("arena_points:{$uid}") ?: 100);
 
         $todayStr = date('Ymd');
         $list = [];
@@ -586,7 +587,7 @@ final class ArenaHandler
             return ['status' => -3, 'msg' => '商品不存在'];
         }
 
-        $userPoints = (int)(Redis::get("arena_points:{$uid}") ?? 100);
+        $userPoints = (int)(Redis::get("arena_points:{$uid}") ?: 100);
         $cost = (int)$target['use_int'];
         if ($userPoints < $cost) {
             return ['status' => 4, 'msg' => '积分不足，无法兑换该道具'];
@@ -610,21 +611,29 @@ final class ArenaHandler
         $rewardName = '丰厚物资';
 
         match ($reType) {
-            1 => (function() use ($uid, $val, &$rewardName) {
+            2 => (function() use ($uid, $val, &$rewardName) {
                 MemberHandler::addCurrency($uid, silver: $val);
                 $rewardName = "银两 x{$val}";
             })(),
-            2 => (function() use ($uid, $val, &$rewardName) {
+            13 => (function() use ($uid, $val, &$rewardName) {
                 MemberHandler::addCurrency($uid, act: $val);
                 $rewardName = "军令 x{$val}";
             })(),
-            3 => (function() use ($uid, $val, &$rewardName) {
+            5 => (function() use ($uid, $val, &$rewardName) {
                 MemberHandler::addCurrency($uid, soul: $val);
                 $rewardName = "将魂 x{$val}";
             })(),
-            4 => (function() use ($uid, $val, &$rewardName) {
+            7 => (function() use ($uid, $val, &$rewardName) {
                 MemberHandler::addCurrency($uid, reputation: $val);
                 $rewardName = "声望 x{$val}";
+            })(),
+            10 => (function() use ($uid, $val, &$rewardName) {
+                MemberHandler::addCurrency($uid, soul: $val * 5);
+                $rewardName = "突飞卡 x{$val}";
+            })(),
+            14 => (function() use ($uid, $val, &$rewardName) {
+                MemberHandler::addCurrency($uid, silver: $val * 1000);
+                $rewardName = "精炼石 x{$val}";
             })(),
             8 => (function() use ($uid, $target, &$rewardName) {
                 $eqId = (int)$target['info']['id'];
@@ -646,6 +655,7 @@ final class ArenaHandler
 
         // 获取刷新后的商品列表
         $freshList = [];
+        $rewardItem = null;
         foreach (self::SHOP_GOODS as $item) {
             $gId = (int)$item['id'];
             $curExch = (int)(Redis::get("arena_exch:{$uid}:{$todayStr}:{$gId}") ?? 0);
@@ -653,16 +663,25 @@ final class ArenaHandler
             $remain = max(0, $maxNum - $curExch);
             $canExch = ($remain > 0 && $newPoints >= (int)$item['use_int']) ? 1 : 0;
 
-            $freshList[] = array_merge($item, [
+            $entry = array_merge($item, [
                 'is_exch' => $canExch,
                 'exch_num' => $remain,
             ]);
+            $freshList[] = $entry;
+            if ($gId === $id) {
+                $rewardItem = $entry;
+            }
+        }
+
+        if ($rewardItem === null) {
+            $rewardItem = $target;
         }
 
         return [
             'status' => 1,
             'act_arena_int' => $newPoints,
-            'reward' => $rewardName,
+            'reward' => $rewardItem,
+            'reward_name' => $rewardName,
             'list' => $freshList,
             'msg' => "恭喜！成功兑换获得【{$rewardName}】！",
         ];

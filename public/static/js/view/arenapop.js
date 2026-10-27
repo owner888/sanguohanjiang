@@ -367,6 +367,11 @@
         },
         //显示玩家获得的奖励
         showMessage: function (reward,act_arena_int) {
+            if (typeof reward === 'string') {
+                xGame.toast.show(reward);
+                return;
+            }
+            reward = reward || {};
             var type = parseInt(reward.re_type);
             var id = reward.id;
             if(reward.type == 1){
@@ -452,7 +457,7 @@
                     xGame.toast.show(lang('acttreasurepop_msg28', [reward.info.gem_level,helper.getItemColor(reward.info.gem_quality),reward.info.gem_name]));
                     break;
                 default :
-                    xGame.toast.show(lang('acttreasurepop_err_msg6'));
+                    xGame.toast.show(lang('acttreasurepop_err_msg6') || (reward && reward.info ? ('恭喜获得：' + reward.info.name) : '兑换成功！'));
                     break;
             }
         },

@@ -155,7 +155,7 @@ final class WarHandler
     public static function point_shop(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $points = (int)(Redis::get('war_points:' . $uid) ?? 888);
+        $points = (int)(Redis::get('war_points:' . $uid) ?: 888);
 
         $list = array_values(self::POINT_CHESTS);
 
@@ -184,7 +184,7 @@ final class WarHandler
         $chest = self::POINT_CHESTS[$id] ?? self::POINT_CHESTS[1];
         $costPoint = (int)$chest['integral'];
 
-        $points = (int)(Redis::get('war_points:' . $uid) ?? 888);
+        $points = (int)(Redis::get('war_points:' . $uid) ?: 888);
         if ($points < $costPoint) {
             return [
                 'status' => 2,

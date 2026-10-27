@@ -2463,6 +2463,7 @@ var langObj = {
     'acttreasurepop_msg17': '恭喜您，获得了{1}个汉字：',
     'acttreasurepop_msg18': '恭喜您，获得了{1}<span class="add_essence" style="background-image:url({2})">x{3}</span>',
     'acttreasurepop_msg19': '下次获得奖励翻倍！',
+    'acttreasurepop_err_msg6': '恭喜您，兑换成功！',
     'acttreasurepop_text1': '<em style="color:#FFD309">悍</em>',
     'acttreasurepop_text2': '<em style="color:#FFD309">将</em>',
     'acttreasurepop_text3': '<em style="color:#FFD309">三</em>',

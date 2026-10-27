@@ -678,6 +678,8 @@ final class GameApiTest extends TestCase
         $exch = $this->request('arena', 'shop_exchange', ['id' => 1]);
         $this->assertSame(1, $exch['status']);
         $this->assertArrayHasKey('act_arena_int', $exch);
+        $this->assertArrayHasKey('reward', $exch);
+        $this->assertSame(2, $exch['reward']['re_type']); // 2 为银币奖励
         $this->assertNotEmpty($exch['list']);
     }
 
