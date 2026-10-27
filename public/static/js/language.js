@@ -113,7 +113,7 @@ var langObj = {
     'no_reward' : '没有可领取的奖励！',
     'reward_success' : '领取成功！',
     'notice' : '提示',
-    'buy_times_ask' : '确定要花费 <em id="buy_arenatimes_price">{1}</em> 元宝购买演武挑战次数吗？<br/><br/>当前可用挑战次数：<em id="buy_arenatimes">{2}</em>次',
+    'buy_times_ask' : '确定要花费 <em id="buy_arenatimes_price">{1}</em> 元宝购买 1 次挑战机会吗？<br/><br/>当前拥有挑战次数：<em id="buy_arenatimes">{2}</em>次<br/><span style="color:#693700;font-size:18px;">（购买后挑战次数将增加 1 次）</span>',
     'can_not_buy_times_yet' : '暂时无法购买次数！',
     'gold_not_enough_for_buying' : '您的元宝不足，无法购买次数！',
     'buy_fail_try_later' : '购买失败，请稍后重试！',
