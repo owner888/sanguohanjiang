@@ -69,17 +69,17 @@
             
             that.bindAll();
             
-            that.friends_num = res.now_number;
-            that.friends_tnum = res.all_number;
-            that.friends_olnum = res.online;
-            that.page = 1;
-            that.pages = res.all_page;
+            that.friends_num = (res.now_number != null) ? res.now_number : (res.list ? res.list.length : 0);
+            that.friends_tnum = (res.all_number != null) ? res.all_number : 100;
+            that.friends_olnum = (res.online != null) ? res.online : that.friends_num;
+            that.page = parseInt(res.page) || 1;
+            that.pages = parseInt(res.all_page) || 1;
             
             that.showFriendsNum();
             that.showOlNum();
             that.showPageNum();
             
-            that.buildMember(res.list);
+            that.buildMember(res.list || []);
             
             that.e.show();
             $('#worldloading').hide();
@@ -88,31 +88,38 @@
         
         buildMember: function(list) {
             var html = '';
+            list = list || [];
             for (var i = 0;i < 4;i ++) {
                
                 if (list[i] == undefined) {
                     html += '<li class="offline">';
                 } else {
-                    if (list[i].online == 1) {
+                    var f = list[i];
+                    var fNick = f.nickname || f.name || ('好友' + (f.fuid || f.uid || (i + 1)));
+                    var fCountry = f.country || '魏国';
+                    var fJob = f.job || '偏将军';
+                    var fUid = f.fuid || f.uid || 0;
+
+                    if (f.online == 1) {
                         html += '<li class="online">';
                     } else {
                         html += '<li class="offline">';
                     }
                     html += '<div>';
-                    html += '<span class="userinfo" uid="' + list[i].fuid + '"></span>';
-                    if (typeof list[i].tree != 'undefined' && parseInt(list[i].tree) > 1) {
-                        html += '<p class="p1 tree' + list[i].tree + '">' + list[i].nickname + ' Lv.' + list[i].level + '</p>';
+                    html += '<span class="userinfo" uid="' + fUid + '"></span>';
+                    if (typeof f.tree != 'undefined' && parseInt(f.tree) > 1) {
+                        html += '<p class="p1 tree' + f.tree + '">' + fNick + ' Lv.' + (f.level || 1) + '</p>';
                     } else {
-                        html += '<p class="p1">' + list[i].nickname + ' Lv.' + list[i].level + '</p>';
+                        html += '<p class="p1">' + fNick + ' Lv.' + (f.level || 1) + '</p>';
                     }
-                    if (list[i].countryid == 0) {
+                    if (f.countryid == 0) {
                         html += '<p class="p2"></p>';
                     } else {
-                        html += '<p class="p2">' + list[i].country + ' 【' + list[i].job + '】</p>';
+                        html += '<p class="p2">' + fCountry + ' 【' + fJob + '】</p>';
                     }
                     
                     html += '<span class="status"></span>';
-                    html += '<span class="close" uid="' + list[i].fuid + '" name="' + list[i].nickname + '"></span>';
+                    html += '<span class="close" uid="' + fUid + '" name="' + fNick + '"></span>';
                      html += '</div>';
                 }
                 html += '<b>' + (1 + i + 4 * (this.page - 1)) + '</b>';

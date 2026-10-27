@@ -939,6 +939,12 @@ final class GameApiTest extends TestCase
         $res = $this->request('friend', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('now_number', $res);
+        $this->assertArrayHasKey('all_number', $res);
+        $this->assertArrayHasKey('online', $res);
+        $this->assertArrayHasKey('nickname', $res['list'][0]);
+        $this->assertArrayHasKey('country', $res['list'][0]);
+        $this->assertArrayHasKey('job', $res['list'][0]);
 
         // 2. 添加新好友
         $add = $this->request('friend', 'add_friend', ['target_uid' => 10005]);

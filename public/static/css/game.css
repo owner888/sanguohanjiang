@@ -7787,6 +7787,19 @@ width: 110px;
 background-image: url(../img/pop/common_pop_avatar_bg_d.jpg);
 background-size:98px 99px !important;
 }
+.right_dom #practicepop_scroller li.block::after{
+content: '空闲';
+display: block;
+position: absolute;
+left: 0;
+right: 0;
+top: 36px;
+font-size: 18px;
+color: #8c6845;
+font-weight: bold;
+text-shadow: 1px 1px 1px #fae6c6;
+pointer-events: none;
+}
 .right_dom #practicepop_scroller li img{
 width: 80px;
 height: 80px;
