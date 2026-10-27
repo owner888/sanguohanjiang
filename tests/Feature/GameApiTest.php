@@ -1104,10 +1104,10 @@ final class GameApiTest extends TestCase
     public function testProtocolSmartFallbackAndLoggerWarning(): void
     {
         // 访问尚未移植的冷门或老旧接口，验证智能平滑降级信封与 OmniPHP Logger 告警追踪 (方案 B)
-        $res = $this->request('act_halloween', 'index');
+        $res = $this->request('act_thanksgiving', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertSame(1, $res['is_fallback']);
-        $this->assertSame('act_halloween', $res['c']);
+        $this->assertSame('act_thanksgiving', $res['c']);
         $this->assertSame('index', $res['m']);
         $this->assertStringContainsString('筹备中', $res['message']);
         $this->assertIsArray($res['list']);
@@ -2162,5 +2162,25 @@ final class GameApiTest extends TestCase
 
         // 3. 锁释放后恢复正常
         Redis::del($lockKey);
+    }
+
+    public function testHalloweenSystem(): void
+    {
+        // 1. 查看万圣活动主页
+        $res = $this->request('act_halloween', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+        $this->assertGreaterThan(0, $res['candy']);
+        $this->assertGreaterThan(0, $res['hammer']);
+
+        // 2. 砸开 1 号南瓜
+        $smash = $this->request('act_halloween', 'action_pumpkin', ['id' => 1]);
+        $this->assertSame(1, $smash['status']);
+        $this->assertSame(1, $smash['id']);
+
+        // 3. 品尝万圣魔法糖果
+        $candy = $this->request('act_halloween', 'action_candy');
+        $this->assertSame(1, $candy['status']);
+        $this->assertGreaterThan(0, $candy['soul']);
     }
 }
