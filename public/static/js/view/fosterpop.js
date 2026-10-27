@@ -107,6 +107,9 @@
 
             /* 显示第一个武将数据*/
             var firstdata = helper.array_first(that.data.list);
+            if (!firstdata) {
+                return;
+            }
             that.nowViewId = firstdata.id;
             that.nowViewK = firstdata.k;
             that.showHero(firstdata);

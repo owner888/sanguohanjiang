@@ -102,7 +102,7 @@
             that.zIndex = 10;
             that.distance = that.getDistance(75, 75);
             that.page = 1;
-            that.pages = res.pack.pages;
+            that.pages = (res.pack && res.pack.pages) ? res.pack.pages : 1;
 
             that.eqPosList = that.heroPosList = {
                 'pos1': {

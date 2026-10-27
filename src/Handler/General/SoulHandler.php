@@ -123,8 +123,58 @@ final class SoulHandler
             ];
         }
 
+        $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
+        $battleArr = [];
+        foreach ($generals as $g) {
+            $gId = (int)$g['id'];
+            $image = (string)($g['image'] ?? 'hero_1');
+            if (empty($image)) {
+                $image = 'hero_' . (int)$g['generalid'];
+            }
+            $entry = [
+                'id' => $gId,
+                'name' => (string)$g['name'],
+                'quality' => (int)($g['quality'] ?? 3),
+                'level' => (int)($g['level'] ?? 1),
+                'image' => $image,
+                'type' => (int)($g['type'] ?? 1),
+                'star' => (int)($g['star'] ?? 3),
+                'turn' => (int)($g['turn'] ?? 0),
+            ];
+            for ($s = 1; $s <= 8; $s++) {
+                $entry['site' . $s] = ['islock' => 0, 'info' => []];
+            }
+            $battleArr[] = $entry;
+        }
+
+        $pack = [
+            'pages' => 1,
+            'limit' => 16,
+            'use' => 0,
+            'list' => [],
+        ];
+
+        $currentSoul = [
+            'id' => 1,
+            'name' => '青龙生命魂',
+            'quality' => 3,
+            'level' => 1,
+            'power' => 200,
+            'type' => 5,
+            'from' => 1,
+            'merge' => 0,
+            'next' => 50,
+            'exp' => 0,
+            'ismax' => 0,
+        ];
+
         return [
             'status' => 1,
+            'general_totals' => count($battleArr),
+            'general' => $battleArr,
+            'pack' => $pack,
+            'soul' => $currentSoul,
+            // 向下兼容保留原字段
             'gid' => $gid,
             'general_name' => $general['name'],
             'user_soul' => $userSoul,

@@ -756,7 +756,7 @@
                 }
             }
 
-            that.mineData.log = log.length == 0 ? null: log;
+            that.mineData.log = (!log || log.length === 0 || $.isEmptyObject(log)) ? null : log;
             that.e.find('#minepop_wrap').find('#mine_list').html(html);
         },
 

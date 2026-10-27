@@ -85,7 +85,7 @@ final class MineHandler
             ];
         }
 
-        $log = null;
+        $log = [];
         if ($mineId > 0) {
             $log = [
                 'page' => $myPage,

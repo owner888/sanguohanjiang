@@ -767,6 +767,9 @@ final class GameApiTest extends TestCase
         $res = $this->request('soul', 'index', ['gid' => $mainGid]);
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['slots']);
+        $this->assertArrayHasKey('pack', $res);
+        $this->assertArrayHasKey('pages', $res['pack']);
+        $this->assertArrayHasKey('general', $res);
         $this->assertArrayHasKey('user_soul', $res);
         $oldSoul = $res['user_soul'];
 
@@ -833,6 +836,8 @@ final class GameApiTest extends TestCase
         // 2. 查看洗髓面板
         $res = $this->request('cultivate', 'index', ['gid' => $mainGid]);
         $this->assertSame(1, $res['status']);
+        $this->assertNotEmpty($res['list']);
+        $this->assertNotEmpty($res['rule']);
         $this->assertCount(4, $res['modes']);
 
         // 3. 执行一次普通洗髓 (mode: 1)
