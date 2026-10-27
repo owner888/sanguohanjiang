@@ -667,6 +667,18 @@ final class GameApiTest extends TestCase
         $buy = $this->request('arena', 'buy_pk_num', ['t' => 1]);
         $this->assertSame(1, $buy['status']);
         $this->assertGreaterThan(0, $buy['times']);
+
+        // 测试演武积分商城主页
+        $arenaShop = $this->request('arena', 'shop_index');
+        $this->assertSame(1, $arenaShop['status']);
+        $this->assertArrayHasKey('act_arena_int', $arenaShop);
+        $this->assertNotEmpty($arenaShop['list']);
+
+        // 测试演武积分兑换 (银两包 id: 1)
+        $exch = $this->request('arena', 'shop_exchange', ['id' => 1]);
+        $this->assertSame(1, $exch['status']);
+        $this->assertArrayHasKey('act_arena_int', $exch);
+        $this->assertNotEmpty($exch['list']);
     }
 
     public function testWebSocketAndBroadcasterSystem(): void

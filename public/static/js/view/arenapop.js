@@ -621,7 +621,9 @@
                 Func = null;
         },
         buildInterList: function (list,act_arena_int) {
+            act_arena_int = (act_arena_int != null) ? act_arena_int : 0;
             this.e.find('#act_arena_int').html(act_arena_int);
+            list = $.isArray(list) ? list : helper.array_values(list || []);
             var html1 = '<li>';
             var html2 = '<li>'; 
             var n = 0;
