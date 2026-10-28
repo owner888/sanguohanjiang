@@ -2188,4 +2188,18 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $candy['status']);
         $this->assertGreaterThan(0, $candy['soul']);
     }
+
+    public function testWorldArenaSystem(): void
+    {
+        // 1. 查看跨服远征主界面
+        $res = $this->request('worldarena', 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertArrayHasKey('top', $res);
+        $this->assertNotEmpty($res['top']);
+        $this->assertArrayHasKey('reward', $res);
+
+        // 2. 进入跨服备战
+        $enter = $this->request('worldarena', 'enter');
+        $this->assertSame(1, $enter['status']);
+    }
 }

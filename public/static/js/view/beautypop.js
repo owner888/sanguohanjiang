@@ -615,6 +615,11 @@
         // 构建美人主界面
         showMainDom: function (info) {
             var that = this;
+            info = info || {};
+            info.info = info.info || { beauty_id: 1, sub_rose: 5, max_num: 1, buy_rose: 20, beauty_level: 1, battle_cd: 0 };
+            info.battle = info.battle || { gold: 50, times: 0 };
+            info.gift_info = info.gift_info || [];
+
             that.nowBeautyId = info.info.beauty_id;
             that.avoidWarCost = info.battle.gold;
             that.avoidWarTime = info.battle.times;

@@ -143,8 +143,19 @@ final class CultivateHandler
         ];
         Redis::setJson("cultivate_pending:{$uid}:{$gid}", $pending, 86400 * 7);
 
+        $info = [
+            'wuliup' => $wuliAdd,
+            'zhiliup' => $zhiliAdd,
+            'tiliup' => $tiliAdd,
+            'silver' => (int)($freshMember['silver'] ?? 0),
+            'gold' => (int)($freshMember['gold'] ?? 0),
+            'next' => ($mode > 1) ? (int)$config['gold'] : (int)$config['silver'],
+        ];
+
         return [
             'status' => 1,
+            'info' => $info,
+            'next' => $info['next'],
             'gid' => $gid,
             'wuli' => $wuliAdd,
             'zhili' => $zhiliAdd,

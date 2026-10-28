@@ -251,6 +251,7 @@
         rewardDown: function(data) {
             
             var that = this;
+            data = data || { gettype1: 1, getvalue1: 50000, gettype2: 0, getvalue2: 0, gettype3: 0, getvalue3: 0, gettype4: 0, getvalue4: 0, gettype5: 0, getvalue5: 0 };
             var html = '';
             var gettype = 0;
             var getvalue = 0;

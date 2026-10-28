@@ -329,11 +329,12 @@
             var equalnum = 0;
             var str = '';
             var temparray = ['wuli', 'zhili', 'tili'];
+            that.data['list'][k]['cultivate'] = that.data['list'][k]['cultivate'] || { wuliup: 0, zhiliup: 0, tiliup: 0 };
             for (var i = 0; i < temparray.length; i++) {
                 var temp = temparray[i];
                 var data_temp = that.data['list'][k][temp];//旧数据
                 var tempup = temparray[i] + 'up';
-                var data_tempup = that.data['list'][k]['cultivate'][tempup];//新数据
+                var data_tempup = that.data['list'][k]['cultivate'][tempup] || 0;//新数据
 
                 var str = (i == 0 ? lang('wuli') : (i == 1 ? lang('zhili') : lang('tili'))) + ':<span>' + data_temp;
                 if (data_tempup > 0) {

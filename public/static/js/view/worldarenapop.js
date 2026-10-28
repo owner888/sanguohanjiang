@@ -107,9 +107,9 @@
                 that.timePrice = 0;
 
                 //保存数据
-                that.top = res.top;
-                that.bet = res.bet;
-                that.reward = res.reward;
+                that.top = res.top || [];
+                that.bet = res.bet || {};
+                that.reward = res.reward || { rank: 1, exploit: 100, cd: 0 };
                 //组装页面数据
                 that.fillEnterDom();
 

@@ -203,12 +203,15 @@ final class WarHandler
         MemberHandler::addCurrency($uid, silver: $rewardSilver, soul: $rewardSoul, reputation: $rewardRep);
 
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $allSilver = (int)($member['silver'] ?? 0);
 
         return [
             'status' => 1,
+            'list' => $chest,
             'point' => $newPoints,
             'silver' => $rewardSilver,
-            'allsilver' => (int)($member['silver'] ?? 0),
+            'allsilver' => $allSilver,
+            'all_silver' => $allSilver,
             'message' => "成功花费 {$costPoint} 积分兑换【{$chest['name']}】！获得丰厚物资馈赠！",
         ];
     }

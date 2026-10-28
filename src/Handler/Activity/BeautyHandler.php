@@ -58,6 +58,7 @@ final class BeautyHandler
         $userBeauties = self::getBeautyData($uid);
 
         $list = [];
+        $activeList = [];
         foreach (self::BEAUTIES as $id => $b) {
             $userB = $userBeauties[$id] ?? ['level' => 1, 'intimacy' => 0];
             $lvl = (int)$userB['level'];
@@ -70,10 +71,75 @@ final class BeautyHandler
                 'total_atk_bonus' => $b['atk_bonus'] * $lvl,
                 'total_hp_bonus' => $b['hp_bonus'] * $lvl,
             ]);
+
+            $activeList[] = [
+                'beauty_id' => $id,
+                'name' => (string)$b['name'],
+                'active' => ($id === 1) ? 1 : 0,
+                'quality' => 3,
+            ];
         }
+
+        $beautyInfo = [
+            'info' => [
+                'beauty_id' => 1,
+                'beauty_quality' => 3,
+                'beauty_level' => 1,
+                'beauty_active' => 1,
+                'skill_cd' => 0,
+                'is_active' => 1,
+                'battle_cd' => 0,
+                'up_status' => 1,
+                'sub_rose' => 5,
+                'max_num' => 3,
+                'buy_rose' => 20,
+                'up_cd' => 0,
+                'up_succ' => 0,
+                'conversion_status' => 0,
+            ],
+            'active' => $activeList,
+            'battle' => [
+                'gold' => 50,
+                'times' => 0,
+            ],
+            'gift_info' => [
+                0 => ['type' => 1, 'gold' => 500, 'ratio' => 50],
+                1 => ['type' => 2, 'diamond' => 10, 'ratio' => 50],
+                2 => ['type' => 3, 'diamond' => 18, 'ratio' => 100],
+            ],
+            'skill' => [
+                [
+                    'id' => 1,
+                    'name' => '倾国绝色',
+                    'content' => '全军普通攻击力提升 50 点',
+                    'value' => 50,
+                    'lock' => 1,
+                    'next_value' => 60,
+                ],
+                [
+                    'id' => 2,
+                    'name' => '闭月天姿',
+                    'content' => '全军策攻提升 40 点',
+                    'value' => 40,
+                    'lock' => 0,
+                    'next_value' => 50,
+                ],
+            ],
+            'chip' => [],
+            'happy' => [
+                'quality' => 1,
+                'ratio' => 20,
+                'skill' => 0,
+                'rose' => 100,
+                'diamond' => 50,
+            ],
+        ];
 
         return [
             'status' => 1,
+            'beauty_info' => $beautyInfo,
+            'say' => '主公，妾身这厢有礼了。',
+            // 向下兼容保留原字段
             'list' => $list,
             'total_beauties' => count($list),
             'message' => 'ok',
