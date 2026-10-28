@@ -308,4 +308,141 @@ final class CountryHandler
             'message' => 'ok',
         ];
     }
+
+    /**
+     * 获取国家成员列表: c=country&m=get_member_list
+     */
+    public static function get_member_list(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $myCountry = max(1, (int)($member['country'] ?? 1));
+        $countryName = self::COUNTRIES[$myCountry]['name'] ?? '魏国';
+        $nickname = (string)($member['nickname'] ?? ('主公' . $uid));
+        $level = (int)($member['level'] ?? 1);
+
+        $country = [
+            'id' => $myCountry,
+            'name' => $countryName,
+            'level' => 5,
+            'member' => 18,
+            'exp' => 25000,
+            'levelupexp' => 50000,
+            'notice' => '修明法度，征讨不臣！愿与诸君同心协力，共定中原！',
+        ];
+
+        $info = [
+            'rank' => 1,
+            'job' => 1,
+            'make_way' => 0,
+            'usurp' => 0,
+            'closeday' => 0,
+        ];
+
+        $list = [
+            [
+                'uid' => $uid,
+                'nickname' => $nickname,
+                'level' => $level,
+                'country' => $myCountry,
+                'job' => 1,
+                'job_name' => '君主',
+                'contribute' => 200,
+                'allcontribute' => 1500,
+                'dateline' => 60,
+            ],
+            [
+                'uid' => 8888,
+                'nickname' => '常山赵子龙',
+                'level' => 60,
+                'country' => $myCountry,
+                'job' => 2,
+                'job_name' => '丞相',
+                'contribute' => 300,
+                'allcontribute' => 3200,
+                'dateline' => 120,
+            ],
+            [
+                'uid' => 8889,
+                'nickname' => '关云长',
+                'level' => 62,
+                'country' => $myCountry,
+                'job' => 3,
+                'job_name' => '大将军',
+                'contribute' => 500,
+                'allcontribute' => 5000,
+                'dateline' => 300,
+            ],
+            [
+                'uid' => 8890,
+                'nickname' => '燕人张翼德',
+                'level' => 58,
+                'country' => $myCountry,
+                'job' => 4,
+                'job_name' => '偏将军',
+                'contribute' => 150,
+                'allcontribute' => 1200,
+                'dateline' => 600,
+            ],
+        ];
+
+        return [
+            'status' => 1,
+            'country' => $country,
+            'info' => $info,
+            'list' => $list,
+            'audit' => 0,
+            'message' => 'ok',
+        ];
+    }
+
+    /**
+     * 获取国家排行: c=country&m=get_rank
+     */
+    public static function get_rank(Context $ctx): array
+    {
+        $page = (int)($ctx->input('page', $ctx->input('p', 1)));
+        $rankList = [
+            [
+                'id' => 1,
+                'rank' => 1,
+                'name' => '魏国',
+                'level' => 5,
+                'member' => 18,
+                'uid' => 8888,
+                'nickname' => '曹操',
+                'notice' => '对酒当歌，人生几何！何以解忧，唯有杜康！',
+            ],
+            [
+                'id' => 2,
+                'rank' => 2,
+                'name' => '蜀国',
+                'level' => 5,
+                'member' => 16,
+                'uid' => 8889,
+                'nickname' => '刘备',
+                'notice' => '勿以恶小而为之，勿以善小而不为！',
+            ],
+            [
+                'id' => 3,
+                'rank' => 3,
+                'name' => '吴国',
+                'level' => 4,
+                'member' => 15,
+                'uid' => 8890,
+                'nickname' => '孙权',
+                'notice' => '江东子弟多才俊，卷土重来未可知！',
+            ],
+        ];
+
+        return [
+            'status' => 1,
+            'list' => $rankList,
+            'country' => $rankList[0],
+            'page' => $page,
+            'perpage' => 10,
+            'pages' => 1,
+            'message' => 'ok',
+        ];
+    }
 }

@@ -148,11 +148,16 @@
 
         /*根据type参数判断是现实有国家的界面还是显示没有国家的界面*/
         showByType: function(res) {
+            res = res || {};
+            res.country = res.country || { id: parseInt(player.info.country) || 1, name: '魏国', member: 18, level: 5, exp: 25000, levelupexp: 50000, notice: '同心协力，共定中原！' };
+            res.info = res.info || { rank: 1, job: 1, make_way: 0, usurp: 0 };
+            res.list = $.isArray(res.list) ? res.list : [];
+
             if (parseInt(player.info.country) > 0) {
                 this.allDom.attr('class', 'country_bg has');
                 /* 这里需要根据job判断*/
-                this.job = parseInt(res.info.job);
-                this.showCurrentRank(res.info.rank);
+                this.job = parseInt(res.info.job) || 1;
+                this.showCurrentRank(res.info.rank || 1);
                 this.fillHasCountry(res);
                 this.fillLeft(res.country);
             } else {

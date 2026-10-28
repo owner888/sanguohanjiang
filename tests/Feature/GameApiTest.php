@@ -830,6 +830,19 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('info', $storage);
         $this->assertArrayHasKey('donate', $storage);
         $this->assertArrayHasKey('act', $storage['salary']);
+
+        // 8. 查看我的国家成员列表 (c=country&m=get_member_list)
+        $memberList = $this->request('country', 'get_member_list');
+        $this->assertSame(1, $memberList['status']);
+        $this->assertArrayHasKey('country', $memberList);
+        $this->assertArrayHasKey('name', $memberList['country']);
+        $this->assertArrayHasKey('info', $memberList);
+        $this->assertNotEmpty($memberList['list']);
+
+        // 9. 查看国家排行 (c=country&m=get_rank)
+        $rank = $this->request('country', 'get_rank');
+        $this->assertSame(1, $rank['status']);
+        $this->assertNotEmpty($rank['list']);
     }
 
     public function testCultivateSystem(): void
