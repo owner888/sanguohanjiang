@@ -184,7 +184,10 @@
         },
 
         getWidth: function(data) {
-            var myWidth = parseInt(data.exp) / parseInt(data.levelupexp) * 564;
+            data = data || { exp: 0, levelupexp: 1000 };
+            var exp = parseInt(data.exp) || 0;
+            var levelupexp = parseInt(data.levelupexp) || 1000;
+            var myWidth = (levelupexp > 0) ? (exp / levelupexp * 564) : 30;
             myWidth = myWidth < 30 ? 30 : myWidth;
             //这里这么写防止小于1的时候animate不执行
             this.diff = myWidth - this.barDom.width();
@@ -385,6 +388,7 @@
         /*参数，传入country的对象*/
         leapShow : function(data){
             var that = this;
+            data = data || { level: that.level || 5, exp: 0, levelupexp: 50000 };
             /*用锁防止它没看完就点*/
             xGame.islock = true;
             var get_width = that.getWidth(data);

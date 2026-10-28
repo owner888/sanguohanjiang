@@ -106,6 +106,112 @@ final class MapHandler
     }
 
     /**
+     * 获取战役关卡据点敌人配置 (按势力 level、场景 stage、据点 missionId 全局精准映射)
+     */
+    public static function getEnemyConfig(int $level, int $stage, int $missionId): array
+    {
+        $roster = [
+            // 势力 1：黄巾之乱
+            1 => [
+                1 => [ // 大兴山
+                    1 => ['name' => '黄巾前哨', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 1, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '黄巾精兵', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 1, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '程远志',   'type' => 2, 'head' => 3, 'color' => 2, 'image' => '10', 'star' => 2, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '邓茂',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '11', 'star' => 2, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '黄巾渠帅·张梁', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '12', 'star' => 3, 'x' => 740, 'y' => 140],
+                ],
+                2 => [ // 青州
+                    1 => ['name' => '青州前哨', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 1, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '黄巾精锐', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 1, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '波才',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '13', 'star' => 2, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '彭脱',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '14', 'star' => 2, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '地公将军·张宝', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '15', 'star' => 3, 'x' => 740, 'y' => 140],
+                ],
+                3 => [ // 广宗
+                    1 => ['name' => '广宗前锋', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 1, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '黄巾死士', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 1, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '管亥',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '16', 'star' => 2, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '严政',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '17', 'star' => 2, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '人公将军·张梁', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '18', 'star' => 4, 'x' => 740, 'y' => 140],
+                ],
+                4 => [ // 巨鹿
+                    1 => ['name' => '巨鹿亲卫', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 1, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '太平道尊', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 2, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '高升',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '19', 'star' => 2, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '韩忠',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '20', 'star' => 2, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '天公将军·张角', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '21', 'star' => 5, 'x' => 740, 'y' => 140],
+                ],
+            ],
+            // 势力 2：董卓乱政
+            2 => [
+                1 => [ // 汜水关
+                    1 => ['name' => '西凉铁骑', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 1, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '飞熊精兵', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 2, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '胡轸',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '22', 'star' => 2, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '樊稠',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '23', 'star' => 3, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '关西都督·华雄', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '24', 'star' => 4, 'x' => 740, 'y' => 140],
+                ],
+                2 => [ // 虎牢关
+                    1 => ['name' => '并州狼骑', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 2, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '虎牢锐卒', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 2, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '张济',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '25', 'star' => 3, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '高顺',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '26', 'star' => 4, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '飞将·吕布', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '27', 'star' => 5, 'x' => 740, 'y' => 140],
+                ],
+                3 => [ // 洛阳
+                    1 => ['name' => '西凉残部', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 2, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '禁军死士', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 2, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '郭汜',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '28', 'star' => 3, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '李傕',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '29', 'star' => 3, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '毒士·李儒', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '30', 'star' => 4, 'x' => 740, 'y' => 140],
+                ],
+                4 => [ // 郿坞
+                    1 => ['name' => '郿坞精锐', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 2, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '相府卫队', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 3, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '董旻',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '31', 'star' => 3, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '牛辅',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '32', 'star' => 4, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '太师·董卓', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '33', 'star' => 5, 'x' => 740, 'y' => 140],
+                ],
+            ],
+            // 势力 3：群雄割据
+            3 => [
+                1 => [ // 界桥
+                    1 => ['name' => '幽州步骑', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 2, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '白马义从', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 2, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '严纲',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '34', 'star' => 3, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '田楷',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '35', 'star' => 3, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '白马将军·公孙瓒', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '36', 'star' => 4, 'x' => 740, 'y' => 140],
+                ],
+                2 => [ // 官渡
+                    1 => ['name' => '大戟精兵', 'type' => 1, 'head' => 1, 'color' => 1, 'image' => '1', 'star' => 2, 'x' => 180, 'y' => 440],
+                    2 => ['name' => '河北强弩', 'type' => 1, 'head' => 2, 'color' => 1, 'image' => '2', 'star' => 3, 'x' => 320, 'y' => 360],
+                    3 => ['name' => '颜良',     'type' => 2, 'head' => 3, 'color' => 2, 'image' => '37', 'star' => 4, 'x' => 460, 'y' => 290],
+                    4 => ['name' => '文丑',     'type' => 2, 'head' => 4, 'color' => 2, 'image' => '38', 'star' => 4, 'x' => 600, 'y' => 210],
+                    5 => ['name' => '河北霸主·袁绍', 'type' => 3, 'head' => 5, 'color' => 3, 'image' => '39', 'star' => 5, 'x' => 740, 'y' => 140],
+                ],
+            ],
+        ];
+
+        if (isset($roster[$level][$stage][$missionId])) {
+            return $roster[$level][$stage][$missionId];
+        }
+
+        // 自适应推导
+        $titles = [1 => '前锋营', 2 => '精锐卫', 3 => '统领', 4 => '主将', 5 => '大帅'];
+        $title = $titles[$missionId] ?? "守军{$missionId}";
+        return [
+            'name' => "第{$level}章·{$title}",
+            'type' => ($missionId >= 4 ? 3 : ($missionId >= 3 ? 2 : 1)),
+            'head' => $missionId,
+            'color' => min(3, max(1, $missionId - 1)),
+            'image' => (string)(20 + $missionId),
+            'star' => min(5, max(1, $missionId)),
+            'x' => 180 + ($missionId - 1) * 140,
+            'y' => 440 - ($missionId - 1) * 75,
+        ];
+    }
+
+    /**
      * 关卡内怪物据点列表: c=map&m=get_mission_list
      */
     public static function get_mission_list(Context $ctx): array
@@ -118,43 +224,11 @@ final class MapHandler
         $curStage = (int)($member['missionstage'] ?? 1);
         $curMissionId = (int)($member['missionid'] ?? 1);
 
-        // 关卡据点敌人 (按 Stage 精准配置对应场景怪)
-        $stageEnemies = [
-            1 => [
-                1 => ['name' => '黄巾前哨', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
-                2 => ['name' => '黄巾精兵', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
-                3 => ['name' => '程远志',   'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
-                4 => ['name' => '邓茂',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
-                5 => ['name' => '张梁',     'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
-            ],
-            2 => [
-                1 => ['name' => '青州前哨', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
-                2 => ['name' => '黄巾精锐', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
-                3 => ['name' => '波才',     'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
-                4 => ['name' => '彭脱',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
-                5 => ['name' => '张宝',     'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
-            ],
-            3 => [
-                1 => ['name' => '广宗前锋', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
-                2 => ['name' => '黄巾死士', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
-                3 => ['name' => '管亥',     'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
-                4 => ['name' => '严政',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
-                5 => ['name' => '张角',     'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
-            ],
-            4 => [
-                1 => ['name' => '巨鹿亲卫', 'type' => 1, 'head' => 1, 'color' => 1, 'x' => 180, 'y' => 440],
-                2 => ['name' => '太平道尊', 'type' => 1, 'head' => 2, 'color' => 1, 'x' => 320, 'y' => 360],
-                3 => ['name' => '高升',     'type' => 2, 'head' => 3, 'color' => 2, 'x' => 460, 'y' => 290],
-                4 => ['name' => '韩忠',     'type' => 2, 'head' => 4, 'color' => 2, 'x' => 600, 'y' => 210],
-                5 => ['name' => '天公将军', 'type' => 3, 'head' => 5, 'color' => 3, 'x' => 740, 'y' => 140],
-            ],
-        ];
-
-        $enemies = $stageEnemies[$stage] ?? $stageEnemies[1];
-
         $list = [];
         $missionItems = [];
-        foreach ($enemies as $mid => $cfg) {
+        for ($mid = 1; $mid <= 5; $mid++) {
+            $cfg = self::getEnemyConfig($level, $stage, $mid);
+
             // 计算据点解锁与通关状态
             if ($stage < $curStage) {
                 // 已打通的大关卡：全部据点已击败并开放
@@ -213,16 +287,9 @@ final class MapHandler
         $stage = (int)($ctx->input('s', 1));
         $id = (int)($ctx->input('id', 1));
 
-        $names = [
-            1 => '黄巾前哨',
-            2 => '黄巾精兵',
-            3 => '程远志',
-            4 => '邓茂',
-            5 => '张梁',
-        ];
-
-        $enemyName = $names[$id] ?? ('黄巾据点' . $id);
-        $type = $id >= 3 ? 3 : 1; // 1: 小兵, 3: 大将
+        $enemyCfg = self::getEnemyConfig($level, $stage, $id);
+        $enemyName = (string)$enemyCfg['name'];
+        $type = (int)$enemyCfg['type'];
 
         return [
             'status' => 1,
@@ -234,7 +301,7 @@ final class MapHandler
                 'level' => max(1, $id * 2),
                 'name' => $enemyName,
                 'type' => $type,
-                'image' => 0, // 0表示使用通用敌将/Boss头像
+                'image' => (int)($enemyCfg['image'] ?? 0),
                 'recruitrate' => 0,
                 'generalid' => 0,
                 'background' => 1,
@@ -334,10 +401,15 @@ final class MapHandler
         }
 
         // 2. 构建敌方据点守军
-        $enemyHp = 800 + $missionId * 150;
-        $enemyAtk = 180 + $missionId * 30;
+        $enemyCfg = self::getEnemyConfig($level, $stage, $missionId);
+        $enemyHeroName = (string)$enemyCfg['name'];
+        $enemyHeroImage = (string)($enemyCfg['image'] ?? '27');
+        $enemyStar = (int)($enemyCfg['star'] ?? 1);
+
+        $enemyHp = 800 + $missionId * 150 + ($level - 1) * 300;
+        $enemyAtk = 180 + $missionId * 30 + ($level - 1) * 50;
         $rightHeroes = [
-            new Hero(100 + $missionId, '黄巾守将', Position::FrontMiddle, $enemyHp, $enemyHp, $enemyAtk, 80, 100),
+            new Hero(100 + $missionId, $enemyHeroName, Position::FrontMiddle, $enemyHp, $enemyHp, $enemyAtk, 80, 100),
         ];
 
         // 3. 调用确定性纯内存九宫格推演引擎
@@ -345,19 +417,17 @@ final class MapHandler
         $simResult = $engine->simulate();
 
         // 4. 组装符合原版 battleworld.js 的战斗回放结构
-        $rightHeroImage = '27'; // 经典武将形象编号
-
         $rightTeamData = [
             2 => [
                 'heroid' => (string)(100 + $missionId),
-                'name' => '黄巾守将',
-                'herotype' => '1',
-                'level' => '1',
+                'name' => $enemyHeroName,
+                'herotype' => (string)($enemyCfg['type'] ?? 1),
+                'level' => (string)max(1, $missionId * 2),
                 'allblood' => $enemyHp,
                 'blood' => $enemyHp,
                 'power' => 0,
-                'image' => $rightHeroImage,
-                'star' => 1,
+                'image' => $enemyHeroImage,
+                'star' => $enemyStar,
                 'talent' => '坚强',
                 'skill' => '会心一击',
             ],

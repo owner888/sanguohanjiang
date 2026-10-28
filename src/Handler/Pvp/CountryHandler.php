@@ -166,13 +166,42 @@ final class CountryHandler
 
         Redis::del('player:' . $uid);
 
+        $countryName = self::COUNTRIES[$myCountry]['name'] ?? '魏国';
+        $countryData = [
+            'id' => $myCountry,
+            'name' => $countryName,
+            'level' => 5,
+            'member' => 18,
+            'exp' => 25200,
+            'levelupexp' => 50000,
+        ];
+
+        $infoData = [
+            'level' => 5,
+            'allcontribute' => 1700,
+            'rank' => 1,
+            'job' => 1,
+            'job_name' => '君主',
+        ];
+
+        $donateRule = [
+            'silver' => 10000,
+            'gold' => 50,
+            'contribute' => $rewardRep,
+        ];
+
         return [
             'status' => 1,
-            'add_reputation' => $rewardRep,
-            'reputation' => $newRep,
+            'country' => $countryData,
+            'info' => $infoData,
+            'donate' => $donateRule,
+            'list' => [],
             'silver' => $newSilver,
             'gold' => $newGold,
-            'message' => "国家捐献成功！为【" . self::COUNTRIES[$myCountry]['name'] . "】建立丰功伟绩，获得声望 {$rewardRep}！",
+            // 向下兼容保留原字段
+            'add_reputation' => $rewardRep,
+            'reputation' => $newRep,
+            'message' => "国家捐献成功！为【{$countryName}】建立丰功伟绩，获得声望 {$rewardRep}！",
         ];
     }
 
