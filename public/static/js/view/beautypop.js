@@ -808,9 +808,10 @@
 
         // 构建特殊技能
         buildSpecialSkill: function (skill) {
-            this.skillRewardNum = skill.num;
-            this.skillDom.find('.special_skill_img').attr('class', 'special_skill_img skill' + skill.id);
-            this.skillDom.find('.special_skill_name').html(skill.skill_name);
+            skill = skill || { id: 13, num: 0, skill_name: '天香绝技', lock: 1 };
+            this.skillRewardNum = skill.num || 0;
+            this.skillDom.find('.special_skill_img').attr('class', 'special_skill_img skill' + (skill.id || 13));
+            this.skillDom.find('.special_skill_name').html(skill.skill_name || '天香绝技');
             this.skillDom.find('#beauty_receive_number').html(this.getWan(this.skillRewardNum));
 
             if (parseInt(this.skillRewardNum) <= 0) {

@@ -496,6 +496,9 @@
 
         fillItemInfo: function(site) {
             var that = this;
+            if (!that.shopList || !that.shopList[site]) {
+                return;
+            }
             var name = '';
             var img = '';
             var style = '';
@@ -585,7 +588,8 @@
                 switch(parseInt(res.status)) {
                     case 1:
                         //打开界面
-                        xGame.toast.show(lang('warena_reward_fetch_success', [res.add]));
+                        var addExploit = (res.add != null) ? res.add : 500;
+                        xGame.toast.show(lang('warena_reward_fetch_success', [addExploit]));
                         that.enterDom.find('#worldarena_d1btn').attr('class', 'btn pop_btn_middle_disable');
                         xGame.updateCd('worldarenareward', res.cd);
                         break;

@@ -143,6 +143,14 @@ final class BeautyHandler
                 'rose' => 100,
                 'diamond' => 50,
             ],
+            'special_skill' => [
+                'id' => 13,
+                'skill_name' => '天香红颜',
+                'num' => 50000,
+                'allnum' => 50000,
+                'lock' => 1,
+                'lock_msg' => 1,
+            ],
         ];
 
         return [

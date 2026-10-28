@@ -2198,7 +2198,19 @@ final class GameApiTest extends TestCase
         $this->assertNotEmpty($res['top']);
         $this->assertArrayHasKey('reward', $res);
 
-        // 2. 进入跨服备战
+        // 2. 领取跨服排行奖励 (验证 add 与 exploit)
+        $rankReward = $this->request('worldarena', 'get_rank_reward');
+        $this->assertSame(1, $rankReward['status']);
+        $this->assertGreaterThan(0, $rankReward['add']);
+        $this->assertGreaterThan(0, $rankReward['exploit']);
+
+        // 3. 查看跨服功勋商店 (验证 list 与 exploit)
+        $shop = $this->request('worldarena', 'shop');
+        $this->assertSame(1, $shop['status']);
+        $this->assertNotEmpty($shop['list']);
+        $this->assertArrayHasKey('exploit', $shop);
+
+        // 4. 进入跨服备战
         $enter = $this->request('worldarena', 'enter');
         $this->assertSame(1, $enter['status']);
     }
