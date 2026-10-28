@@ -784,7 +784,7 @@
 
                 if (parseInt(skill[i].lock) == 0) {
                     dom.children('.lock').show();
-                    dom.children('.msg').html(lang('beautypop_unlock', [skill[i].lock_msg])).show();
+                    dom.children('.msg').html(lang('beautypop_unlock', [skill[i].lock_msg || (i === 1 ? 21 : 61)])).show();
                 } else {
                     dom.children('.lock').hide();
                     dom.children('.msg').html('').hide();
@@ -1162,6 +1162,8 @@
                 }
             }
 
+            num = (num != null) ? num : 3;
+            cost = (cost != null) ? cost : 100;
             dom.find('.times').html(num);
             dom.find('.cost').html('x' + cost);
         },
@@ -1384,7 +1386,7 @@
             var render = function (res) {
                 
                 if (parseInt(res.status) == 1) {
-                    that.roseNum = res.rose;
+                    that.roseNum = (res.rose != null) ? res.rose : (that.roseNum || 100);
                     that.skillDom.find('#beauty_flower_num').html(that.roseNum);
                     player.updateinfo({
                         'gold': res.gold

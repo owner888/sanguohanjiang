@@ -1017,6 +1017,17 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('happy', $gift);
         $this->assertGreaterThan(0, $gift['happy']['rose']);
         $this->assertGreaterThanOrEqual(1, $gift['level']);
+
+        // 4. 购买玫瑰花测试
+        $buyRose = $this->request('beauty', 'buy_rose');
+        $this->assertSame(1, $buyRose['status']);
+        $this->assertGreaterThan(0, $buyRose['rose']);
+
+        // 5. 查看美人互动主界面
+        $actIdx = $this->request('beauty', 'active_index', ['id' => 1]);
+        $this->assertSame(1, $actIdx['status']);
+        $this->assertGreaterThan(0, $actIdx['greeting']);
+        $this->assertGreaterThan(0, $actIdx['spend_greet']);
     }
 
     public function testMountSystem(): void

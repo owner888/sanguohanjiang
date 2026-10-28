@@ -142,6 +142,7 @@ final class BeautyHandler
                     'content' => '全军普通攻击力提升 50 点',
                     'value' => 50,
                     'lock' => 1,
+                    'lock_msg' => 1,
                     'next_value' => 60,
                 ],
                 [
@@ -150,7 +151,17 @@ final class BeautyHandler
                     'content' => '全军策攻提升 40 点',
                     'value' => 40,
                     'lock' => 0,
+                    'lock_msg' => 21,
                     'next_value' => 50,
+                ],
+                [
+                    'id' => 3,
+                    'name' => '洛水惊鸿',
+                    'content' => '全军生命上限提升 500 点',
+                    'value' => 500,
+                    'lock' => 0,
+                    'lock_msg' => 61,
+                    'next_value' => 600,
                 ],
             ],
             'chip' => $chips,
@@ -431,6 +442,83 @@ final class BeautyHandler
             'intimacy' => $newIntimacy,
             'leveled_up' => $leveledUp ? 1 : 0,
             'message' => "珠宝赏赐成功！【{$beautyName}】芳心暗许，亲密度暴增 100 点！",
+        ];
+    }
+
+    /**
+     * 购买玫瑰花: c=beauty&m=buy_rose
+     */
+    public static function buy_rose(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $cost = 20;
+
+        $member = DB::table('member')->where('uid', $uid)->first();
+        if ((int)($member['gold'] ?? 0) < $cost) {
+            return ['status' => -2, 'msg' => '元宝不足，无法购买玫瑰花'];
+        }
+
+        MemberHandler::deductCurrency($uid, gold: $cost);
+        $freshMember = DB::table('member')->where('uid', $uid)->first();
+
+        return [
+            'status' => 1,
+            'rose' => 101,
+            'gold' => (int)($freshMember['gold'] ?? 0),
+            'message' => '成功购买一朵娇艳玫瑰！',
+        ];
+    }
+
+    /**
+     * 美人互动主页: c=beauty&m=active_index
+     */
+    public static function active_index(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+
+        return [
+            'status' => 1,
+            'greeting' => 3,
+            'close' => 3,
+            'love' => 3,
+            'g_dateline' => 0,
+            'three' => 1,
+            'spend_greet' => 100000,
+            'spend_close' => 100,
+            'spend_love' => 500,
+            'love_vip' => 5,
+            'message' => 'ok',
+        ];
+    }
+
+    /**
+     * 美人互动操作 (问候/亲近/宠幸): c=beauty&m=active_action
+     */
+    public static function active_action(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $bid = (int)($ctx->input('id', $ctx->input('beauty_id', 1)));
+        $type = (int)($ctx->input('type', 1)); // 1 问候, 2 亲近, 3 宠幸
+
+        $rewardSilver = ($type === 1) ? 50000 : (($type === 2) ? 100000 : 300000);
+        MemberHandler::addCurrency($uid, silver: $rewardSilver);
+
+        $member = DB::table('member')->where('uid', $uid)->first();
+
+        return [
+            'status' => 1,
+            'greeting' => 2,
+            'close' => 2,
+            'love' => 2,
+            'g_dateline' => 0,
+            'all_silver' => (int)($member['silver'] ?? 0),
+            'all_gold' => (int)($member['gold'] ?? 0),
+            'reward' => [
+                'silver' => $rewardSilver,
+                'rose' => 2,
+            ],
+            'say' => '主公如此关怀备至，妾身心满意足。',
+            'message' => '互动完成！',
         ];
     }
 }
