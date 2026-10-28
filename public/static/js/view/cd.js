@@ -5529,12 +5529,17 @@
         /* 初始化调用 */
         init: function(s) {
             this.e = $('#beauty_avoid_cd');
+            s = parseInt(s) || 0;
             this.s = s;
 
-            if (s > 0) {
+            if (s > 0 && !isNaN(s)) {
                 this.e.html(helper.timeToClock(this.s));
                 timer.addListener(this);
                 this.on = true;
+            } else {
+                if (this.e && this.e.parent()) {
+                    this.e.parent().hide();
+                }
             }
         },
 

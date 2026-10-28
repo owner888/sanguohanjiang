@@ -554,4 +554,29 @@ final class BeautyHandler
             'message' => '互动完成！',
         ];
     }
+
+    /**
+     * 铜雀台免战: c=beauty&m=peace
+     */
+    public static function peace(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $cost = 50;
+
+        $member = DB::table('member')->where('uid', $uid)->first();
+        if ((int)($member['gold'] ?? 0) < $cost) {
+            return ['status' => -2, 'msg' => '元宝不足，开启免战需要 50 元宝'];
+        }
+
+        MemberHandler::deductCurrency($uid, gold: $cost);
+        $freshMember = DB::table('member')->where('uid', $uid)->first();
+
+        return [
+            'status' => 1,
+            'cd_time' => 7200, // 2 小时免战 CD (秒)
+            'times' => 3,      // 剩余可用免战购买次数
+            'all_gold' => (int)($freshMember['gold'] ?? 0),
+            'message' => '开启铜雀台免战成功！2小时内不受任何劫掠侵扰！',
+        ];
+    }
 }

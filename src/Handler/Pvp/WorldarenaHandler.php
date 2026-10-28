@@ -176,6 +176,41 @@ final class WorldarenaHandler
     }
 
     /**
+     * 领取跨服押注奖励: c=worldarena&m=get_bet_reward
+     */
+    public static function get_bet_reward(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $rewardSilver = 100000;
+        MemberHandler::addCurrency($uid, silver: $rewardSilver);
+
+        $member = DB::table('member')->where('uid', $uid)->first();
+        $allSilver = (int)($member['silver'] ?? 0);
+
+        $betInfo = [
+            'bet_status' => 0,
+            'times' => 0,
+            'support' => 0,
+            'silver' => 0,
+            'cd' => 0,
+            'nickname' => '',
+            'rank' => [
+                'before' => 0,
+                'after' => 0,
+            ],
+        ];
+
+        return [
+            'status' => 1,
+            'add' => $rewardSilver,
+            'silver' => $rewardSilver,
+            'all_silver' => $allSilver,
+            'bet' => $betInfo,
+            'message' => "领取押注奖励成功，获得银两 {$rewardSilver}！",
+        ];
+    }
+
+    /**
      * 跨服功勋商店主页: c=worldarena&m=shop
      */
     public static function shop(Context $ctx): array

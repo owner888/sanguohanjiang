@@ -1037,6 +1037,12 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('special_skill', $actAction);
         $this->assertArrayHasKey('reward', $actAction);
         $this->assertSame(2, $actAction['lastnum']);
+
+        // 7. 铜雀台开启免战
+        $peace = $this->request('beauty', 'peace');
+        $this->assertSame(1, $peace['status']);
+        $this->assertSame(7200, $peace['cd_time']);
+        $this->assertGreaterThan(0, $peace['times']);
     }
 
     public function testMountSystem(): void
@@ -2240,7 +2246,14 @@ final class GameApiTest extends TestCase
         $this->assertNotEmpty($shop['list']);
         $this->assertArrayHasKey('exploit', $shop);
 
-        // 4. 进入跨服备战
+        // 4. 领取跨服押注奖励 (验证 bet.rank.before)
+        $betReward = $this->request('worldarena', 'get_bet_reward');
+        $this->assertSame(1, $betReward['status']);
+        $this->assertArrayHasKey('bet', $betReward);
+        $this->assertArrayHasKey('rank', $betReward['bet']);
+        $this->assertSame(0, $betReward['bet']['rank']['before']);
+
+        // 5. 进入跨服备战
         $enter = $this->request('worldarena', 'enter');
         $this->assertSame(1, $enter['status']);
     }

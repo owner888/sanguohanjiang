@@ -1072,9 +1072,10 @@
                 
                 if (parseInt(res.status) == 1) {
                     that.avoiding = true;
-                    that.avoidWarTime = res.times;
+                    that.avoidWarTime = (res.times != null) ? res.times : 3;
                     that.mainDom.find('.avoid_time').show();
-                    xGame.updateCd('beautyAvoid', res.cd_time);
+                    var cdTime = parseInt(res.cd_time) || 7200;
+                    xGame.updateCd('beautyAvoid', cdTime);
                     player.updateinfo({
                         'gold': res.all_gold
                     });

@@ -154,6 +154,7 @@
 
         fillD2: function() {
             /*TODO*/
+            this.bet = (this.bet && typeof this.bet === 'object') ? this.bet : { support: 0, silver: 0, cd: 0, nickname: '', rank: { before: 0, after: 0 } };
             if (this.bet != '') {
                 this.bet.rank = this.bet.rank || { before: 0, after: 0 };
                 if(typeof this.bet.nickname != 'undefined') {
