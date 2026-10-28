@@ -995,6 +995,14 @@ final class GameApiTest extends TestCase
         $res = $this->request('beauty', 'index');
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('beauty_info', $res);
+        $this->assertArrayHasKey('skill', $res['beauty_info']);
+
+        // 测试获取指定美人信息
+        $info = $this->request('beauty', 'get_beauty_info', ['beauty_id' => 2]);
+        $this->assertSame(1, $info['status']);
+        $this->assertArrayHasKey('beauty_info', $info);
+        $this->assertSame(2, $info['beauty_info']['info']['beauty_id']);
 
         // 2. 赠送鲜花给貂蝉 (id: 1)
         $flower = $this->request('beauty', 'give_flower', ['id' => 1]);

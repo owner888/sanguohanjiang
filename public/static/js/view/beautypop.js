@@ -771,6 +771,7 @@
         // 构建普通技能
         buildSkill: function (skill) {
             
+            skill = skill || [];
             this.skillInfo = skill;
             var itemDom = this.skillDom.find('.common_skill_item');
             var groupDom = this.skillDom.find('.common_skill_group');

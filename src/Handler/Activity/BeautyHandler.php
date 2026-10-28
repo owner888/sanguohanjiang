@@ -58,6 +58,10 @@ final class BeautyHandler
     {
         $uid = MemberHandler::resolveUid($ctx);
         $userBeauties = self::getBeautyData($uid);
+        $beautyId = (int)($ctx->input('beauty_id', $ctx->input('bid', 1)));
+        if (!isset(self::BEAUTIES[$beautyId])) {
+            $beautyId = 1;
+        }
 
         $list = [];
         $activeList = [];
@@ -101,11 +105,14 @@ final class BeautyHandler
             'lock_msg' => 1,
         ];
 
+        $curUserB = $userBeauties[$beautyId] ?? ['level' => 1, 'intimacy' => 0];
+        $curLvl = (int)$curUserB['level'];
+
         $beautyInfo = [
             'info' => [
-                'beauty_id' => 1,
+                'beauty_id' => $beautyId,
                 'beauty_quality' => 3,
-                'beauty_level' => 1,
+                'beauty_level' => $curLvl,
                 'beauty_active' => 1,
                 'skill_cd' => 0,
                 'is_active' => 1,
@@ -167,6 +174,14 @@ final class BeautyHandler
             'total_beauties' => count($list),
             'message' => 'ok',
         ];
+    }
+
+    /**
+     * 获取指定美人信息: c=beauty&m=get_beauty_info
+     */
+    public static function get_beauty_info(Context $ctx): array
+    {
+        return self::index($ctx);
     }
 
     /**
