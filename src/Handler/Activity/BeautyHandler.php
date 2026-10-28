@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 use OmniPHP\WebSocket\Broadcaster;
 
+/**
+ * 铜雀台绝色佳人、红颜技能与后宫互动处理器 (DDD Activity Domain)
+ */
 final class BeautyHandler
 {
     /**
@@ -90,6 +92,15 @@ final class BeautyHandler
             ];
         }
 
+        $specialSkill = [
+            'id' => 13,
+            'skill_name' => '天香红颜',
+            'num' => 50000,
+            'allnum' => 50000,
+            'lock' => 1,
+            'lock_msg' => 1,
+        ];
+
         $beautyInfo = [
             'info' => [
                 'beauty_id' => 1,
@@ -143,24 +154,103 @@ final class BeautyHandler
                 'rose' => 100,
                 'diamond' => 50,
             ],
-            'special_skill' => [
-                'id' => 13,
-                'skill_name' => '天香红颜',
-                'num' => 50000,
-                'allnum' => 50000,
-                'lock' => 1,
-                'lock_msg' => 1,
-            ],
+            'special_skill' => $specialSkill,
         ];
 
         return [
             'status' => 1,
             'beauty_info' => $beautyInfo,
+            'special_skill' => $specialSkill,
             'say' => '主公，妾身这厢有礼了。',
             // 向下兼容保留原字段
             'list' => $list,
             'total_beauties' => count($list),
             'message' => 'ok',
+        ];
+    }
+
+    /**
+     * 美人休息: c=beauty&m=rest_beauty
+     */
+    public static function rest_beauty(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->first();
+
+        $specialSkill = [
+            'id' => 13,
+            'skill_name' => '天香红颜',
+            'num' => 50000,
+            'allnum' => 50000,
+            'lock' => 1,
+            'lock_msg' => 1,
+        ];
+
+        return [
+            'status' => 1,
+            'wakeup_num' => 0,
+            'say' => '妾身暂且歇息，主公得闲常来看看妾身。',
+            'special_skill' => $specialSkill,
+            'all_gold' => (int)($member['gold'] ?? 0),
+            'all_silver' => (int)($member['silver'] ?? 0),
+            'message' => '美人已安置歇息',
+        ];
+    }
+
+    /**
+     * 激活美人: c=beauty&m=wakeup_beauty
+     */
+    public static function wakeup_beauty(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->first();
+
+        $specialSkill = [
+            'id' => 13,
+            'skill_name' => '天香红颜',
+            'num' => 50000,
+            'allnum' => 50000,
+            'lock' => 1,
+            'lock_msg' => 1,
+        ];
+
+        return [
+            'status' => 1,
+            'wakeup_num' => 1,
+            'say' => '主公唤妾身何事？妾身自当全力以赴！',
+            'special_skill' => $specialSkill,
+            'all_gold' => (int)($member['gold'] ?? 0),
+            'all_silver' => (int)($member['silver'] ?? 0),
+            'message' => '美人已随驾侍奉',
+        ];
+    }
+
+    /**
+     * 领取特殊技能奖励: c=beauty&m=action_special_reward
+     */
+    public static function action_special_reward(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $rewardSilver = 50000;
+        MemberHandler::addCurrency($uid, silver: $rewardSilver);
+
+        $member = DB::table('member')->where('uid', $uid)->first();
+
+        $specialSkill = [
+            'id' => 13,
+            'skill_name' => '天香红颜',
+            'num' => 0,
+            'allnum' => 50000,
+            'lock' => 1,
+            'lock_msg' => 1,
+        ];
+
+        return [
+            'status' => 1,
+            'silver' => $rewardSilver,
+            'all_silver' => (int)($member['silver'] ?? 0),
+            'special_skill' => $specialSkill,
+            'message' => "成功领取美人红颜恩赐：银两 {$rewardSilver}！",
         ];
     }
 
@@ -217,6 +307,15 @@ final class BeautyHandler
             ]);
         }
 
+        $specialSkill = [
+            'id' => 13,
+            'skill_name' => '天香红颜',
+            'num' => 50000,
+            'allnum' => 50000,
+            'lock' => 1,
+            'lock_msg' => 1,
+        ];
+
         return [
             'status' => 1,
             'bid' => $bid,
@@ -225,6 +324,7 @@ final class BeautyHandler
             'intimacy' => $newIntimacy,
             'leveled_up' => $leveledUp ? 1 : 0,
             'silver' => $newSilver,
+            'special_skill' => $specialSkill,
             'message' => "成功向【{$beautyName}】赠送一束娇艳玫瑰！亲密度 +20！" . ($leveledUp ? " 绝色美人等级突破至 {$curLvl} 级！" : ''),
         ];
     }
@@ -256,7 +356,7 @@ final class BeautyHandler
         $curLvl = (int)$userB['level'];
 
         $leveledUp = false;
-        while ($newIntimacy >= $curLvl * 100) {
+        if ($newIntimacy >= $curLvl * 100) {
             $newIntimacy -= $curLvl * 100;
             $curLvl++;
             $leveledUp = true;
@@ -273,6 +373,22 @@ final class BeautyHandler
         Redis::del('player:' . $uid);
 
         $beautyName = self::BEAUTIES[$bid]['name'];
+        if ($leveledUp) {
+            $pName = $member['nickname'] ?? ('主公' . $uid);
+            Broadcaster::broadcast('marquee', [
+                'content' => "国色天香！主公【{$pName}】赏赐珠宝博得佳人【{$beautyName}】倾城一笑，等级突破至 {$curLvl} 级！",
+                'type' => 'system_broadcast',
+            ]);
+        }
+
+        $specialSkill = [
+            'id' => 13,
+            'skill_name' => '天香红颜',
+            'num' => 50000,
+            'allnum' => 50000,
+            'lock' => 1,
+            'lock_msg' => 1,
+        ];
 
         return [
             'status' => 1,
@@ -282,7 +398,8 @@ final class BeautyHandler
             'intimacy' => $newIntimacy,
             'leveled_up' => $leveledUp ? 1 : 0,
             'gold' => $newGold,
-            'message' => "赐予【{$beautyName}】夜明珠美玉！亲密度 +100！" . ($leveledUp ? " 绝色美人等级突破至 {$curLvl} 级！" : ''),
+            'special_skill' => $specialSkill,
+            'message' => "珠宝赏赐成功！【{$beautyName}】芳心暗许，亲密度暴增 100 点！",
         ];
     }
 }
