@@ -505,19 +505,52 @@ final class BeautyHandler
 
         $member = DB::table('member')->where('uid', $uid)->first();
 
+        $specialSkill = [
+            'id' => 13,
+            'skill_name' => '天香红颜',
+            'num' => 50000,
+            'allnum' => 50000,
+            'lock' => 1,
+            'lock_msg' => 1,
+        ];
+
+        $happy = [
+            'quality' => 1,
+            'ratio' => 30,
+            'skill' => 5,
+            'rose' => 100,
+            'diamond' => 50,
+        ];
+
+        $rewards = [
+            [
+                'type' => 2, // 银币
+                'num' => $rewardSilver,
+            ],
+            [
+                'type' => 31, // 玫瑰花
+                'num' => 2,
+            ],
+        ];
+
         return [
             'status' => 1,
+            'lastnum' => 2,
+            'cd_time' => 0,
+            'diamond' => 50,
+            'gold' => (int)($member['gold'] ?? 0),
+            'silver' => (int)($member['silver'] ?? 0),
+            'happy' => $happy,
+            'special_skill' => $specialSkill,
+            'reward' => $rewards,
+            'say' => '主公如此关怀备至，妾身心满意足。',
+            // 向下兼容保留原字段
             'greeting' => 2,
             'close' => 2,
             'love' => 2,
             'g_dateline' => 0,
             'all_silver' => (int)($member['silver'] ?? 0),
             'all_gold' => (int)($member['gold'] ?? 0),
-            'reward' => [
-                'silver' => $rewardSilver,
-                'rose' => 2,
-            ],
-            'say' => '主公如此关怀备至，妾身心满意足。',
             'message' => '互动完成！',
         ];
     }

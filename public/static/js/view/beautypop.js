@@ -1209,6 +1209,10 @@
         interactRewardDown: function (data, type) {
             
             var that = this;
+            data = data || {};
+            data.happy = data.happy || { rose: that.roseNum || 100, diamond: that.diamondNum || 50, ratio: that.favourPoint || 20, quality: 1, skill: 5 };
+            data.special_skill = data.special_skill || { id: 13, num: 0, skill_name: '天香绝技', lock: 1 };
+            data.reward = $.isArray(data.reward) ? data.reward : [];
 
             player.updateinfo({
                 'gold': data.gold,

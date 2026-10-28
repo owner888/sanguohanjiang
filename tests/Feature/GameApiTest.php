@@ -1028,6 +1028,15 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $actIdx['status']);
         $this->assertGreaterThan(0, $actIdx['greeting']);
         $this->assertGreaterThan(0, $actIdx['spend_greet']);
+
+        // 6. 执行美人互动 (问候)
+        $actAction = $this->request('beauty', 'active_action', ['id' => 1, 'type' => 1]);
+        $this->assertSame(1, $actAction['status']);
+        $this->assertArrayHasKey('happy', $actAction);
+        $this->assertGreaterThan(0, $actAction['happy']['rose']);
+        $this->assertArrayHasKey('special_skill', $actAction);
+        $this->assertArrayHasKey('reward', $actAction);
+        $this->assertSame(2, $actAction['lastnum']);
     }
 
     public function testMountSystem(): void
