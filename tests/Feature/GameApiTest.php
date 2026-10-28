@@ -341,6 +341,11 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $res['status']);
         $this->assertSame(100, $res['rate']);
         $this->assertNotEmpty($res['list']);
+        $this->assertArrayHasKey('info', $res);
+        $this->assertArrayHasKey('info', $res['info']);
+        $this->assertGreaterThan(0, $res['info']['info']['quality']);
+        $this->assertArrayHasKey('rule', $res['info']);
+        $this->assertArrayHasKey('cd', $res['info']);
 
         $firstEquip = $res['list'][1];
         $eid = (int)$firstEquip['id'];

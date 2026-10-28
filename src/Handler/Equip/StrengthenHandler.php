@@ -6,10 +6,9 @@ namespace Hanjiang\Handler\Equip;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
-
-use OmniPHP\Http\Context;
-use OmniPHP\Database\DB;
 use OmniPHP\Cache\Redis;
+use OmniPHP\Database\DB;
+use OmniPHP\Http\Context;
 
 final class StrengthenHandler
 {
@@ -71,12 +70,43 @@ final class StrengthenHandler
             $idx++;
         }
 
+        $firstItem = $list[1] ?? [];
+        $powerup = ($firstItem['bonus']['attack'] ?? 0) ?: (($firstItem['bonus']['defense'] ?? 0) ?: ($firstItem['bonus']['hp'] ?? 50));
+        $firstDetail = [
+            'id' => $firstItem['id'] ?? 1,
+            'equipid' => $firstItem['equipid'] ?? 101,
+            'name' => $firstItem['name'] ?? '青铜剑',
+            'type' => $firstItem['type'] ?? 1,
+            'quality' => $firstItem['quality'] ?? 1,
+            'needlevel' => 1,
+            'level' => $firstItem['level'] ?? 1,
+            'power' => 50,
+            'powerup' => $powerup,
+            'gid' => $firstItem['gid'] ?? 0,
+            'gidname' => $firstItem['generalname'] ?? '',
+        ];
+
+        $infoObj = [
+            'info' => $firstDetail,
+            'rule' => [
+                'rate' => 100,
+                'silver' => $firstItem['cost_silver'] ?? 150,
+                'gold' => 0,
+            ],
+            'cd' => [
+                'status' => 0,
+                'cd' => 0,
+            ],
+            // 向下兼容
+            'cost_silver' => $firstItem['cost_silver'] ?? 150,
+        ];
+
         return [
             'status' => 1,
             'rate' => 100, // 强化成功率 100%
             'cd' => 0,
             'list' => $list,
-            'info' => $list[1] ?? [],
+            'info' => $infoObj,
             'message' => 'ok',
         ];
     }
@@ -119,23 +149,14 @@ final class StrengthenHandler
         $newLevel = $curLevel + 1;
         $remainSilver = max(0, (int)$member['silver'] - $costSilver);
 
-        // 升级装备
         DB::table('equipment')->where('id', $eid)->update(['level' => $newLevel]);
-
         Redis::del('player:' . $uid);
-
-        $nickname = $member['nickname'] ?? ('主公' . $uid);
-        \OmniPHP\WebSocket\Broadcaster::broadcast('marquee', [
-            'content' => "神工现世！主公【{$nickname}】成功将【{$equip['name']}】强化至 +{$newLevel}！",
-            'type' => 'system_broadcast',
-        ]);
 
         $newBonus = GeneralHandler::calculateEquipBonus(array_merge($equip, ['level' => $newLevel]));
 
         return [
             'status' => 1,
             'message' => '强化成功',
-            'id' => $eid,
             'level' => $newLevel,
             'cost_silver' => $costSilver,
             'silver' => $remainSilver,
@@ -165,18 +186,40 @@ final class StrengthenHandler
 
         $curLevel = max(1, (int)$equip['level']);
         $costSilver = $curLevel * 150;
+        $curBonus = GeneralHandler::calculateEquipBonus($equip);
+        $powerup = ($curBonus['attack'] ?? 0) ?: (($curBonus['defense'] ?? 0) ?: ($curBonus['hp'] ?? 50));
+
+        $detail = [
+            'id' => $eid,
+            'equipid' => (int)$equip['equipid'],
+            'name' => $equip['name'],
+            'type' => (int)$equip['type'],
+            'quality' => (int)$equip['quality'],
+            'needlevel' => 1,
+            'level' => $curLevel,
+            'power' => 50,
+            'powerup' => $powerup,
+            'gid' => (int)$equip['generalid'],
+            'gidname' => '',
+            'cost_silver' => $costSilver,
+            'rate' => 100,
+            'bonus' => $curBonus,
+            'next_bonus' => GeneralHandler::calculateEquipBonus(array_merge($equip, ['level' => $curLevel + 1])),
+        ];
 
         return [
             'status' => 1,
-            'info' => [
-                'id' => $eid,
-                'name' => $equip['name'],
-                'level' => $curLevel,
-                'cost_silver' => $costSilver,
+            'info' => $detail,
+            'rule' => [
                 'rate' => 100,
-                'bonus' => GeneralHandler::calculateEquipBonus($equip),
-                'next_bonus' => GeneralHandler::calculateEquipBonus(array_merge($equip, ['level' => $curLevel + 1])),
+                'silver' => $costSilver,
+                'gold' => 0,
             ],
+            'cd' => [
+                'status' => 0,
+                'cd' => 0,
+            ],
+            'message' => 'ok',
         ];
     }
 
@@ -187,7 +230,7 @@ final class StrengthenHandler
     {
         return [
             'status' => 1,
-            'message' => 'CD已清除',
+            'message' => '冷却已清除',
         ];
     }
 }

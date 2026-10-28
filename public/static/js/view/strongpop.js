@@ -100,9 +100,13 @@
                     that.sid = rightdata.id;
                     $('#strongitem' + that.sid).addClass('selected');
                 }
+                res.info = res.info || {};
+                res.info.info = res.info.info || res.info;
+                res.info.rule = res.info.rule || { rate: 100, silver: 1500, gold: 0 };
+                res.info.cd = res.info.cd || { status: 0, cd: 0 };
                 that.fillRightInfo(res.info.info);
                 that.fillRightRule(res.info.rule);
-                xGame.updateCd('strong', res.info.cd.cd);
+                xGame.updateCd('strong', res.info.cd.cd || 0);
                 if (res.info.cd.status == 1) {
                     that.cd = true;
                     $('#strong_cd').addClass('cd');
@@ -345,17 +349,18 @@
 
         fillRightInfo: function(info) {
             var that = this;
-            that.e.find('.itembox').attr('class', 'itembox c_i_bj' + info.quality).children('span').css({
-                'background': 'url(' + xGame.itemurl(info.equipid) + ') 50% 50% no-repeat;'
+            info = info || { quality: 1, equipid: 1, name: '装备', type: 1, needlevel: 1, level: 1, powerup: 50, gid: 0, gidname: '' };
+            that.e.find('.itembox').attr('class', 'itembox c_i_bj' + (info.quality || 1)).children('span').css({
+                'background': 'url(' + xGame.itemurl(info.equipid || 1) + ') 50% 50% no-repeat;'
             });
-            that.e.find('#iteminfo_p').find('h4').text(info.name);
+            that.e.find('#iteminfo_p').find('h4').text(info.name || '');
             that.e.find('#iteminfo_p').find('h4').css({
-                'color': helper.getItemColor(info.quality)
+                'color': helper.getItemColor(info.quality || 1)
             });
-            that.e.find('#iteminfo_p').find('#type').html(helper.getItemVocation(parseInt(info.type)));
-            that.e.find('#iteminfo_p').find('#eq_lv').html(info.needlevel);
-            that.e.find('#iteminfo_p').find('#st_lv').html(info.level);
-            that.e.find('#iteminfo_p').find('#atk').html(helper.getItemPowerName(parseInt(info.type)) + '：<span id="atk_num">' + info.powerup + '</span>');
+            that.e.find('#iteminfo_p').find('#type').html(helper.getItemVocation(parseInt(info.type || 1)));
+            that.e.find('#iteminfo_p').find('#eq_lv').html(info.needlevel || 1);
+            that.e.find('#iteminfo_p').find('#st_lv').html(info.level || 1);
+            that.e.find('#iteminfo_p').find('#atk').html(helper.getItemPowerName(parseInt(info.type || 1)) + '：<span id="atk_num">' + (info.powerup || 0) + '</span>');
             if (info.gid > 0) {
                 that.e.find('#eq_name').html(info.gidname + lang('is_equip')).css('display', 'block');
             } else {
