@@ -177,15 +177,20 @@
 
             var that = this;
 
+            var obj = $('#practice_building');
             var cfg = {
-                x: 744,
-                y: 275
+                x: 45,
+                y: 55
             };
-            if(typeof isIPhone5 != 'undefined' && isIPhone5 == true) {
-                cfg.x = 813;
-                cfg.y = 300;
+            if (!obj || obj.length === 0) {
+                obj = $('#cityworld_page');
+                cfg.x = 744;
+                cfg.y = 275;
+                if(typeof isIPhone5 != 'undefined' && isIPhone5 == true) {
+                    cfg.x = 813;
+                    cfg.y = 300;
+                }
             }
-            var obj = $('#cityworld_page');
             that.movieclip1 = new movieClipClass({
                 "img": staticUrl + 'img/city/npc3.png',
                 "width": 103,
