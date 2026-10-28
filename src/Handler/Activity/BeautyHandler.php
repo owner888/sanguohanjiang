@@ -339,6 +339,9 @@ final class BeautyHandler
             'intimacy' => $newIntimacy,
             'leveled_up' => $leveledUp ? 1 : 0,
             'silver' => $newSilver,
+            'rose' => 100,
+            'skill_cd' => 86400,
+            'say' => "得蒙主公垂青赠妾身鲜花，妾身喜不自胜！",
             'special_skill' => $specialSkill,
             'message' => "成功向【{$beautyName}】赠送一束娇艳玫瑰！亲密度 +20！" . ($leveledUp ? " 绝色美人等级突破至 {$curLvl} 级！" : ''),
         ];
@@ -350,7 +353,7 @@ final class BeautyHandler
     public static function gift(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $bid = (int)($ctx->input('id', $ctx->input('bid', 1)));
+        $bid = (int)($ctx->input('id', $ctx->input('bid', $ctx->input('beauty_id', 1))));
 
         if (!isset(self::BEAUTIES[$bid])) {
             return ['status' => 0, 'message' => '无效的美人编号'];
@@ -405,15 +408,28 @@ final class BeautyHandler
             'lock_msg' => 1,
         ];
 
+        $happy = [
+            'quality' => min(5, max(1, (int)ceil($newIntimacy / 20))),
+            'ratio' => min(100, $newIntimacy),
+            'skill' => min(100, (int)floor($newIntimacy / 5)),
+            'rose' => 100,
+            'diamond' => 50,
+        ];
+
         return [
             'status' => 1,
+            'happy' => $happy,
+            'diamond_num' => 50,
+            'gold' => $newGold,
+            'all_gold' => $newGold,
+            'say' => "谢主公厚赠！妾身定当竭力侍奉主公！",
+            'special_skill' => $specialSkill,
+            // 向下兼容保留原字段
             'bid' => $bid,
             'name' => $beautyName,
             'level' => $curLvl,
             'intimacy' => $newIntimacy,
             'leveled_up' => $leveledUp ? 1 : 0,
-            'gold' => $newGold,
-            'special_skill' => $specialSkill,
             'message' => "珠宝赏赐成功！【{$beautyName}】芳心暗许，亲密度暴增 100 点！",
         ];
     }

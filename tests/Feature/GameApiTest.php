@@ -1014,6 +1014,8 @@ final class GameApiTest extends TestCase
         $gift = $this->request('beauty', 'gift', ['id' => 1]);
         $this->assertSame(1, $gift['status']);
         $this->assertSame(1, $gift['bid']);
+        $this->assertArrayHasKey('happy', $gift);
+        $this->assertGreaterThan(0, $gift['happy']['rose']);
         $this->assertGreaterThanOrEqual(1, $gift['level']);
     }
 

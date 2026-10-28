@@ -830,9 +830,10 @@
 
         // 构建好感度
         buildFavour: function (happy) {
-            this.roseNum = happy.rose;
-            this.diamondNum = happy.diamond;
-            this.favourPoint = happy.ratio;
+            happy = happy || { rose: 100, diamond: 50, ratio: 20, quality: 1, skill: 5 };
+            this.roseNum = happy.rose || 0;
+            this.diamondNum = happy.diamond || 0;
+            this.favourPoint = happy.ratio || 0;
             this.skillDom.find('#beauty_favour_level').css('background-image', 'url(' + staticUrl + 'img/pop/beautypop_favour_level' + happy.quality + '.png' + ')');
             this.skillDom.find('#beauty_addition_percent').html(happy.skill + '%');
             this.skillDom.find('#beauty_flower_num').html(this.roseNum);
