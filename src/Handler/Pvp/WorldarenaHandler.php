@@ -51,6 +51,14 @@ final class WorldarenaHandler
         $betInfo = [
             'bet_status' => 0,
             'times' => 0,
+            'support' => 0,
+            'silver' => 0,
+            'cd' => 0,
+            'nickname' => '',
+            'rank' => [
+                'before' => 0,
+                'after' => 0,
+            ],
         ];
 
         // 排名功勋奖励

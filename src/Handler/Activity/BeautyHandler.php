@@ -80,6 +80,16 @@ final class BeautyHandler
             ];
         }
 
+        $chips = [];
+        for ($c = 1; $c <= 6; $c++) {
+            $chips[] = [
+                'chip_id' => $c,
+                'chip_name' => "绝色碎片{$c}",
+                'chip' => 0,
+                'own' => 0,
+            ];
+        }
+
         $beautyInfo = [
             'info' => [
                 'beauty_id' => 1,
@@ -125,7 +135,7 @@ final class BeautyHandler
                     'next_value' => 50,
                 ],
             ],
-            'chip' => [],
+            'chip' => $chips,
             'happy' => [
                 'quality' => 1,
                 'ratio' => 20,

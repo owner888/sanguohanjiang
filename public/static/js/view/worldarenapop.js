@@ -155,12 +155,13 @@
         fillD2: function() {
             /*TODO*/
             if (this.bet != '') {
+                this.bet.rank = this.bet.rank || { before: 0, after: 0 };
                 if(typeof this.bet.nickname != 'undefined') {
                     this.enterDom.find('#worldarena_text').html(this.bet.nickname.length > 0 ? lang('warena_yazhu_target', [this.bet.nickname]) : lang('warena_yazhu_target', [lang('no')]));
                 } else {
-                    this.enterDom.find('#worldarena_text').html(lang('warena_your_supportor', [this.bet.support]));
+                    this.enterDom.find('#worldarena_text').html(lang('warena_your_supportor', [this.bet.support || 0]));
                 }
-                this.enterDom.find('#worldarena_reward').html(this.bet.silver);
+                this.enterDom.find('#worldarena_reward').html(this.bet.silver || 0);
                 if(this.bet.rank.before == 0 && this.bet.rank.after == 0) {
                     var str = lang('warena_no_rank');//无
                 } else {

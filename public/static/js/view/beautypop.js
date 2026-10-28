@@ -727,9 +727,16 @@
             var that = this;
             var dom = that.chipDom.children('.chip_item');
             var id = 0;
+            chip = chip || [];
 
             dom.each(function (i) {
                 var $this = $(this);
+                if (!chip[i]) {
+                    $this.removeClass('has');
+                    $this.find('.img').hide();
+                    $this.find('.no_chip').show();
+                    return;
+                }
                 id = chip[i].chip_id;
                 $this.attr('chipid', id);
 
