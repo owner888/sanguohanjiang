@@ -190,8 +190,18 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $res['info']['win']);
         $this->assertArrayHasKey('battle', $res);
         $this->assertSame('黄巾前哨', $res['battle']['rightteam'][2]['name']);
+        $this->assertCount(2, $res['battle']['rightteam'], '据点 1 应当包含 2 名守军对抗');
+        $this->assertArrayHasKey(2, $res['battle']['rightteam']);
+        $this->assertArrayHasKey(3, $res['battle']['rightteam']);
         $this->assertSame(3, $res['battle']['assess']);
         $this->assertNotEmpty($res['battle']['process']);
+
+        // 验证关底大 Boss 战役 (id: 5)：拥有 5 人满编军团对决
+        $bossRes = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 5]);
+        $this->assertSame(1, $bossRes['status']);
+        $this->assertCount(5, $bossRes['battle']['rightteam'], '关底决战应当拥有 5 人满编敌军军团');
+        $this->assertArrayHasKey(5, $bossRes['battle']['rightteam'], '5号中排统帅位必须为关底大Boss');
+        $this->assertSame('黄巾渠帅·张梁', $bossRes['battle']['rightteam'][5]['name']);
 
         // 验证重刷已打通的据点时，玩家全局最高进度单向锁定不回滚
         $memBefore = \OmniPHP\Database\DB::table('member')->where('uid', self::$uid)->first();
