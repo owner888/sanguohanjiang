@@ -69,9 +69,10 @@ final class MapHandler
         }
 
         $member = DB::table('member')->where('uid', $uid)->first();
+        $curLevel = max(1, (int)($member['missionlevel'] ?? 1));
         $curStage = max(1, (int)($member['missionstage'] ?? 1));
 
-        // 黄巾势力包含 4 个关卡 stage: 1大兴山 2青州 3广宗 4巨鹿
+        // 战役关卡场景 stage: 1~4
         $stages = [
             1 => ['stage' => 1, 'name' => '大兴山'],
             2 => ['stage' => 2, 'name' => '青州'],
@@ -82,8 +83,17 @@ final class MapHandler
         $list = [];
         $stageItems = [];
         foreach ($stages as $stgId => $stg) {
-            $isOpen = ($stgId <= $curStage);
-            $isCleared = ($stgId < $curStage);
+            if ($level < $curLevel) {
+                // 已彻底通关的旧势力：全部关卡全开全过
+                $isOpen = true;
+                $isCleared = true;
+            } elseif ($level === $curLevel) {
+                $isOpen = ($stgId <= $curStage);
+                $isCleared = ($stgId < $curStage);
+            } else {
+                $isOpen = false;
+                $isCleared = false;
+            }
 
             $item = [
                 'id' => $stgId,
@@ -96,10 +106,12 @@ final class MapHandler
             $stageItems[] = $item;
         }
 
+        $hasNext = ($level < $curLevel) || ($level === $curLevel && $curStage > 4);
+
         return [
             'status' => 1,
             'popo' => 0,
-            'next_status' => ($curStage >= 4) ? 1 : 0,
+            'next_status' => $hasNext ? 1 : 0,
             'list' => $list,
             'stages' => $stageItems, // 语义化关卡列表
         ];
@@ -247,26 +259,27 @@ final class MapHandler
         $stage = (int)($ctx->input('s', 1));
 
         $member = DB::table('member')->where('uid', $uid)->first();
-        $curStage = (int)($member['missionstage'] ?? 1);
-        $curMissionId = (int)($member['missionid'] ?? 1);
+        $curLevel = max(1, (int)($member['missionlevel'] ?? 1));
+        $curStage = max(1, (int)($member['missionstage'] ?? 1));
+        $curMissionId = max(1, (int)($member['missionid'] ?? 1));
 
         $list = [];
         $missionItems = [];
         for ($mid = 1; $mid <= 5; $mid++) {
             $cfg = self::getEnemyConfig($level, $stage, $mid);
 
-            // 计算据点解锁与通关状态
-            if ($stage < $curStage) {
-                // 已打通的大关卡：全部据点已击败并开放
+            // 计算据点解锁与通关状态 (结合 level, stage, mid 全维度单向防回退)
+            if ($level < $curLevel || ($level === $curLevel && $stage < $curStage)) {
+                // 已打通的旧关卡：全部据点已击败并开放自由扫荡
                 $openstatus = 1;
                 $status = 1;
-            } elseif ($stage === $curStage) {
+            } elseif ($level === $curLevel && $stage === $curStage) {
                 if ($mid < $curMissionId) {
                     $openstatus = 1;
                     $status = 1; // 已打通
                 } elseif ($mid === $curMissionId) {
                     $openstatus = 1;
-                    $status = 0; // 当前挑战据点
+                    $status = 0; // 当前挑战前线据点
                 } else {
                     $openstatus = 0; // 未解锁
                     $status = 0;
@@ -295,10 +308,12 @@ final class MapHandler
             $missionItems[] = $item;
         }
 
+        $hasNext = ($level < $curLevel) || ($level === $curLevel && $curStage > $stage);
+
         return [
             'status' => 1,
             'popo' => 0,
-            'next_status' => ($curStage > $stage) ? 1 : 0,
+            'next_status' => $hasNext ? 1 : 0,
             'list' => $list,
             'missions' => $missionItems, // 语义化据点列表
         ];
@@ -488,33 +503,48 @@ final class MapHandler
                 $levelUp = 1;
             }
 
-            $curMemberStage = (int)($member['missionstage'] ?? 1);
-            $curMemberMission = (int)($member['missionid'] ?? 1);
-            $maxStageForLevel = 4; // 黄巾势力共有 4 个大关卡场景
-            $nextLevel = $level;
+            $curMemberLevel = max(1, (int)($member['missionlevel'] ?? 1));
+            $curMemberStage = max(1, (int)($member['missionstage'] ?? 1));
+            $curMemberMission = max(1, (int)($member['missionid'] ?? 1));
+            $maxStageForLevel = 4; // 每个势力共有 4 个大关卡场景
+
+            $nextLevel = $curMemberLevel;
+            $nextStage = $curMemberStage;
+            $nextMissionId = $curMemberMission;
+            $nextSite = 3;
+            $openstatus = 0;
 
             if ($isWin) {
-                if ($isLastMission) {
-                    if ($stage >= $maxStageForLevel) {
-                        // 打败势力最终Boss，整势力彻底通关！开启下一新势力 (例如袁绍势力)
-                        $openstatus = 2;
-                        $nextLevel = $level + 1;
-                        $nextStage = 1;
-                        $nextMissionId = 1;
-                        $nextSite = 1; // 回到世界大地图展现新势力开启
+                // 只有当玩家挑战的是“当前最高前线据点”时，才单向推进全局历史最高进度！
+                $isFrontier = ($level === $curMemberLevel && $stage === $curMemberStage && $missionId === $curMemberMission);
+
+                if ($isFrontier) {
+                    if ($isLastMission) {
+                        if ($stage >= $maxStageForLevel) {
+                            // 打败势力最终Boss，整势力彻底通关！开启下一新势力
+                            $openstatus = 2;
+                            $nextLevel = $curMemberLevel + 1;
+                            $nextStage = 1;
+                            $nextMissionId = 1;
+                            $nextSite = 1; // 回到世界大地图展现新势力开启
+                        } else {
+                            // 打败守关Boss，当前小关卡通关！开启下一大关场景
+                            $openstatus = 1;
+                            $nextStage = $curMemberStage + 1;
+                            $nextMissionId = 1;
+                            $nextSite = 2; // 回到势力场景地图展现新开启关卡
+                        }
                     } else {
-                        // 打败守关Boss，当前小关卡通关！开启下一大关场景
-                        $openstatus = 1;
-                        $nextStage = $stage + 1;
-                        $nextMissionId = 1;
-                        $nextSite = 2; // 回到势力场景地图展现新开启关卡
+                        // 普通据点通关，推进到下一个据点
+                        $openstatus = 0;
+                        $nextStage = $curMemberStage;
+                        $nextMissionId = $missionId + 1;
+                        $nextSite = 3; // 保持在关卡小地图现场
                     }
                 } else {
-                    // 普通据点通关，推进到下一个据点
+                    // 回头重刷旧关卡：保持最高历史进度绝不倒退回滚！
                     $openstatus = 0;
-                    $nextStage = $stage;
-                    $nextMissionId = max($curMemberMission, $missionId + 1);
-                    $nextSite = 3; // 保持在关卡小地图现场
+                    $nextSite = 3;
                 }
 
                 // 推进玩家进度

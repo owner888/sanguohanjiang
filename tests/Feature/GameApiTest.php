@@ -187,6 +187,21 @@ final class GameApiTest extends TestCase
         $this->assertSame('黄巾前哨', $res['battle']['rightteam'][2]['name']);
         $this->assertSame(3, $res['battle']['assess']);
         $this->assertNotEmpty($res['battle']['process']);
+
+        // 验证重刷已打通的据点时，玩家全局最高进度单向锁定不回滚
+        $memBefore = \OmniPHP\Database\DB::table('member')->where('uid', self::$uid)->first();
+        $oldLvl = (int)$memBefore['missionlevel'];
+        $oldStg = (int)$memBefore['missionstage'];
+        $oldMis = (int)$memBefore['missionid'];
+
+        // 再次打一次 1-1-1 旧关卡
+        $repeat = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
+        $this->assertSame(1, $repeat['status']);
+
+        $memAfter = \OmniPHP\Database\DB::table('member')->where('uid', self::$uid)->first();
+        $this->assertGreaterThanOrEqual($oldLvl, (int)$memAfter['missionlevel'], '重刷旧关卡绝不可导致势力等级倒退');
+        $this->assertGreaterThanOrEqual($oldStg, (int)$memAfter['missionstage'], '重刷旧关卡绝不可导致大关场景倒退');
+        $this->assertGreaterThanOrEqual($oldMis, (int)$memAfter['missionid'], '重刷旧关卡绝不可导致据点编号倒退');
     }
 
     public function testGeneralSystem(): void
