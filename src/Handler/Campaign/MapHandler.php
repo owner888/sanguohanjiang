@@ -617,26 +617,97 @@ final class MapHandler
             Redis::del('player:' . $uid);
         }
 
+        $resultInfo = [
+            'win' => $isWin ? 1 : -1,
+            'exp' => 100,
+            'gexp' => 150,
+            'silver' => 500,
+            'gettype' => 3,
+            'getvalue' => 500,
+            'background' => 1,
+            'openstatus' => $openstatus,
+            'get_level' => $level, // 势力通关标记
+            'missionlevel' => $nextLevel,
+            'missionstage' => $nextStage,
+            'missionid' => $nextMissionId,
+            'itemname' => '青铜铠甲',
+            'levelup' => $levelUp,
+            'report' => 0,
+        ];
+
+        // 若主公升级，生成升级银两奖励与功能预告/功能开启数据包，驱动客户端弹出【主公升级】与【功能开启】弹窗
+        if ($levelUp === 1) {
+            $levelData = self::getLevelFuncData($curLevel, (int)($member['silver'] ?? 0) + 500);
+            $resultInfo['levelReward'] = $levelData['levelReward'];
+            $resultInfo['levelFunc'] = $levelData['levelFunc'];
+        }
+
         return [
             'status' => 1,
-            'info' => [
-                'win' => $isWin ? 1 : -1,
-                'exp' => 100,
-                'gexp' => 150,
-                'silver' => 500,
-                'gettype' => 3,
-                'getvalue' => 500,
-                'background' => 1,
-                'openstatus' => $openstatus,
-                'get_level' => $level, // 势力通关标记
-                'missionlevel' => $nextLevel,
-                'missionstage' => $nextStage,
-                'missionid' => $nextMissionId,
-                'itemname' => '青铜铠甲',
-                'levelup' => $levelUp,
-                'report' => 0,
-            ],
+            'info' => $resultInfo,
             'battle' => $battleReport,
+        ];
+    }
+
+    /**
+     * 生成主公升级奖励与下一阶段功能开启预告
+     *
+     * @return array{levelReward: array<string, int>, levelFunc: array<string, mixed>}
+     */
+    public static function getLevelFuncData(int $newLevel, int $allSilver): array
+    {
+        $silverReward = $newLevel * 5000;
+
+        // 功能开启等级里程碑配置
+        $milestones = [
+            11 => ['mark' => 'practice', 'name' => '校场训练', 'info' => '开启校场训练位，快速提升武将经验'],
+            16 => ['mark' => 'strong', 'name' => '强化', 'info' => '开启装备强化，可大幅提高装备效果'],
+            21 => ['mark' => 'levy', 'name' => '征税', 'info' => '开启主城征税，源源不断获得大笔银饷'],
+            26 => ['mark' => 'mine', 'name' => '演武榜', 'info' => '开启演武榜与银矿争夺，与天下豪杰切磋'],
+            31 => ['mark' => 'bar', 'name' => '酒馆', 'info' => '开启酒馆名将招募，招募三国名将'],
+            41 => ['mark' => 'foster', 'name' => '培养', 'info' => '开启武将洗髓培养，激发全军无限潜能'],
+            51 => ['mark' => 'country', 'name' => '国家', 'info' => '开启国家系统与海外商贸，效力魏蜀吴'],
+            60 => ['mark' => 'beauty', 'name' => '铜雀台', 'info' => '开启铜雀台佳人系统，红颜相伴全军增益'],
+            70 => ['mark' => 'mount', 'name' => '坐骑', 'info' => '开启坐骑马厩系统，乘骑三国绝世良驹'],
+            80 => ['mark' => 'gem', 'name' => '宝石', 'info' => '开启宝石镶嵌系统，属性神石战力激增'],
+        ];
+
+        // 查找当前等级是否正好解锁新功能
+        $openData = ['mark' => '', 'name' => '', 'info' => ''];
+        $isOpen = 0;
+        if (isset($milestones[$newLevel])) {
+            $isOpen = 1;
+            $openData = $milestones[$newLevel];
+        }
+
+        // 查找下一个即将解锁的新功能
+        $nextFunc = ['mark' => 'strong', 'name' => '强化', 'level' => 16, 'info' => '16级 开启装备强化功能'];
+        foreach ($milestones as $lvl => $cfg) {
+            if ($lvl > $newLevel) {
+                $nextFunc = [
+                    'mark' => $cfg['mark'],
+                    'name' => $cfg['name'],
+                    'level' => $lvl,
+                    'info' => "{$lvl}级 开启{$cfg['name']}功能",
+                ];
+                break;
+            }
+        }
+
+        $levelFunc = [
+            'all_silver' => $allSilver,
+            'func_mark' => $isOpen ? $openData['mark'] : $nextFunc['mark'],
+            'func_name' => $isOpen ? $openData['name'] : $nextFunc['name'],
+            'func_level' => $isOpen ? $newLevel : $nextFunc['level'],
+            'func_info' => $isOpen ? $openData['info'] : $nextFunc['info'],
+            'func_open' => $isOpen,
+            'imageid' => 0,
+            'open' => $openData,
+        ];
+
+        return [
+            'levelReward' => ['1' => $silverReward],
+            'levelFunc' => $levelFunc,
         ];
     }
 

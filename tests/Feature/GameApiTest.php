@@ -207,6 +207,15 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThanOrEqual($oldLvl, (int)$memAfter['missionlevel'], '重刷旧关卡绝不可导致势力等级倒退');
         $this->assertGreaterThanOrEqual($oldStg, (int)$memAfter['missionstage'], '重刷旧关卡绝不可导致大关场景倒退');
         $this->assertGreaterThanOrEqual($oldMis, (int)$memAfter['missionid'], '重刷旧关卡绝不可导致据点编号倒退');
+
+        // 验证主公升级时的奖励包与功能开启预告生成结构 (16级解锁装备强化)
+        $funcData = \Hanjiang\Handler\Campaign\MapHandler::getLevelFuncData(16, 50000);
+        $this->assertArrayHasKey('levelReward', $funcData);
+        $this->assertSame(80000, $funcData['levelReward']['1']);
+        $this->assertArrayHasKey('levelFunc', $funcData);
+        $this->assertSame(1, $funcData['levelFunc']['func_open']);
+        $this->assertSame('强化', $funcData['levelFunc']['func_name']);
+        $this->assertSame('strong', $funcData['levelFunc']['func_mark']);
     }
 
     public function testGeneralSystem(): void
