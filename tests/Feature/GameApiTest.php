@@ -145,6 +145,11 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $scenes['status']);
         $this->assertArrayHasKey('list', $scenes);
 
+        // 验证势力地图底部【下一势力】按钮状态 (在第 9 势力曹操势力时，下一势力第 10 势力刘备势力处于开放状态，next_status 必须为 1)
+        $caocaoScenes = $this->request('map', 'get_scene_list', ['l' => 9]);
+        $this->assertSame(1, $caocaoScenes['status']);
+        $this->assertSame(1, $caocaoScenes['next_status'], '曹操势力向右切换到刘备势力必须畅通可点击');
+
         $missions = $this->request('map', 'get_mission_list', ['l' => 1, 's' => 1]);
         $this->assertSame(1, $missions['status']);
         $this->assertArrayHasKey('list', $missions);

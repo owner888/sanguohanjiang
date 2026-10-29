@@ -106,7 +106,9 @@ final class MapHandler
             $stageItems[] = $item;
         }
 
-        $hasNext = ($level < $curLevel) || ($level === $curLevel && $curStage > 4);
+        $nextLevel = $level + 1;
+        $maxOpenedLevel = max(10, $curLevel);
+        $hasNext = ($nextLevel <= $maxOpenedLevel && $nextLevel <= 16);
 
         return [
             'status' => 1,
