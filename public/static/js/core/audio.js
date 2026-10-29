@@ -1,7 +1,7 @@
 (function() {
     gAudioClass = function() {
         this.musicstatus = true; //音乐开关
-        this.ready = false; ////是否准备好加载native music
+        this.ready = true; //是否准备好加载音频
         this.musicurl = {}; //音乐url列表
         this.nativemusic = {};
         this.current = null; //当前应播放的 bgm id（用于自动播放解锁后恢复）
@@ -11,59 +11,88 @@
 
         this.init();
     };
+
+    var resolveAudioUrl = function(name) {
+        var base = (typeof staticUrl != 'undefined' && staticUrl) ? staticUrl : 'static/';
+        if (base.charAt(base.length - 1) !== '/') {
+            base += '/';
+        }
+        return base + 'audio/' + name + '.mp3';
+    };
+
     gAudioClass.prototype = {
         init: function() {
-            if (localStorage['gAudiomusicstatus'] == 'false') {
+            if (localStorage['gAudiomusicstatus'] === 'false') {
                 this.musicstatus = false;
+            } else {
+                this.musicstatus = true;
             }
-            // cordova 原生壳走 Media，浏览器走 HTML5 Audio（原版只有 Media，H5 静音）
-            this.isNative = (typeof Media != 'undefined' && typeof cordova != 'undefined');
+
+            this.ready = true;
+            this.isNative = (typeof Media !== 'undefined' && typeof cordova !== 'undefined');
+
+            // 预先填充音乐 URL
+            for (var i = 0; i < this.musicfiles.length; i++) {
+                var mName = this.musicfiles[i];
+                this.musicurl[mName] = resolveAudioUrl(mName);
+            }
+
+            this.bindUserGestureUnlock();
         },
 
-        loadMusic: function() { //only fill url
-            if (this.musicstatus == false) {
-                return;
-            }
+        bindUserGestureUnlock: function() {
+            var self = this;
+            var unlock = function() {
+                if (self.musicstatus === true && self.current != null) {
+                    self.playbgm(self.current);
+                }
+            };
+
+            // 持续挂载用户触摸与点击交互监听，一旦产生手势即触发音频播放
+            document.addEventListener('touchstart', unlock, { passive: true });
+            document.addEventListener('touchend', unlock, { passive: true });
+            document.addEventListener('click', unlock, { passive: true });
+            document.addEventListener('keydown', unlock, { passive: true });
+        },
+
+        loadMusic: function() {
+            this.ready = true;
             for (var i = 0; i < this.musicfiles.length; i++) {
                 var musicname = this.musicfiles[i];
-                this.musicurl[musicname] = staticUrl + 'audio/' + musicname + '.mp3';
+                var url = resolveAudioUrl(musicname);
+                this.musicurl[musicname] = url;
+
                 if (this.isNative) {
-                    this.nativemusic[musicname] = new Media(this.musicurl[musicname],
-                    function() {},
-                    function() {
-                        console.log('native music error')
-                    });
-                } else {
-                    var au = new Audio(this.musicurl[musicname]);
-                    au.loop = true;
-                    au.preload = 'auto';
-                    this.nativemusic[musicname] = au;
-                }
-            }
-            //浏览器自动播放限制：首次用户交互后才能出声
-            if (!this.isNative) {
-                var self = this;
-                var unlock = function() {
-                    document.removeEventListener('touchend', unlock);
-                    document.removeEventListener('click', unlock);
-                    document.removeEventListener('keydown', unlock);
-                    if (self.musicstatus == true && self.current != null) {
-                        self.playbgm(self.current);
+                    if (!this.nativemusic[musicname]) {
+                        this.nativemusic[musicname] = new Media(url, function() {}, function(err) {
+                            console.log('native media error', err);
+                        });
                     }
-                };
-                document.addEventListener('touchend', unlock, false);
-                document.addEventListener('click', unlock, false);
-                document.addEventListener('keydown', unlock, false);
+                } else {
+                    if (!this.nativemusic[musicname]) {
+                        var au = new Audio(url);
+                        au.loop = true;
+                        au.preload = 'auto';
+                        this.nativemusic[musicname] = au;
+                    }
+                }
             }
         },
 
         settingmusic: function(status) {
-            this.musicstatus = status;
-            if (status == true) {
+            this.musicstatus = !!status;
+            this.ready = true;
+
+            if (this.musicstatus === true) {
                 localStorage['gAudiomusicstatus'] = 'true';
                 this.loadMusic();
-                this.playbgm('city_bgm');
-            } else { //停止所有音乐
+                // 优先恢复当前场景适用的背景音乐
+                var targetBgm = this.current || 'city_bgm';
+                if ($('#battleworld_page').length > 0 || (typeof battleWorld != 'undefined' && battleWorld && battleWorld.isshow)) {
+                    targetBgm = 'battle_bgm';
+                }
+                this.playbgm(targetBgm);
+            } else {
                 localStorage['gAudiomusicstatus'] = 'false';
                 this.stopMusic();
             }
@@ -72,13 +101,16 @@
         stopMusic: function() {
             for (var i in this.nativemusic) {
                 var m = this.nativemusic[i];
-                if (m == undefined || m == null) continue;
+                if (!m) continue;
+
                 if (this.isNative) {
-                    try { m.stop(); m.release(); } catch(e) {}
+                    try {
+                        m.stop();
+                        m.release();
+                    } catch(e) {}
                 } else {
                     try {
                         m.pause();
-                        m.muted = true;
                         m.currentTime = 0;
                     } catch(e) {}
                 }
@@ -88,73 +120,57 @@
 
         playbgm: function(audioid) {
             var self = this;
-            self.current = audioid; //记录意图，解锁/出错恢复时用
+            self.current = audioid;
 
             if (self.musicstatus !== true) {
                 self.stopMusic();
                 return;
             }
 
-            if (self.ready == true && self.musicstatus == true && self.musicurl[audioid] != null) {
-                //step 1 干掉其他的音乐
-                for (var i in self.nativemusic) {
-                    if (i != audioid && self.nativemusic[i] != undefined && self.nativemusic[i] != null) {
-                        if (self.isNative) {
-                            self.nativemusic[i].stop();
-                        } else {
-                            self.nativemusic[i].pause();
-                        }
+            self.ready = true;
+            var musicurl = self.musicurl[audioid] || resolveAudioUrl(audioid);
+            self.musicurl[audioid] = musicurl;
+
+            // 暂停并重置其他背景音轨
+            for (var i in self.nativemusic) {
+                if (i !== audioid && self.nativemusic[i]) {
+                    if (self.isNative) {
+                        try { self.nativemusic[i].stop(); } catch(e) {}
+                    } else {
+                        try { self.nativemusic[i].pause(); } catch(e) {}
                     }
                 }
-                var musicurl = self.musicurl[audioid];
-                if (self.isNative) {
-                    if (self.nativemusic[audioid] == undefined || self.nativemusic[audioid] == null) { //开始播
-                        self.nativemusic[audioid] = new Media(musicurl,
-                        function() {},
-                        function() {
-                            console.log('native music error:' + audioid)
-                        });
-                        self.nativemusic[audioid].play({
-                            playAudioWhenScreenIsLocked: false,
-                            numberOfLoops: "infinite"
-                        });
-                    } else { //重复播
-                        // 获取媒体播放到的位置 
-                        self.nativemusic[audioid].getCurrentPosition(
-                        // 获取成功后调用的回调函数 
-                        function(position) {
-                            if (position <= -1) { //重播
-                                self.nativemusic[audioid].play({
-                                    playAudioWhenScreenIsLocked: false,
-                                    numberOfLoops: "infinite"
-                                });
-                            }
-                        },
-                        // 发生错误后调用的回调函数 
-                        function(e) {
-                            console.log("Error getting pos=" + e);
-                        });
-                    }
-                } else { //浏览器 HTML5 Audio
-                    var au = self.nativemusic[audioid];
-                    if (au == undefined || au == null) {
-                        au = new Audio(musicurl);
-                        au.loop = true;
-                        au.preload = 'auto';
-                        self.nativemusic[audioid] = au;
-                    }
-                    au.muted = false;
-                    var p = au.play();
-                    if (p != undefined && p != null && p['catch'] != undefined) {
-                        p['catch'](function(e) {
-                            //自动播放被拦截：等首次交互后由 unlock 恢复
-                            console.log('browser bgm blocked, waiting for user gesture');
-                        });
-                    }
+            }
+
+            if (self.isNative) {
+                if (!self.nativemusic[audioid]) {
+                    self.nativemusic[audioid] = new Media(musicurl, function() {}, function(err) {
+                        console.log('native media error', err);
+                    });
+                }
+                self.nativemusic[audioid].play({
+                    playAudioWhenScreenIsLocked: false,
+                    numberOfLoops: "infinite"
+                });
+            } else {
+                var au = self.nativemusic[audioid];
+                if (!au) {
+                    au = new Audio(musicurl);
+                    au.loop = true;
+                    au.preload = 'auto';
+                    self.nativemusic[audioid] = au;
                 }
 
+                au.muted = false;
+                au.volume = 1.0;
+
+                var playPromise = au.play();
+                if (playPromise !== undefined && playPromise !== null && typeof playPromise.catch === 'function') {
+                    playPromise.catch(function(err) {
+                        console.log('browser audio waiting for user gesture', err);
+                    });
+                }
             }
         },
     };
-
 })();

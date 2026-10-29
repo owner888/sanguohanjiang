@@ -239,6 +239,7 @@
                         var nextStatus = !gAudio.musicstatus;
                         gAudio.settingmusic(nextStatus);
                         that.setMusicBtn(nextStatus);
+                        xGame.toast.show(nextStatus ? '已开启背景音乐' : '已关闭背景音乐');
                     }
                     return false;
                 });
