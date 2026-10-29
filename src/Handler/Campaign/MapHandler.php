@@ -88,13 +88,19 @@ final class MapHandler
         $curLevel = max(1, (int)($member['missionlevel'] ?? 1));
         $curStage = max(1, (int)($member['missionstage'] ?? 1));
 
-        // 战役关卡场景 stage: 1~4
-        $stages = [
-            1 => ['stage' => 1, 'name' => '大兴山'],
-            2 => ['stage' => 2, 'name' => '青州'],
-            3 => ['stage' => 3, 'name' => '广宗'],
-            4 => ['stage' => 4, 'name' => '巨鹿'],
+        // 战役关卡场景 stage: 1~4 (按势力 level 严格匹配史实关卡)
+        $stageNamesByLevel = [
+            1 => [1 => '曲阳', 2 => '广宗', 3 => '巨鹿', 4 => '濮阳'],
+            2 => [1 => '乌巢', 2 => '官渡', 3 => '壶关', 4 => '邺城'],
+            3 => [1 => '蓟县', 2 => '界桥', 3 => '北平', 4 => '代郡'],
+            4 => [1 => '虎牢关', 2 => '洛阳', 3 => '函谷关', 4 => '郿坞'],
         ];
+
+        $defaultNames = $stageNamesByLevel[$level] ?? [1 => '前哨营', 2 => '先锋寨', 3 => '要塞关', 4 => '主城'];
+        $stages = [];
+        for ($s = 1; $s <= 4; $s++) {
+            $stages[$s] = ['stage' => $s, 'name' => $defaultNames[$s] ?? "关卡{$s}"];
+        }
 
         $list = [];
         $stageItems = [];

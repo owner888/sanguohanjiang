@@ -379,19 +379,22 @@
                 var stageList = res.stages || (res.list ? Object.values(res.list) : []);
                 for (var s = 0; s < stageList.length; s++) {
                     var stageItem = stageList[s];
-                    if (!stageItem || stageItem.openstatus == 0) {
+                    if (!stageItem) {
                         continue;
                     }
                     var stageIdx = stageItem.stage;
-                    lastenemy = stageIdx;
-                    lastenemy_id = stageItem.id;
+                    if (stageItem.openstatus != 0 && stageItem.status == 0) {
+                        lastenemy = stageIdx;
+                        lastenemy_id = stageItem.id;
+                    }
                     //英雄集结和宋朝最后一个势力强制最后一个设置为null，为了没有箭头
                     if ((stageIdx == 73 || stageIdx == 80) && stageItem.status == 1) {
                         lastenemy = null;
                     }
                     if (shili_map_ini && shili_map_ini[stageIdx]) { //本地
                         nowstage = shili_map_ini[stageIdx];
-                        html += '<div id="guanqia' + nowstage.stage + '" class="btn guanqia pictype' + nowstage.type + ' guanqia' + nowstage.stage + '" style="left:' + getSLeft(nowstage.x) + 'px;top:' + getSTop(nowstage.y) + 'px" s="' + nowstage.stage + '">';
+                        var isLocked = (stageItem.openstatus == 0);
+                        html += '<div id="guanqia' + nowstage.stage + '" class="btn guanqia pictype' + nowstage.type + ' guanqia' + nowstage.stage + (isLocked ? ' close': '') + '" style="left:' + getSLeft(nowstage.x) + 'px;top:' + getSTop(nowstage.y) + 'px" s="' + nowstage.stage + '">';
                         html += '<div class="bg ' + (nowstage.reverse == 1 ? 'reverse': '') + '"></div>';
                         if (parseInt(player.info.missionlevel) <= 14) {
                             html += '<p style="background-image:url(' + that.getCityNameImage(player.info.missionlevel) + ');background-position-y:-' + ((nowstage.stage - 1) * 22) + 'px;"></p>';
@@ -423,7 +426,7 @@
                         mapWorld.loadGuanqiaMap(player.info.missionlevel, shili.attr('s'));
                         shili = null;
                     } else {
-                        alert('当前未开启！');
+                        xGame.toast.show('请先击败前置关卡敌军！');
                     }
                     that = null;
                 });

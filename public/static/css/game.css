@@ -2413,6 +2413,13 @@ background:url(../img/map/flag_done.png) 0 0 no-repeat;
 position:absolute;
 z-index:20;
 }
+#map_wrap > .shilimap > .guanqia.close {
+opacity: 0.6;
+filter: grayscale(60%);
+}
+#map_wrap > .shilimap > .guanqia.close .bg {
+filter: brightness(0.7);
+}
 #map_wrap > .shilimap > .guanqia > .bg {
 position:absolute;
 left:0;
