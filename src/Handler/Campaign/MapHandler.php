@@ -192,23 +192,49 @@ final class MapHandler
             ],
         ];
 
-        if (isset($roster[$level][$stage][$missionId])) {
-            return $roster[$level][$stage][$missionId];
+        $item = $roster[$level][$stage][$missionId] ?? null;
+        if ($item === null) {
+            $titles = [1 => '前锋营', 2 => '精锐卫', 3 => '统领', 4 => '主将', 5 => '大帅'];
+            $title = $titles[$missionId] ?? "守军{$missionId}";
+            $item = [
+                'name' => "第{$level}章·{$title}",
+                'type' => ($missionId >= 4 ? 3 : ($missionId >= 3 ? 2 : 1)),
+                'head' => $missionId,
+                'color' => min(3, max(1, $missionId - 1)),
+                'image' => (string)(20 + $missionId),
+                'star' => min(5, max(1, $missionId)),
+                'x' => 180 + ($missionId - 1) * 140,
+                'y' => 440 - ($missionId - 1) * 75,
+            ];
         }
 
-        // 自适应推导
-        $titles = [1 => '前锋营', 2 => '精锐卫', 3 => '统领', 4 => '主将', 5 => '大帅'];
-        $title = $titles[$missionId] ?? "守军{$missionId}";
-        return [
-            'name' => "第{$level}章·{$title}",
-            'type' => ($missionId >= 4 ? 3 : ($missionId >= 3 ? 2 : 1)),
-            'head' => $missionId,
-            'color' => min(3, max(1, $missionId - 1)),
-            'image' => (string)(20 + $missionId),
-            'star' => min(5, max(1, $missionId)),
-            'x' => 180 + ($missionId - 1) * 140,
-            'y' => 440 - ($missionId - 1) * 75,
-        ];
+        // 精准统一等级与三维数值
+        $baseLevel = ($level - 1) * 20 + ($stage - 1) * 5 + $missionId * 2;
+        $type = (int)($item['type'] ?? 1);
+
+        if ($type === 3) { // 关卡终极大Boss
+            $hp = 1800 + $baseLevel * 100;
+            $atk = 220 + $baseLevel * 18;
+            $def = 100 + $baseLevel * 10;
+        } elseif ($type === 2) { // 关卡精英守将
+            $hp = 1200 + $baseLevel * 80;
+            $atk = 180 + $baseLevel * 15;
+            $def = 80 + $baseLevel * 8;
+        } else { // 前哨小怪
+            $hp = 800 + $baseLevel * 60;
+            $atk = 140 + $baseLevel * 12;
+            $def = 60 + $baseLevel * 6;
+        }
+
+        $power = (int)round($hp * 0.15 + $atk * 2.0 + $def * 1.5);
+
+        return array_merge($item, [
+            'level' => $baseLevel,
+            'hp' => $hp,
+            'atk' => $atk,
+            'def' => $def,
+            'power' => $power,
+        ]);
     }
 
     /**
@@ -263,7 +289,7 @@ final class MapHandler
                 'status' => $status,
                 'maxtimes' => 5,
                 'coin' => 0,
-                'power' => 100 * $mid,
+                'power' => $cfg['power'],
             ];
             $list[(string)$mid] = $item;
             $missionItems[] = $item;
@@ -298,7 +324,8 @@ final class MapHandler
                 'missionlevel' => $level,
                 'missionstage' => $stage,
                 'missionid' => $id,
-                'level' => max(1, $id * 2),
+                'level' => $enemyCfg['level'],
+                'power' => $enemyCfg['power'],
                 'name' => $enemyName,
                 'type' => $type,
                 'image' => (int)($enemyCfg['image'] ?? 0),
@@ -306,10 +333,10 @@ final class MapHandler
                 'generalid' => 0,
                 'background' => 1,
                 'first' => 1,
-                'firstkillexp' => 150,
-                'exp' => 100,
-                'gfirstkillexp' => 200,
-                'gexp' => 150,
+                'firstkillexp' => 150 + $enemyCfg['level'] * 20,
+                'exp' => 100 + $enemyCfg['level'] * 10,
+                'gfirstkillexp' => 200 + $enemyCfg['level'] * 25,
+                'gexp' => 150 + $enemyCfg['level'] * 15,
                 'maxtimes' => 5,
                 'nowmaxtimes' => 5,
                 'coin' => 0,
