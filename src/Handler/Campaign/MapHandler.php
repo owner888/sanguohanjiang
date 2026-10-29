@@ -21,39 +21,55 @@ final class MapHandler
 {
     /**
      * 世界十三州大地图主信息: c=map&m=index
-     * 采用强类型 Faction / FactionStatus 领域枚举，同时输出语义化 factions 列表与向下兼容键
+     * 采用强类型 Faction / FactionStatus 领域枚举，依据玩家实际历史推图进度真实计算开启与通关状态
      */
     public static function index(Context $ctx): array
     {
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->first();
+        $curLevel = max(1, (int)($member['missionlevel'] ?? 1));
+
         $factions = [];
         $res = [
             'status' => 1,
             'open' => 1,
-            'enter_world' => 1,
+            'enter_world' => $curLevel,
             'next_status' => 0,
             'first_enter' => 0,
         ];
 
-        // 默认开启前 10 个主流战役势力
-        foreach (array_slice(Faction::cases(), 0, 10) as $faction) {
+        foreach (Faction::cases() as $faction) {
+            $fid = $faction->value;
+
+            if ($fid < $curLevel) {
+                // 已彻底通关的旧势力
+                $status = 1;
+                $passStatus = 1;
+            } elseif ($fid === $curLevel) {
+                // 当前正在攻坚的前线势力
+                $status = 1;
+                $passStatus = 0;
+            } else {
+                // 尚未攻克解锁的未来势力
+                $status = 0;
+                $passStatus = 0;
+            }
+
             $item = [
-                'id' => $faction->value,
+                'id' => $fid,
                 'code' => $faction->code(),
                 'name' => $faction->label(),
-                'status' => FactionStatus::Active->value,
-                'status_name' => FactionStatus::Active->label(),
-                'pass_status' => 0,
+                'status' => $status,
+                'status_name' => ($status === 1) ? FactionStatus::Active->label() : FactionStatus::Locked->label(),
+                'pass_status' => $passStatus,
                 'rewardnum' => 0,
             ];
 
             $factions[] = $item;
-            // 保持对老版数字键的向后兼容支持
-            $res[(string)$faction->value] = $item;
+            $res[(string)$fid] = $item;
         }
 
-        // 语义化标准输出
         $res['factions'] = $factions;
-
         return $res;
     }
 
@@ -467,20 +483,26 @@ final class MapHandler
         ];
 
         // 5. 战斗胜利关卡推进、升级与经验结算
-        $levelUp = 0;
         $isWin = $simResult['win'];
         $isLastMission = ($missionId >= 5); // 5号Boss是本关最终守关将领
         $nextStage = $stage;
         $nextMissionId = $missionId;
         $openstatus = 0;
+        $levelUp = 0;
+
+        $gainExp = 100 + ($enemyCfg['level'] ?? 1) * 10;
+        $gainGexp = 150 + ($enemyCfg['level'] ?? 1) * 15;
 
         if ($member !== null) {
-            $newExp = (int)$member['exp'] + 100;
-            $curLevel = (int)$member['level'];
-            if ($newExp >= (int)$member['maxexp']) {
+            $curLevel = max(1, (int)$member['level']);
+            $newExp = (int)$member['exp'] + ($isWin ? $gainExp : (int)round($gainExp * 0.2));
+            $reqExp = GeneralHandler::getLevelUpExp($curLevel);
+
+            while ($newExp >= $reqExp && $curLevel < 120) {
+                $newExp -= $reqExp;
                 $curLevel++;
-                $newExp = 0;
                 $levelUp = 1;
+                $reqExp = GeneralHandler::getLevelUpExp($curLevel);
             }
 
             $curMemberLevel = max(1, (int)($member['missionlevel'] ?? 1));
@@ -532,6 +554,7 @@ final class MapHandler
                     'act' => max(0, (int)$member['act'] - 1),
                     'silver' => (int)$member['silver'] + 500,
                     'exp' => $newExp,
+                    'maxexp' => $reqExp,
                     'level' => $curLevel,
                     'missionsite' => $nextSite,
                     'missionlevel' => $nextLevel,
@@ -597,8 +620,8 @@ final class MapHandler
 
         $resultInfo = [
             'win' => $isWin ? 1 : -1,
-            'exp' => 100,
-            'gexp' => 150,
+            'exp' => $gainExp,
+            'gexp' => $gainGexp,
             'silver' => 500,
             'gettype' => 3,
             'getvalue' => 500,
