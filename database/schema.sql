@@ -18,6 +18,7 @@ CREATE TABLE `zc_sanguo_user` (
     `channel` INT NOT NULL DEFAULT 106,
     `is_guest` TINYINT NOT NULL DEFAULT 0,
     `mac` VARCHAR(64) NOT NULL DEFAULT '',
+    `guest_key` CHAR(64) NOT NULL DEFAULT '' COMMENT '游客登录密钥 sha256（明文只在注册时返回一次）',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL,
@@ -36,7 +37,7 @@ CREATE TABLE `zc_sanguo_member` (
     `sex` TINYINT NOT NULL DEFAULT 1,
     `gender` TINYINT NOT NULL DEFAULT 0,
     `roleid` TINYINT NOT NULL DEFAULT 1,
-    `country` TINYINT NOT NULL DEFAULT 1 COMMENT '1魏 2蜀 3吴',
+    `country` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家id(zc_sanguo_country.id，0 未加入)',
     `level` INT UNSIGNED NOT NULL DEFAULT 1,
     `exp` BIGINT UNSIGNED NOT NULL DEFAULT 0,
     `maxexp` BIGINT UNSIGNED NOT NULL DEFAULT 100,
@@ -80,6 +81,7 @@ CREATE TABLE `zc_sanguo_member_field` (
     `gift` INT NOT NULL DEFAULT 0,
     `race` TINYINT NOT NULL DEFAULT 0,
     `race_dateline` INT UNSIGNED NOT NULL DEFAULT 0,
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '每日第一次游戏时间（每日计划任务判断依据）',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL
@@ -312,5 +314,157 @@ INSERT INTO `zc_sanguo_mission_newreward` (`id`, `levelid`, `missid`, `mname`, `
 (11, 2, 5, '洛阳', 2, '银两', 20000, 0),
 (12, 2, 6, '董卓', 1, '元宝', 300, 0)
 ON DUPLICATE KEY UPDATE `mname` = VALUES(`mname`);
+
+-- -------------------------------------------------------------
+-- 国家（玩家军团）系统 (对齐原版 zc_sanguo_country 等表)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_country`;
+CREATE TABLE `zc_sanguo_country` (
+    `id` SMALLINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '国家id',
+    `name` VARCHAR(21) NOT NULL COMMENT '名称',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '等级',
+    `member` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '成员个数',
+    `uid` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国王uid',
+    `nickname` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '国王昵称',
+    `exp` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当前经验',
+    `levelupexp` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '升级所需经验',
+    `allexp` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '总经验',
+    `city` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家占领都城id',
+    `city_status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '都城状态（1已占领，2已请战，3有挑战国家）',
+    `military` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家军令',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    KEY `idx_name` (`name`),
+    KEY `idx_rank` (`deleted_at`, `level`, `exp`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家表';
+
+DROP TABLE IF EXISTS `zc_sanguo_member_country`;
+CREATE TABLE `zc_sanguo_member_country` (
+    `uid` BIGINT UNSIGNED NOT NULL PRIMARY KEY COMMENT '玩家uid',
+    `nickname` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '昵称',
+    `country` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家id',
+    `job` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '职位',
+    `contribute` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '今日贡献',
+    `allcontribute` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '总贡献',
+    `worshipdateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '每日祭祀时间',
+    `eid` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '谏言的列表',
+    `support` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '支持谏言时间（判断首次支持免费）',
+    `refresh` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '刷新谏言列表（判断首次刷新免费）',
+    `effect` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '都城占领效果更新时间',
+    `effect_type` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家都城奖励类型',
+    `city` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '参加国战时的城池id',
+    `warstatus` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国战状态（1已参加国战，0没有参加',
+    `salarytime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '领取俸禄时间',
+    `goldtimes` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '元宝贡献次数',
+    `silvertimes` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '银币贡献次数',
+    `learntimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '学艺次数',
+    `joindateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '加入国家时间',
+    `leavedateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '离开国家的时间',
+    `debris` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '神器碎片数量',
+    `credit` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '战功',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    KEY `job` (`job`),
+    KEY `idx_country` (`country`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家国家表';
+
+-- 原版主键为 (uid, country)；软删除后同一玩家可再次申请同一国家，改用自增 id 主键
+DROP TABLE IF EXISTS `zc_sanguo_country_apply`;
+CREATE TABLE `zc_sanguo_country_apply` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `uid` BIGINT UNSIGNED NOT NULL,
+    `country` MEDIUMINT UNSIGNED NOT NULL COMMENT '国家id',
+    `rank` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家排行',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '玩家等级',
+    `nickname` VARCHAR(21) NOT NULL DEFAULT '' COMMENT '玩家昵称',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    KEY `idx_uid_country` (`uid`, `country`),
+    KEY `idx_country` (`country`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家申请表';
+
+DROP TABLE IF EXISTS `zc_sanguo_country_notice`;
+CREATE TABLE `zc_sanguo_country_notice` (
+    `id` INT UNSIGNED NOT NULL PRIMARY KEY COMMENT '国家id',
+    `notice` VARCHAR(210) NOT NULL DEFAULT '' COMMENT '公告',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家公告表';
+
+DROP TABLE IF EXISTS `zc_sanguo_country_report`;
+CREATE TABLE `zc_sanguo_country_report` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '战报id',
+    `report` TEXT NOT NULL COMMENT '战斗过程',
+    `nickname` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '攻方昵称',
+    `userlevel` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '攻方等级',
+    `name` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '守方昵称',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '守方等级',
+    `background` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '战斗背景',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家成员升官战报表';
+
+DROP TABLE IF EXISTS `zc_sanguo_country_log`;
+CREATE TABLE `zc_sanguo_country_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id',
+    `uid` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户uid',
+    `operator_uid` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '操作人uid（踢人，通过审核）',
+    `country` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家id',
+    `status` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '操作（1退出，2进入，3被踢出）',
+    `class` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '操作执行类',
+    `method` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '操作执行方法',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '操作时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='退出/进入国家操作记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_country_donate_log`;
+CREATE TABLE `zc_sanguo_country_donate_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `uid` BIGINT UNSIGNED NOT NULL,
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '玩家等级',
+    `type` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '花费类型1：银币 2：元宝 3: 谏言',
+    `cost` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '花费数',
+    `donate` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '获得贡献',
+    `contribute` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当日贡献',
+    `allcontribute` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '总贡献',
+    `class` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '执行类',
+    `method` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '执行方法',
+    `argument` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '参数',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '操作时间',
+    `vip` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'vip',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家捐献记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_country_learn_log`;
+CREATE TABLE `zc_sanguo_country_learn_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `uid` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+    `vip` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'vip等级',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '玩家等级',
+    `cost` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '花费元宝',
+    `addexp` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '获得经验',
+    `gid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '武将id',
+    `gturn1` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '几转',
+    `glevel1` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '武将等级(加经验前)',
+    `gexp1` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '武将经验（加经验前）',
+    `glevelupexp1` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '升级所需经验（加经验前）',
+    `glevel2` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '武将等级（加经验后）',
+    `gexp2` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '武将经验（加经验后）',
+    `glevelupexp2` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '升级经验（加经验后）',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '操作时间',
+    `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1 正常，3 等级上限，4 需要转生，其他失败',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国师授艺记录表';
 
 SET FOREIGN_KEY_CHECKS = 1;

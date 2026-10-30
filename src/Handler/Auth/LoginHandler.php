@@ -16,9 +16,18 @@ final class LoginHandler
     public static function guest(Context $ctx): array
     {
         $uid = (int)($ctx->input('uid', 0));
-        if ($uid <= 0) {
-            $user = DB::table('user')->where('is_guest', 1)->orderBy('uid', 'DESC')->first();
-            $uid = $user !== null ? (int)$user['uid'] : 10001;
+        $guestKey = trim((string)$ctx->input('guestkey', ''));
+        if ($uid <= 0 || $guestKey === '') {
+            // 参数缺失
+            return ['status' => -4];
+        }
+
+        // 旧版靠设备 mac 校验游客身份，H5 端 mac 恒为 00:00:00:00:00:00 形同虚设；
+        // 开发者要求改为注册时下发的游客密钥
+        $user = DB::table('user')->where('uid', $uid)->where('is_guest', 1)->whereNull('deleted_at')->first();
+        if ($user === null || $user['guest_key'] === '' || !hash_equals((string)$user['guest_key'], hash('sha256', $guestKey))) {
+            // 登录验证失败
+            return ['status' => -1, 'message' => '登录验证失败'];
         }
 
         $token = 'tk_guest_' . $uid . '_' . bin2hex(random_bytes(8));

@@ -12,37 +12,19 @@ use OmniPHP\Cache\Redis;
 final class MemberHandler
 {
     /**
-     * 根据请求上下文解析当前真实 uid (多重防御，坚决杜绝跨号串号)
+     * 根据请求 token 解析当前登录 uid（对齐旧版 token_model->check_token）
+     *
+     * 只认登录时签发并写入 Redis 的 token；无 token / token 失效返回 0，
+     * 不接受请求里的 uid 参数，也不从 token 字面解析 uid（二者都可伪造）。
      */
     public static function resolveUid(Context $ctx): int
     {
         $token = trim((string)$ctx->input('token', ''));
-        if ($token !== '') {
-            $cachedUid = Redis::get('token:' . $token);
-            if ($cachedUid !== null && (int)$cachedUid > 0) {
-                return (int)$cachedUid;
-            }
-            $json = Redis::getJson('token:' . $token);
-            if (is_array($json) && isset($json['uid']) && (int)$json['uid'] > 0) {
-                return (int)$json['uid'];
-            }
-            // 容灾解析：从自描述 Token 格式直接解构 (如 tk_guest_34_xxx 或 tk_user_18_xxx)
-            if (preg_match('/^tk_(?:guest|user)_(\d+)_/i', $token, $matches)) {
-                $uid = (int)$matches[1];
-                if ($uid > 0) {
-                    // 自动回填 Redis 缓存
-                    Redis::set('token:' . $token, (string)$uid, 86400 * 7);
-                    return $uid;
-                }
-            }
+        if ($token === '') {
+            return 0;
         }
-
-        $inputUid = (int)$ctx->input('uid', 0);
-        if ($inputUid > 0) {
-            return $inputUid;
-        }
-
-        return 1;
+        $uid = Redis::get('token:' . $token);
+        return $uid !== null && (int)$uid > 0 ? (int)$uid : 0;
     }
 
     /**
@@ -75,7 +57,7 @@ final class MemberHandler
                 'sex' => 1,
                 'gender' => 0,
                 'roleid' => 1,
-                'country' => 1,
+                'country' => 0,
                 'level' => 1,
                 'exp' => 0,
                 'maxexp' => 80,

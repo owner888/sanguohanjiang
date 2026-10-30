@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\Handler\Pvp\CountryHandler;
 
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -33,7 +32,7 @@ final class CountryShopHandler
         return [
             'status' => 1,
             'my_reputation' => $rep,
-            'country_name' => CountryHandler::COUNTRIES[$country]['name'] ?? '在野游侠',
+            'country_name' => DB::table('country')->where('id', $country)->whereNull('deleted_at')->value('name') ?? '在野游侠',
             'list' => array_values(self::GOODS),
             'message' => 'ok',
         ];

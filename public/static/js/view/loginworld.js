@@ -30,6 +30,7 @@
                 this.loginKYAcount();
             } else {
                 xGame.xsRemove('tryuid');
+                xGame.xsRemove('trykey');
                 this.loginRender();
                 this.initAcountList();
             } 
@@ -391,6 +392,7 @@
                             'adid': xGame.adid,
                             'devicetoken': xGame.devicetoken,
                             'uid': xGame.xsGet('tryuid'),
+                            'guestkey': xGame.xsGet('trykey'),
                             'channel': channelID
                         },
                         successFunc, false, loginWorld.tempLoginFail);
@@ -584,6 +586,7 @@
                             'devicetoken': xGame.devicetoken,
                             'adid': xGame.adid,
                             'uid': xGame.xsGet('tryuid'),
+                            'guestkey': xGame.xsGet('trykey'),
                             'channel': channelID
                         },
                         successFunc, false, loginWorld.tempLoginFail);
@@ -742,6 +745,7 @@
 
                 if (res.status == 1) { //试玩成功，保存试玩uid
                     xGame.xsSet('tryuid', res.uid);
+                    xGame.xsSet('trykey', res.guestkey);
                     xGame.xsRemove('lastaccountsaved');
                     loginWorld.serverlistRender(res, loginWorld.checkFirstTime());
                     /* HasOfferTrack */

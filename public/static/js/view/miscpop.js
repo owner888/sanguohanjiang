@@ -3634,6 +3634,7 @@
                             xGame.confirm.hide(function() {
                                 miscpop.hide('bindpop');
                                 xGame.xsRemove('tryuid');
+                                xGame.xsRemove('trykey');
                                 var lastaccountsaved = bind_u.val() + ',' + bind_p.val();
                                 xGame.xsSet('lastaccountsaved', lastaccountsaved);
                                 // if (guide.now == 824) {
@@ -6188,6 +6189,7 @@
             xGame.xsRemove('game_notice');
             xGame.xsRemove('chatdata');
             xGame.xsRemove('tryuid');
+            xGame.xsRemove('trykey');
             xGame.xsRemove("serverlist", true);
             xGame.xsRemove('chatdata');
             xGame.xsRemove('chatlasttab');

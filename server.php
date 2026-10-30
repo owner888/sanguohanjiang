@@ -6,9 +6,12 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 date_default_timezone_set('Asia/Shanghai');
 
+use Hanjiang\Cron\CountryCron;
 use Hanjiang\Handler\HandlerRegistry;
 use Hanjiang\Http\Router;
+use Hanjiang\Middleware\AuthMiddleware;
 use Hanjiang\Middleware\CorsMiddleware;
+use Hanjiang\Middleware\DailyCronMiddleware;
 use Hanjiang\Middleware\GameProtocolMiddleware;
 use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
 use Hanjiang\Middleware\ThrottleMiddleware;
@@ -16,6 +19,7 @@ use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use Workerman\Connection\TcpConnection;
 use Workerman\Protocols\Http\Request;
+use Workerman\Timer;
 use Workerman\Worker;
 
 $config = require __DIR__ . '/config/app.php';
@@ -31,7 +35,9 @@ $httpWorker->name = 'Hanjiang-Http-Gateway';
 $router = new Router($config['http']['public_path']);
 $router->use(new CorsMiddleware());
 $router->use(new ResponseEnvelopeMiddleware());
+$router->use(new AuthMiddleware());
 $router->use(new ThrottleMiddleware());
+$router->use(new DailyCronMiddleware());
 // 自动挂载 7 大领域子目录下的全部 Handler 映射 (驼峰与下划线双向兼容)
 $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
 
@@ -40,6 +46,17 @@ $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
 $httpWorker->onWorkerStart = static function (Worker $worker) use ($dbConfig): void {
     DB::init($dbConfig['mysql']);
     Redis::init($dbConfig['redis']);
+
+    // 全服每日计划任务只在 #0 号 Worker 上跑，避免多进程重复执行
+    if ($worker->id === 0) {
+        $runDaily = static function (): void {
+            CountryCron::clearContribute();
+        };
+        Timer::add(strtotime('tomorrow') - time(), static function () use ($runDaily): void {
+            $runDaily();
+            Timer::add(86400, $runDaily);
+        }, [], false);
+    }
 };
 
 $httpWorker->onMessage = static function (TcpConnection $connection, Request $request) use ($router): void {

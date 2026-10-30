@@ -10,9 +10,13 @@ use Hanjiang\Model\Equipment;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 use OmniPHP\Cache\Redis;
+use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\HandlerRegistry;
 use Hanjiang\Http\Router;
+use Hanjiang\Cron\CountryCron;
+use Hanjiang\Middleware\AuthMiddleware;
 use Hanjiang\Middleware\CorsMiddleware;
+use Hanjiang\Middleware\DailyCronMiddleware;
 use Hanjiang\Middleware\GameProtocolMiddleware;
 use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
 use Hanjiang\Middleware\ThrottleMiddleware;
@@ -35,7 +39,9 @@ final class GameApiTest extends TestCase
         $router = new Router(dirname(__DIR__, 2) . '/public');
         $router->use(new CorsMiddleware());
         $router->use(new ResponseEnvelopeMiddleware());
+        $router->use(new AuthMiddleware());
         $router->use(new ThrottleMiddleware());
+        $router->use(new DailyCronMiddleware());
         // 自动发现并挂载全量 7 大领域子目录下的全部 Handler 映射 (驼峰与下划线双向兼容)
         $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
 
@@ -87,10 +93,15 @@ final class GameApiTest extends TestCase
         self::$uid = (int)$reg['uid'];
         $this->assertGreaterThan(0, self::$uid);
 
-        $login = $this->request('login', 'guest', ['uid' => self::$uid]);
+        $login = $this->request('login', 'guest', ['uid' => self::$uid, 'guestkey' => $reg['guestkey']]);
         $this->assertSame(1, $login['status']);
         $this->assertNotEmpty($login['token']);
         self::$token = (string)$login['token'];
+
+        // 游客密钥必填且必须匹配；不再有「不传 uid 登录最新游客」
+        $this->assertSame(-4, $this->request('login', 'guest', ['token' => '', 'uid' => self::$uid])['status']);
+        $this->assertSame(-1, $this->request('login', 'guest', ['token' => '', 'uid' => self::$uid, 'guestkey' => 'wrong'])['status']);
+        $this->assertSame(-4, $this->request('login', 'guest', ['token' => '', 'uid' => '', 'guestkey' => $reg['guestkey']])['status']);
     }
 
     public function testMemberProfileAndRoleSelection(): void
@@ -818,8 +829,13 @@ final class GameApiTest extends TestCase
         // 执行分发
         \Hanjiang\WebSocket\WebSocketHandler::dispatch($wsCtx);
 
+        // 未 auth 的连接不能发聊天（不再回退到请求里的 uid）
+        $anonCtx = \OmniPHP\WebSocket\Context::mock(['action' => 'chat', 'message' => '冒名', 'uid' => self::$uid]);
+        \Hanjiang\WebSocket\WebSocketHandler::dispatch($anonCtx);
+        $this->assertStringContainsString('auth_fail', $anonCtx->sentMessages[0]);
+
         // 验证 Context 错误响应机制
-        $errCtx = \OmniPHP\WebSocket\Context::mock(['action' => 'chat', 'message' => '']);
+        $errCtx = \OmniPHP\WebSocket\Context::mock(['action' => 'chat', 'message' => ''], uid: self::$uid);
         \Hanjiang\WebSocket\WebSocketHandler::dispatch($errCtx);
         $this->assertNotEmpty($errCtx->sentMessages);
         $this->assertStringContainsString('聊天内容不能为空', $errCtx->sentMessages[0]);
@@ -855,57 +871,199 @@ final class GameApiTest extends TestCase
 
     public function testCountrySystem(): void
     {
-        // 1. 查看三国概况
-        $res = $this->request('country', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(3, $res['countries']);
+        $before = DB::table('member')->where('uid', self::$uid)->first();
+        $this->assertNotNull($before);
 
-        // 2. 选择天命随机加入阵营 (获得天命封赏)
-        $join = $this->request('country', 'select_country', ['country' => 0]);
-        $this->assertSame(1, $join['status']);
-        $this->assertGreaterThan(0, $join['country']);
-        $this->assertSame(1, $join['is_random']);
-        $this->assertSame(100, $join['bonus_gold']);
-        $this->assertSame(10000, $join['bonus_silver']);
+        // 0. 等级不足 (_open: 等级 > 25) 时建国被拦截
+        DB::table('member')->where('uid', self::$uid)->update(['level' => 20]);
+        $this->assertSame(4, $this->request('country', 'create', ['name' => 'X', 'confirm' => 1])['status']);
 
-        // 3. 再次尝试选国被拦截 (不可叛国)
-        $rejoin = $this->request('country', 'select_country', ['country' => 1]);
-        $this->assertSame(0, $rejoin['status']);
+        // 国家系统开放 (> 25)、国库捐献 (>= 50)、国师授艺 (>= 30)
+        DB::table('member')->where('uid', self::$uid)->update(['level' => 60, 'gold' => 100000, 'silver' => 10000000]);
+        Redis::del('player:' . self::$uid);
 
-        // 4. 国家军资捐献
-        $donate = $this->request('country', 'donate', ['type' => 1]);
-        $this->assertSame(1, $donate['status']);
-        $this->assertGreaterThan(0, $donate['reputation']);
+        // 1. 建国价格
+        $price = $this->request('country', 'create', ['confirm' => 0]);
+        $this->assertSame(1, $price['status']);
+        $this->assertSame(500, $price['price']);
 
-        // 5. 领取每日国家俸禄
-        $salary = $this->request('country', 'salary');
-        $this->assertSame(1, $salary['status']);
-        $this->assertGreaterThan(0, $salary['silver']);
+        // 2. 名称校验
+        $this->assertSame(-1, $this->request('country', 'create', ['name' => '', 'confirm' => 1])['status']);
+        $this->assertSame(-2, $this->request('country', 'create', ['name' => '一二三四五六七八', 'confirm' => 1])['status']);
 
-        // 6. 重复领取俸禄被拦截
-        $dupSalary = $this->request('country', 'salary');
-        $this->assertSame(0, $dupSalary['status']);
+        // 3. 建国：扣 500 元宝，成为君主
+        $name = '国' . substr((string)hrtime(true), -6);
+        $create = $this->request('country', 'create', ['name' => $name, 'confirm' => 1]);
+        $this->assertSame(1, $create['status']);
+        $countryId = (int)$create['country']['id'];
+        $this->assertGreaterThan(0, $countryId);
+        $this->assertSame($name, $create['country']['name']);
+        $this->assertSame(100000 - 500, $create['gold']);
+        $this->assertSame(1, $create['info']['job']);
+        $this->assertSame('君主', $create['list'][0]['job_name']);
+        $this->assertSame($countryId, (int)DB::table('member')->where('uid', self::$uid)->first()['country']);
 
-        // 7. 国家大营仓储与俸禄详情 (c=country&m=storage)
-        $storage = $this->request('country', 'storage');
-        $this->assertSame(1, $storage['status']);
-        $this->assertArrayHasKey('salary', $storage);
-        $this->assertArrayHasKey('info', $storage);
-        $this->assertArrayHasKey('donate', $storage);
-        $this->assertArrayHasKey('act', $storage['salary']);
+        // 4. 已有国家不可再建
+        $again = $this->request('country', 'create', ['name' => $name . 'b', 'confirm' => 1]);
+        $this->assertSame(2, $again['status']);
+        $this->assertSame($countryId, $again['country']);
 
-        // 8. 查看我的国家成员列表 (c=country&m=get_member_list)
+        // 5. 成员列表
         $memberList = $this->request('country', 'get_member_list');
         $this->assertSame(1, $memberList['status']);
-        $this->assertArrayHasKey('country', $memberList);
-        $this->assertArrayHasKey('name', $memberList['country']);
-        $this->assertArrayHasKey('info', $memberList);
-        $this->assertNotEmpty($memberList['list']);
+        $this->assertSame($name, $memberList['country']['name']);
+        $this->assertSame('', $memberList['country']['notice']);
+        $this->assertSame(1, $memberList['info']['job']);
+        $this->assertSame(0, $memberList['info']['make_way']);
+        $this->assertCount(1, $memberList['list']);
+        $this->assertSame(1000, (int)$memberList['list'][0]['allcontribute']);
+        $this->assertSame('君主', $memberList['list'][0]['job_name']);
+        $this->assertSame(0, (int)$memberList['audit']);
 
-        // 9. 查看国家排行 (c=country&m=get_rank)
+        // 6. 国家排行 (page=0 返回我的国家所在页)
         $rank = $this->request('country', 'get_rank');
         $this->assertSame(1, $rank['status']);
-        $this->assertNotEmpty($rank['list']);
+        $this->assertSame($countryId, (int)$rank['country']['id']);
+        $this->assertArrayHasKey('notice', $rank['country']);
+        $this->assertSame(5, $rank['perpage']);
+
+        // 7. 国家信息 / 搜索
+        $info = $this->request('country', 'get_country_info', ['id' => $countryId]);
+        $this->assertSame(1, $info['status']);
+        $this->assertSame($name, $info['country']['name']);
+        $search = $this->request('country', 'search', ['name' => $name]);
+        $this->assertSame(1, $search['status']);
+        $this->assertSame($countryId, (int)$search['list'][0]['id']);
+        $this->assertSame(-2, $this->request('country', 'search', ['name' => '不存在之国'])['status']);
+
+        // 8. 第二位玩家申请 / 取消申请
+        $reg = $this->request('register', 'guest', ['token' => '', 'uid' => '']);
+        $this->assertSame(1, $reg['status']);
+        $uid2 = (int)$reg['uid'];
+        $login2 = $this->request('login', 'guest', ['token' => '', 'uid' => $uid2, 'guestkey' => $reg['guestkey']]);
+        $token2 = (string)$login2['token'];
+        $as2 = ['token' => $token2, 'uid' => $uid2];
+        DB::table('member')->where('uid', $uid2)->update(['level' => 30]);
+        Redis::del('player:' . $uid2);
+
+        $apply = $this->request('country', 'apply', $as2 + ['id' => $countryId]);
+        $this->assertSame(1, $apply['status']);
+        $this->assertSame(-3, $this->request('country', 'apply', $as2 + ['id' => $countryId])['status']);
+        $this->assertSame(-2, $this->request('country', 'apply', $as2 + ['id' => 999999])['status']);
+
+        $applyList = $this->request('country', 'get_apply_list', $as2);
+        $this->assertSame(1, $applyList['status']);
+        $this->assertCount(1, $applyList['list']);
+        $this->assertSame($countryId, (int)$applyList['country']['id']);
+
+        $this->assertSame(1, (int)$this->request('country', 'get_member_list')['audit']);
+        $audits = $this->request('country', 'get_audit_list');
+        $this->assertSame(1, $audits['status']);
+        $this->assertSame($uid2, (int)$audits['list'][0]['uid']);
+
+        $this->assertSame(1, $this->request('country', 'del_apply', $as2 + ['id' => $countryId])['status']);
+        $this->assertSame(-1, $this->request('country', 'del_apply', $as2 + ['id' => $countryId])['status']);
+        $this->assertSame(0, (int)$this->request('country', 'get_member_list')['audit']);
+        // 软删除后可以再次申请同一国家
+        $this->assertSame(1, $this->request('country', 'apply', $as2 + ['id' => $countryId])['status']);
+
+        // 9. 审核通过（国战/国家boss时段冻结）
+        $audit = $this->request('country', 'audit', ['uid' => $uid2, 'type' => 1]);
+        if (in_array($audit['status'], [4, 5], true)) {
+            $this->assertSame(1, $this->request('country', 'ignore_all')['status']);
+        } else {
+            $this->assertSame(1, $audit['status']);
+            $this->assertSame(0, (int)$audit['audit']);
+            $this->assertSame(2, $audit['country']['member']);
+            $this->assertSame($countryId, (int)DB::table('member')->where('uid', $uid2)->first()['country']);
+            $list2 = $this->request('country', 'get_member_list', $as2);
+            $this->assertSame(1, $list2['status']);
+            $this->assertSame(2, $list2['info']['job']);
+            $this->assertCount(2, $list2['list']);
+            $this->assertSame(1, $this->request('country', 'get_member_list')['info']['make_way']);
+            // 君主为第一位，贡献更高的不可踢
+            $kickInfo = $this->request('country', 'kick_out_info', ['token' => $token2, 'uid' => self::$uid]);
+            $this->assertSame(-3, $kickInfo['status']);
+            $mw = $this->request('country', 'make_way_info');
+            $this->assertSame(1, $mw['status']);
+            $this->assertSame($uid2, (int)$mw['info']['uid']);
+        }
+
+        // 10. 发布公告
+        $this->assertSame(-5, $this->request('country', 'publish_notice', ['country' => $countryId, 'content' => '加群qq'])['status']);
+        $this->assertSame(-4, $this->request('country', 'publish_notice', ['country' => $countryId + 1, 'content' => '团结'])['status']);
+        $notice = $this->request('country', 'publish_notice', ['country' => $countryId, 'content' => '团结一心']);
+        $this->assertSame(1, $notice['status']);
+        $this->assertSame('团结一心', $notice['notice']);
+        $this->assertSame(3, $this->request('country', 'publish_notice', ['country' => $countryId, 'content' => '团结一心'])['status']);
+        $this->assertSame('团结一心', $this->request('country', 'get_country_info', ['id' => $countryId])['country']['notice']);
+
+        // 11. 国库
+        $storage = $this->request('country', 'storage');
+        $this->assertSame(1, $storage['status']);
+        $this->assertSame(0, $storage['islock']);
+        $this->assertSame(0, $storage['get']);
+        $this->assertSame(500 * 60, $storage['donate']['silver']);
+        $this->assertSame(10, $storage['donate']['gold']);
+        $this->assertSame(10, $storage['donate']['contribute']);
+        // 1 级国家俸禄：银币 550*等级、军令 5、将魂 80，乘君主系数 2.0；60 级无玉石
+        $this->assertSame((int)round(550 * 60 * 2.0), $storage['salary']['silver']);
+        $this->assertSame(10, $storage['salary']['act']);
+        $this->assertSame(160, $storage['salary']['soul']);
+        $this->assertArrayNotHasKey('jade', $storage['salary']);
+        $this->assertSame('君主', $storage['info']['job_name']);
+
+        // 12. 捐献 (银币 / 元宝 / 参数错误)
+        $silverBefore = (int)DB::table('member')->where('uid', self::$uid)->first()['silver'];
+        $donate = $this->request('country', 'donate', ['type' => 1]);
+        $this->assertSame(1, $donate['status']);
+        $this->assertSame($silverBefore - 500 * 60, $donate['silver']);
+        $this->assertSame(550 * 60, $donate['donate']['silver']);
+        $this->assertSame(1, $donate['country']['level']);
+        $this->assertSame(10, $donate['country']['exp']);
+        $this->assertSame(80, $donate['country']['levelupexp']);
+        $donateGold = $this->request('country', 'donate', ['type' => 2]);
+        $this->assertSame(1, $donateGold['status']);
+        $this->assertSame(100000 - 500 - 10, $donateGold['gold']);
+        $this->assertSame(11, $donateGold['donate']['gold']);
+        $this->assertSame(20, $donateGold['country']['exp']);
+        $this->assertSame(-5, $this->request('country', 'donate', ['type' => 9])['status']);
+        $mc = DB::table('member_country')->where('uid', self::$uid)->first();
+        $this->assertSame(1020, (int)$mc['allcontribute']);
+        $this->assertSame(1, (int)$mc['silvertimes']);
+        $this->assertSame(1, (int)$mc['goldtimes']);
+        $this->assertSame(2, DB::table('country_donate_log')->where('uid', self::$uid)->count());
+
+        // 13. 俸禄
+        $actBefore = (int)DB::table('member')->where('uid', self::$uid)->first()['act'];
+        $salary = $this->request('country', 'get_salary');
+        $this->assertSame(1, $salary['status']);
+        $this->assertSame($actBefore + 10, $salary['act']);
+        $this->assertSame(2, $this->request('country', 'get_salary')['status']);
+        $this->assertSame(1, $this->request('country', 'storage')['get']);
+
+        // 14. 国师授艺：1 级国家没有学艺次数
+        $learnIndex = $this->request('country', 'learn_index');
+        $this->assertSame(1, $learnIndex['status']);
+        $this->assertSame(1, $learnIndex['level']);
+        $this->assertSame(0, $learnIndex['all_times']);
+        $this->assertSame(0, $learnIndex['times']);
+        $this->assertCount(3, $learnIndex['list']);
+        $this->assertSame(1125 * 60, $learnIndex['list'][0]['exp']);
+        $this->assertSame(4, $this->request('country', 'learn', ['type' => 1])['status']);
+        $this->assertSame(-4, $this->request('country', 'learn', ['type' => 9])['status']);
+
+        // 15. 君主无法升官；国家战报
+        $this->assertSame(2, $this->request('country', 'get_usurp_info')['status']);
+        $this->assertSame(1, $this->request('country', 'fight_notice', ['type' => 1])['status']);
+
+        // 恢复等级与货币，保留国家成员身份
+        DB::table('member')->where('uid', self::$uid)->update([
+            'level' => $before['level'],
+            'gold' => $before['gold'],
+            'silver' => $before['silver'],
+        ]);
+        Redis::del('player:' . self::$uid);
     }
 
     public function testCultivateSystem(): void
@@ -1318,17 +1476,13 @@ final class GameApiTest extends TestCase
         $this->assertSame(0, $dup['status']);
     }
 
-    public function testGameMasterData(): void
+    public function testMasterDataMatchesLegacyDump(): void
     {
-        // 验证 16 大历史战役章节数据完备
-        $this->assertCount(16, \Hanjiang\Battle\GameMasterData::CHAPTERS);
-        $redCliff = \Hanjiang\Battle\GameMasterData::getChapter(9);
-        $this->assertNotNull($redCliff);
-        $this->assertSame('赤壁之战', $redCliff['name']);
-
-        // 验证原版神兵利器名剑宝甲
-        $this->assertArrayHasKey(101, \Hanjiang\Battle\GameMasterData::ARTIFACTS);
-        $this->assertSame('青龙偃月刀', \Hanjiang\Battle\GameMasterData::ARTIFACTS[101]['name']);
+        // 旧版配置表生成的常量数组：抽查场景与怪物原值
+        $this->assertCount(94, \Hanjiang\MasterData\Scene::ROWS);
+        $this->assertSame('曲阳', \Hanjiang\MasterData\Scene::ROWS[1]['name']);
+        $this->assertSame('长枪兵', \Hanjiang\MasterData\Monster::ROWS[1]['name']);
+        $this->assertSame(20, \Hanjiang\MasterData\Monster::ROWS[1]['blood']);
     }
 
     public function testGeneralInheritSystem(): void
@@ -1551,6 +1705,75 @@ final class GameApiTest extends TestCase
         $reward = $this->request('compete', 'get_reward');
         $this->assertSame(1, $reward['status']);
         $this->assertGreaterThan(0, $reward['silver']);
+    }
+
+    /**
+     * @return array{uid: int, auth: array{token: string, uid: int}}
+     */
+    private function newGuestPlayer(): array
+    {
+        $reg = $this->request('register', 'guest', ['token' => '', 'uid' => '']);
+        $this->assertSame(1, $reg['status']);
+        $uid = (int)$reg['uid'];
+        $login = $this->request('login', 'guest', ['token' => '', 'uid' => $uid, 'guestkey' => $reg['guestkey']]);
+        return ['uid' => $uid, 'auth' => ['token' => (string)$login['token'], 'uid' => $uid]];
+    }
+
+    public function testAuthRejectsForgedIdentity(): void
+    {
+        // 无 token / 伪造 token / 只带 uid：受保护接口一律 403，公开接口照常
+        foreach ([['token' => '', 'uid' => self::$uid], ['token' => 'tk_guest_' . self::$uid . '_forged', 'uid' => self::$uid]] as $forged) {
+            $ctx = Context::mock(array_merge(['c' => 'member', 'm' => 'index'], $forged));
+            $res = self::$router->handleContext($ctx);
+            $this->assertInstanceOf(WorkermanResponse::class, $res);
+            $this->assertSame('403', (string)$res->rawBody());
+        }
+        $this->assertSame(1, $this->request('ios', 'update_world_common', ['token' => '', 'uid' => ''])['status']);
+        $this->assertSame(0, MemberHandler::resolveUid(Context::mock(['uid' => self::$uid])));
+    }
+
+    public function testCountryMakeWayRequiresKing(): void
+    {
+        $p = $this->newGuestPlayer();
+        $countryId = (int)DB::table('country')->insertGetId(['name' => '禅' . substr((string)hrtime(true), -6), 'member' => 2, 'uid' => 1, 'nickname' => 'king']);
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => 30, 'country' => $countryId]);
+        DB::table('member_country')->insert(['uid' => $p['uid'], 'nickname' => 'p', 'country' => $countryId, 'job' => 2]);
+        Redis::del('player:' . $p['uid']);
+
+        // 非君主调用禅让被拦截，职位不变
+        $this->assertSame(-7, $this->request('country', 'make_way', $p['auth'])['status']);
+        $this->assertSame(2, (int)DB::table('member_country')->where('uid', $p['uid'])->first()['job']);
+    }
+
+    public function testDailyCronResetsCountryCounters(): void
+    {
+        $p = $this->newGuestPlayer();
+        $uid = $p['uid'];
+        if (DB::table('member_field')->where('uid', $uid)->first() === null) {
+            DB::table('member_field')->insert(['uid' => $uid]);
+        }
+        DB::table('member_country')->insert([
+            'uid' => $uid, 'nickname' => 'p', 'country' => 1,
+            'goldtimes' => 5, 'silvertimes' => 3, 'learntimes' => 2, 'contribute' => 100,
+        ]);
+        DB::table('member_field')->where('uid', $uid)->update(['dateline' => strtotime('yesterday')]);
+        Redis::del("daily_cron:{$uid}");
+
+        // 当天首次请求：清空捐献/学艺次数，今日贡献留给全服 0 点任务
+        $this->request('member', 'index', $p['auth']);
+        $row = DB::table('member_country')->where('uid', $uid)->first();
+        $this->assertSame([0, 0, 0, 100], [(int)$row['goldtimes'], (int)$row['silvertimes'], (int)$row['learntimes'], (int)$row['contribute']]);
+        $this->assertGreaterThanOrEqual(strtotime('today'), (int)DB::table('member_field')->where('uid', $uid)->first()['dateline']);
+
+        // 同一天再次请求不重复执行
+        DB::table('member_country')->where('uid', $uid)->update(['goldtimes' => 4]);
+        Redis::del("daily_cron:{$uid}");
+        $this->request('member', 'index', $p['auth']);
+        $this->assertSame(4, (int)DB::table('member_country')->where('uid', $uid)->first()['goldtimes']);
+
+        // 全服 0 点任务清空今日贡献
+        CountryCron::clearContribute();
+        $this->assertSame(0, (int)DB::table('member_country')->where('uid', $uid)->first()['contribute']);
     }
 
     public function testCountrySacrificeSystem(): void

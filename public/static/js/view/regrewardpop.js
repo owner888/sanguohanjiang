@@ -89,6 +89,7 @@
                     switch (res.status) {
                         case 1:
                             xGame.xsRemove('tryuid');
+                            xGame.xsRemove('trykey');
                             xGame.saveAccount(_username, _password);
                             xGame.confirm.show(lang('bind_complete'), lang('bind_complete_msg', [_username, _password]), 1, function() {
                                 

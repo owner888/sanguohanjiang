@@ -23,6 +23,8 @@ final class RegisterHandler
         $now = time();
         $username = 'guest_' . bin2hex(random_bytes(4));
         $password = bin2hex(random_bytes(6));
+        // 游客登录密钥：明文只返回这一次，库里只存 sha256
+        $guestKey = bin2hex(random_bytes(16));
 
         // 写入用户表
         $uid = DB::table('user')->insert([
@@ -31,6 +33,7 @@ final class RegisterHandler
             'channel' => $channel,
             'is_guest' => 1,
             'mac' => $mac,
+            'guest_key' => hash('sha256', $guestKey),
         ]);
 
         // 初始化玩家数据
@@ -52,6 +55,7 @@ final class RegisterHandler
         return [
             'status' => 1,
             'uid' => $uid,
+            'guestkey' => $guestKey,
             'message' => '试玩账号创建成功',
             'serverlist' => $serverList,
         ];

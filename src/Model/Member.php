@@ -81,6 +81,38 @@ class Member extends Model
     }
 
     /**
+     * 每日计划任务：玩家当天首次请求时执行一次（移植自旧版 member_model->daily_cron）
+     *
+     * 以 member_field.dateline 原子抢占当日执行权，多 Worker 并发首请求只会执行一次。
+     * member_field 不存在时不执行（旧版该行注册即建）。
+     */
+    public static function dailyCron(int $uid, int $now): void
+    {
+        $affected = DB::execute(
+            'UPDATE `zc_sanguo_member_field` SET `dateline` = :now
+             WHERE `uid` = :uid AND `deleted_at` IS NULL AND `dateline` < :today',
+            ['now' => $now, 'uid' => $uid, 'today' => strtotime(date('Y-m-d', $now))]
+        );
+        if ($affected === 0) {
+            return;
+        }
+
+        // 依赖未移植：member_field 每日计数归零（leaptimes / baijintimes / zhizuntimes / soultimes /
+        // stone1~3_times / treasure_free，新版 member_field 尚无这些字段）
+        // 依赖未移植：update_activity_info（islandtimes / sacrifice1~3 / freebusiness / freetower /
+        // freemooncake / task_number / flop* / elitetimes / generaltasktimes / freeheaven）
+        // 依赖未移植：lottery_model->update_day、logined_model->update_day 连续登录计数
+        // 依赖未移植：member.dateline / version / appversion、insert_member_log 每日日志
+
+        // 清空昨日贡献次数/学艺次数（member_model->clear_donate）
+        DB::table('member_country')->where('uid', $uid)->whereNull('deleted_at')->update([
+            'goldtimes' => 0,
+            'silvertimes' => 0,
+            'learntimes' => 0,
+        ]);
+    }
+
+    /**
      * 原子安全扣除玩家货币/资源 (带余额防超扣安全防御)
      *
      * 底层采用行级原子锁 WHERE silver >= :req_silver，彻底杜绝并发超卖与重放刷钱

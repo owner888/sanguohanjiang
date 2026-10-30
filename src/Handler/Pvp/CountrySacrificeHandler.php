@@ -38,7 +38,7 @@ final class CountrySacrificeHandler
         return [
             'status' => 1,
             'my_country' => $country,
-            'country_name' => CountryHandler::COUNTRIES[$country]['name'] ?? '在野游侠',
+            'country_name' => DB::table('country')->where('id', $country)->whereNull('deleted_at')->value('name') ?? '在野游侠',
             'sacrificed_today' => $claimed ? 1 : 0,
             'list' => array_values(self::SACRIFICES),
             'message' => 'ok',
@@ -81,7 +81,7 @@ final class CountrySacrificeHandler
 
         Redis::set('country_sacrifice_date:' . $uid, (string)time(), 86400 * 2);
 
-        $countryName = CountryHandler::COUNTRIES[$country]['name'];
+        $countryName = DB::table('country')->where('id', $country)->whereNull('deleted_at')->value('name');
 
         // 高阶天祭全服通告
         if ($sacId === 3) {

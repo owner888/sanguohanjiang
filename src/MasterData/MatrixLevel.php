@@ -1,0 +1,123 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Hanjiang\MasterData;
+
+/**
+ * 阵法升级费用表（旧版 zc_sanguo_matrix_level）
+ *
+ * 由 tools/gen_master_data.php 从旧版 dump 生成，勿手改。
+ */
+final class MatrixLevel
+{
+    public const string TABLE = 'zc_sanguo_matrix_level';
+
+    /**
+     * 按主键 level 索引，共 100 行。字段：
+     *   - level (int) 阵法等级
+     *   - price (int) 花费金币
+     */
+    public const array ROWS = [
+        1 => ['level' => 1, 'price' => 1],
+        2 => ['level' => 2, 'price' => 2],
+        3 => ['level' => 3, 'price' => 3],
+        4 => ['level' => 4, 'price' => 4],
+        5 => ['level' => 5, 'price' => 5],
+        6 => ['level' => 6, 'price' => 10],
+        7 => ['level' => 7, 'price' => 15],
+        8 => ['level' => 8, 'price' => 20],
+        9 => ['level' => 9, 'price' => 25],
+        10 => ['level' => 10, 'price' => 30],
+        11 => ['level' => 11, 'price' => 35],
+        12 => ['level' => 12, 'price' => 40],
+        13 => ['level' => 13, 'price' => 45],
+        14 => ['level' => 14, 'price' => 50],
+        15 => ['level' => 15, 'price' => 55],
+        16 => ['level' => 16, 'price' => 60],
+        17 => ['level' => 17, 'price' => 65],
+        18 => ['level' => 18, 'price' => 70],
+        19 => ['level' => 19, 'price' => 75],
+        20 => ['level' => 20, 'price' => 80],
+        21 => ['level' => 21, 'price' => 85],
+        22 => ['level' => 22, 'price' => 90],
+        23 => ['level' => 23, 'price' => 95],
+        24 => ['level' => 24, 'price' => 100],
+        25 => ['level' => 25, 'price' => 105],
+        26 => ['level' => 26, 'price' => 110],
+        27 => ['level' => 27, 'price' => 115],
+        28 => ['level' => 28, 'price' => 120],
+        29 => ['level' => 29, 'price' => 125],
+        30 => ['level' => 30, 'price' => 130],
+        31 => ['level' => 31, 'price' => 135],
+        32 => ['level' => 32, 'price' => 140],
+        33 => ['level' => 33, 'price' => 145],
+        34 => ['level' => 34, 'price' => 150],
+        35 => ['level' => 35, 'price' => 155],
+        36 => ['level' => 36, 'price' => 160],
+        37 => ['level' => 37, 'price' => 165],
+        38 => ['level' => 38, 'price' => 170],
+        39 => ['level' => 39, 'price' => 175],
+        40 => ['level' => 40, 'price' => 180],
+        41 => ['level' => 41, 'price' => 185],
+        42 => ['level' => 42, 'price' => 190],
+        43 => ['level' => 43, 'price' => 195],
+        44 => ['level' => 44, 'price' => 200],
+        45 => ['level' => 45, 'price' => 205],
+        46 => ['level' => 46, 'price' => 210],
+        47 => ['level' => 47, 'price' => 215],
+        48 => ['level' => 48, 'price' => 220],
+        49 => ['level' => 49, 'price' => 225],
+        50 => ['level' => 50, 'price' => 230],
+        51 => ['level' => 51, 'price' => 235],
+        52 => ['level' => 52, 'price' => 240],
+        53 => ['level' => 53, 'price' => 245],
+        54 => ['level' => 54, 'price' => 250],
+        55 => ['level' => 55, 'price' => 255],
+        56 => ['level' => 56, 'price' => 260],
+        57 => ['level' => 57, 'price' => 265],
+        58 => ['level' => 58, 'price' => 270],
+        59 => ['level' => 59, 'price' => 275],
+        60 => ['level' => 60, 'price' => 280],
+        61 => ['level' => 61, 'price' => 285],
+        62 => ['level' => 62, 'price' => 290],
+        63 => ['level' => 63, 'price' => 295],
+        64 => ['level' => 64, 'price' => 300],
+        65 => ['level' => 65, 'price' => 305],
+        66 => ['level' => 66, 'price' => 310],
+        67 => ['level' => 67, 'price' => 315],
+        68 => ['level' => 68, 'price' => 320],
+        69 => ['level' => 69, 'price' => 325],
+        70 => ['level' => 70, 'price' => 330],
+        71 => ['level' => 71, 'price' => 335],
+        72 => ['level' => 72, 'price' => 340],
+        73 => ['level' => 73, 'price' => 345],
+        74 => ['level' => 74, 'price' => 350],
+        75 => ['level' => 75, 'price' => 355],
+        76 => ['level' => 76, 'price' => 360],
+        77 => ['level' => 77, 'price' => 365],
+        78 => ['level' => 78, 'price' => 370],
+        79 => ['level' => 79, 'price' => 375],
+        80 => ['level' => 80, 'price' => 380],
+        81 => ['level' => 81, 'price' => 385],
+        82 => ['level' => 82, 'price' => 390],
+        83 => ['level' => 83, 'price' => 395],
+        84 => ['level' => 84, 'price' => 400],
+        85 => ['level' => 85, 'price' => 405],
+        86 => ['level' => 86, 'price' => 410],
+        87 => ['level' => 87, 'price' => 415],
+        88 => ['level' => 88, 'price' => 420],
+        89 => ['level' => 89, 'price' => 425],
+        90 => ['level' => 90, 'price' => 430],
+        91 => ['level' => 91, 'price' => 435],
+        92 => ['level' => 92, 'price' => 440],
+        93 => ['level' => 93, 'price' => 445],
+        94 => ['level' => 94, 'price' => 450],
+        95 => ['level' => 95, 'price' => 455],
+        96 => ['level' => 96, 'price' => 460],
+        97 => ['level' => 97, 'price' => 465],
+        98 => ['level' => 98, 'price' => 470],
+        99 => ['level' => 99, 'price' => 475],
+        100 => ['level' => 100, 'price' => 480],
+    ];
+}

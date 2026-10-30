@@ -167,3 +167,19 @@ if ($gid > 0 && isset($generalMap[$gid])) {
 
 
 
+
+## 8. 导入 schema.sql 中文乱码 (mysql 客户端字符集)
+
+### 症状
+- 新建库后跑 PHPUnit，`testSiegeSystem` 等断言中文名称的用例失败，库里的中文默认值 / 注释是乱码。
+
+### 根因
+- `mysql` 客户端默认连接字符集不是 utf8mb4，按错误编码把 `schema.sql` 里的中文字面量写进库。
+
+### 避坑规则
+- 导入 `database/schema.sql` 与 `database/migrations/*.sql` 一律带 `--default-character-set=utf8mb4`。
+
+### 示例
+```bash
+mysql --default-character-set=utf8mb4 -uroot -p < database/schema.sql
+```

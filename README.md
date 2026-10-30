@@ -47,6 +47,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   │   ├── BattleEngine.php # Core simulation logic (ported from battle_model.php)
 │   │   ├── Hero.php         # Combat entity model
 │   │   └── Position.php     # 9-grid tactical positions (1-9) enum
+│   ├── MasterData/          # Legacy config tables as const arrays (generated, do not edit)
 │   ├── Middleware/          # Middleware pipeline (aligned with smart-book)
 │   │   ├── MiddlewareInterface.php
 │   │   ├── CorsMiddleware.php             # Cross-origin and OPTIONS preflight
@@ -63,6 +64,8 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   └── Http/                # HTTP Gateway & Router
 │       ├── Router.php       # Pipeline runner & static asset server
 │       └── Response.php     # Protocol response helper
+├── tools/
+│   └── gen_master_data.php  # Regenerates src/MasterData from the legacy mysqldump
 ├── server.php               # Workerman service entrypoint
 ├── composer.json            # Dependencies & PSR-4 autoloading
 ├── README.md                # English documentation
@@ -159,7 +162,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=tower&m=index|action|sweep`: Trial Soul Tower climbing, boss encounters, floor sweeps, and soul rewards
 - `c=pass_general&m=index|action|reset`: Six-Stage Pass General campaign, legendary warlord duels, and milestone chests
 - `c=soul&m=index|upgrade`: Soul fate constellation slots, soul point upgrades, and permanent hero battle stat empowerment
-- `c=country&m=index|select_country|donate|salary`: Three Kingdoms nations (Wei, Shu, Wu), allegiance selection, military donations, and daily salaries
+- `c=country&m=create|get_rank|get_member_list|apply|del_apply|get_apply_list|get_audit_list|ignore_all|audit|publish_notice|betray|make_way_info|make_way|kick_out_info|kick_out|get_usurp_info|usurp|storage|donate|get_salary|search|get_country_info|learn_index|learn|fight_notice`: Player-founded nations (guilds; `member.country` is the guild id): founding, rankings, applications & audits, notices, abdication, kicks, promotion/usurpation duels, treasury donations, daily salaries, and the National Preceptor training
 - `c=cultivate&m=index|roll|save`: Warlord marrow cultivation & attribute cleansing (Strength, Intellect, Vitality)
 - `c=dailysign&m=index|sign`: 30-Day monthly continuous check-in, tiered silver/gold rewards, and anti-duplicate validations
 - `c=logined&m=index|get_reward`: 1-15 Day consecutive login rewards, daily progression, and streak resets
@@ -268,10 +271,10 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Integrated `OmniPHP\ArchitectureGuard` to enforce clean architecture and prevent custom infrastructure re-wrapping
 - [x] Client network layer with exponential backoff auto-reconnect, jitter, and zombie connection sweeping (`sweep`)
 - [x] Complete port of legacy core modules: Trial Soul Tower (`tower`), Six-Stage Pass General campaign (`pass_general`), and dynamic storyline quests (`mainquest`)
-- [x] Three Kingdoms nation faction system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
+- [x] Player-founded nation (guild) system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
 - [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and server-wide Dong Zhuo World Boss crusade (`worldboss`)
-- [x] Legion territorial siege warfare (`siege`), GVG cross-server championship tournament betting (`gvg`), and 16-chapter campaign static master repository (`GameMasterData`)
+- [x] Legion territorial siege warfare (`siege`), GVG cross-server championship tournament betting (`gvg`)
 - [x] Built-in golden flowing marquee banner UI renderer in `ws_client.js` with hardware-accelerated broadcast animations
 - [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge celebration (`first_recharge`), and maritime silk road (`overseastrade`)
 - [x] High-tier diversion mechanics: Bole stud farm (`studfarm`), rough jade gambling (`jadegamble`), tomb raiding maps (`treasuremap`), and weaponry workshop (`workshop`)

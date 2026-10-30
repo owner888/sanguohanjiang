@@ -47,6 +47,7 @@
 │   │   ├── BattleEngine.php # 核心战斗推演逻辑 (源自 battle_model.php 重构)
 │   │   ├── Hero.php         # 战斗英雄实体模型
 │   │   └── Position.php     # 九宫格战位 (1-9号位) 枚举
+│   ├── MasterData/          # 旧版配置表常量数组（脚本生成，勿手改）
 │   ├── Middleware/          # 中间件流水线 (完全对齐 smart-book 架构)
 │   │   ├── MiddlewareInterface.php
 │   │   ├── CorsMiddleware.php             # 跨域与 OPTIONS 预检处理
@@ -63,6 +64,8 @@
 │   └── Http/                # HTTP 协议层与网关
 │       ├── Router.php       # 流水线驱动器及静态文件服务器
 │       └── Response.php     # 统一协议响应助手
+├── tools/
+│   └── gen_master_data.php  # 从旧版 mysqldump 重新生成 src/MasterData
 ├── server.php               # Workerman 服务启动脚本
 ├── composer.json            # Composer 依赖与 PSR-4 自动加载
 ├── README.md                # 英文说明文档
@@ -159,7 +162,7 @@
 - `c=tower&m=index|action|sweep`：将魂星路试炼塔爬塔闯关、守关神兽决战、一键扫荡与将魂结算
 - `c=pass_general&m=index|action|reset`：经典过关斩将单挑六大名将（华雄/颜良/文丑/庞德/典韦/吕布）与通关宝箱开启
 - `c=soul&m=index|upgrade`：将魂星盘八大命格孔位激活、试炼塔将魂消耗升级与攻防血量永久加成
-- `c=country&m=index|select_country|donate|salary`：魏蜀吴三国势力格局、天命随机选国封赏、国家军资捐献与每日国家俸禄
+- `c=country&m=create|get_rank|get_member_list|apply|del_apply|get_apply_list|get_audit_list|ignore_all|audit|publish_notice|betray|make_way_info|make_way|kick_out_info|kick_out|get_usurp_info|usurp|storage|donate|get_salary|search|get_country_info|learn_index|learn|fight_notice`：玩家自建国家（军团，`member.country` 即国家 id）：建国、国家排行、申请与审核、国家公告、禅让、踢人、升官/篡位挑战、国库捐献、每日俸禄与国师授艺
 - `c=cultivate&m=index|roll|save`：武将洗髓培养系统，武力/智力/体力永久洗练与属性注入强化
 - `c=dailysign&m=index|sign`：30天连续月度签到、阶梯式海量银两/元宝/军令封赏与防重复签到校验
 - `c=logined&m=index|get_reward`：1~15天连续登录阶梯大礼包、登录天数递增与断签自动重置
@@ -268,10 +271,10 @@
 - [x] 框架级引入 `OmniPHP\ArchitectureGuard` 架构铁律守卫，杜绝新老项目重复造轮子与私造基础设施
 - [x] 前端网络层指数退避断线重连（Exponential Backoff with Jitter）与服务端超时僵尸连接自动回收扫描（`sweep`）
 - [x] 全面移植并贯通原版核心进阶玩法：试炼塔爬塔闯关与一键扫荡 (`tower`)、过关斩将斩杀六大名将 (`pass_general`)、主线任务动态里程碑 (`mainquest`)
-- [x] 原版经典深度养成与宏观格局重现：三国国家阵营格局 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
+- [x] 原版经典深度养成与宏观格局重现：玩家自建国家（军团）系统 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
 - [x] 全面打通前端全量高频日常交互系统：每日签到福利 (`dailysign`)、VIP 特权俸禄与晋级礼包 (`vip`)、系统信箱与飞鸽传书 (`message`)、好友社交系统 (`friend`)、银矿占领挂机采矿 (`mine`)
 - [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、天命观星突破 (`heaven`)、全服世界 BOSS 董卓战 (`worldboss`)
-- [x] 军团攻城掠地城池战 (`siege`)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)、十六历史战役全景数值大字典 (`GameMasterData`)
+- [x] 军团攻城掠地城池战 (`siege`)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)
 - [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
 - [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充至尊神礼 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
 - [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)

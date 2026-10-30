@@ -95,6 +95,14 @@ final class WebSocketHandler
             return;
         }
 
+        // 除心跳与鉴权外，所有事件必须先通过 auth 绑定 uid
+        if (!in_array($action, ['ping', 'auth', 'login'], true) && (int)($ctx->uid() ?? 0) <= 0) {
+            $ctx->emit('auth_fail', [
+                'message' => '鉴权失败，Token 无效或已过期',
+            ]);
+            return;
+        }
+
         match ($action) {
             'ping' => self::handlePing($ctx),
             'auth', 'login' => self::handleAuth($ctx),
@@ -131,7 +139,7 @@ final class WebSocketHandler
 
     public static function handleCreateTeam(Context $ctx): void
     {
-        $uid = $ctx->uid() ?: 1;
+        $uid = (int)$ctx->uid();
         $fid = (int)($ctx->input('id', 1));
         $type = (int)($ctx->input('type', 1));
         $topteam = (bool)($ctx->input('topteam', false));
@@ -165,7 +173,7 @@ final class WebSocketHandler
 
     public static function handleJoinTeam(Context $ctx): void
     {
-        $uid = $ctx->uid() ?: 1;
+        $uid = (int)$ctx->uid();
         $fid = (int)($ctx->input('id', 1));
         $teamId = (int)($ctx->input('teamid', 0));
 
@@ -198,7 +206,7 @@ final class WebSocketHandler
 
     public static function handleExitTeam(Context $ctx): void
     {
-        $uid = $ctx->uid() ?: 1;
+        $uid = (int)$ctx->uid();
         $fid = (int)($ctx->input('id', 1));
         $teams = Redis::getJson("elite_teams:{$fid}") ?: [];
         unset($teams[$uid]);
@@ -212,17 +220,9 @@ final class WebSocketHandler
 
     public static function handleAuth(Context $ctx): void
     {
-        $token = (string)$ctx->input('token', '');
-        $uid = (int)$ctx->input('uid', 0);
-
-        if ($token !== '') {
-            $cached = Redis::get('token:' . $token);
-            if ($cached !== null && (int)$cached > 0) {
-                $uid = (int)$cached;
-            } elseif (preg_match('/^tk_(?:guest|user)_(\d+)_/i', $token, $m)) {
-                $uid = (int)$m[1];
-            }
-        }
+        $token = trim((string)$ctx->input('token', ''));
+        $cached = $token !== '' ? Redis::get('token:' . $token) : null;
+        $uid = $cached !== null ? (int)$cached : 0;
 
         if ($uid <= 0) {
             $ctx->emit('auth_fail', [
@@ -245,7 +245,7 @@ final class WebSocketHandler
 
     public static function handleChat(Context $ctx): void
     {
-        $uid = $ctx->uid() ?? (int)$ctx->input('uid', 0);
+        $uid = (int)$ctx->uid();
         $name = (string)$ctx->input('name', '');
         if ($name === '' && $uid > 0) {
             $member = DB::table('member')->where('uid', $uid)->first();

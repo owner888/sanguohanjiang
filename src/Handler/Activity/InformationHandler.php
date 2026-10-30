@@ -6,7 +6,6 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
-use Hanjiang\Handler\Pvp\CountryHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -43,7 +42,7 @@ final class InformationHandler
         }
 
         $countryId = (int)($member['country'] ?? 0);
-        $countryName = CountryHandler::COUNTRIES[$countryId]['name'] ?? '';
+        $countryName = DB::table('country')->where('id', $countryId)->whereNull('deleted_at')->value('name') ?? '';
 
         $player = [
             'nickname' => (string)($member['nickname'] ?? ('主公' . $targetUid)),
