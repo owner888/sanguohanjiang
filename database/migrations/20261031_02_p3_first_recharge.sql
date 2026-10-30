@@ -1,7 +1,7 @@
 -- 已有数据库升级：首充返利（旧版 first_recharge_log 与 member_field.first_recharge）
 --
 -- 新建库直接导入 schema.sql 即可，无需执行本文件。
--- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_p3_first_recharge.sql
+-- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_02_p3_first_recharge.sql
 --
 -- 旧版 first_recharge 列默认 1（显示首充图标），已有玩家升级后同样显示图标。
 -- 首充日志由充值流程写入；升级前没有任何首充记录，旧的 Redis first_recharge_status:{uid} 不再使用，可自行清理。

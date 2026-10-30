@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "9f09cb376e2286bbf04dd3cafad0248c",
+    "content-hash": "8a0d40db5151838c764dbd2009642c87",
     "packages": [
         {
             "name": "omniphp/framework",

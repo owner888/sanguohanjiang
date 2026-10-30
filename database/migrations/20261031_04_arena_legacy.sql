@@ -1,7 +1,7 @@
 -- 已有数据库升级：演武榜改回旧版（controllers/arena.php + models/arena_model.php）
 --
 -- 新建库直接导入 schema.sql 即可，无需执行本文件。
--- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_arena_legacy.sql
+-- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_04_arena_legacy.sql
 --
 -- 升级前：zc_sanguo_arena 是新版自定的天梯（预设 NPC 10001 ~ 10005 占前 5 名、次数默认 15、没有 win / total_rank），
 --         演武积分 / 购买次数 / 兑换次数存 Redis（arena_points:* / arena_buy_times:* / arena_exch:*）。

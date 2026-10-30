@@ -1,7 +1,7 @@
 -- 已有数据库升级：将魂星路（c=tower）改回旧版（controllers/tower.php + models/tower_model.php）
 --
 -- 新建库直接导入 schema.sql 即可，无需执行本文件。
--- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_tower_legacy.sql
+-- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_05_tower_legacy.sql
 --
 -- 升级前：tower 是新版自定的爬塔（楼层 / 守军 / 奖励都是自定数值），进度只存 Redis（tower_progress:{uid}），库里没有任何星路表。
 -- 升级后：新增 member_activity（星路位置 towerlevel / towerstage / towermission、免费次数 freetower、购买次数 towertimes、

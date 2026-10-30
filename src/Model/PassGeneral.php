@@ -238,17 +238,19 @@ final class PassGeneral
         if ($claimed <= 0 || $userData['is_get'] !== 2) {
             return;
         }
-        // 如果有未领取的奖励 自动发放给玩家（旧版控制器 $i 恒为 1，取 $new_reward[0]）
-        self::autoBoxReward($userData, $version, 1, $now);
+        // 如果有未领取的奖励 自动发放给玩家
+        self::autoBoxReward($userData, $version, $now);
     }
 
     /**
      * 自动发放未领取的宝箱奖励并发信（_update_pass_general_info / cron_acttask::update_pass_general_info 的循环体）
      *
+     * 旧版计划任务按循环计数发放 $new_reward[$i - 1]，而每层宝箱只有一行，第二个玩家起取不到奖励；
+     * 开发者要求修正：每个玩家都发放本层奖励 $new_reward[0]。
+     *
      * @param array<string, int> $userData 发放前的玩家记录
-     * @param int $i 旧版循环计数：发放 $new_reward[$i - 1] 的奖励，日志记 $new_reward[0] 的类型
      */
-    public static function autoBoxReward(array $userData, int $version, int $i, int $now): void
+    public static function autoBoxReward(array $userData, int $version, int $now): void
     {
         $uid = $userData['uid'];
         // 获取奖励
@@ -268,8 +270,8 @@ final class PassGeneral
         $message = self::LANG_CRON_AUTOPASS_GENERAL_GET;
         // 发放奖励
         for ($ii = 1; $ii <= 3; $ii++) {
-            if (isset($newReward[$i - 1]['type' . $ii]) && $newReward[$i - 1]['type' . $ii] !== 0) {
-                $message .= self::getRewardItem((int)$newReward[$i - 1]['type' . $ii], (int)$newReward[$i - 1]['value' . $ii], $uid, $now);
+            if (isset($newReward[0]['type' . $ii]) && $newReward[0]['type' . $ii] !== 0) {
+                $message .= self::getRewardItem((int)$newReward[0]['type' . $ii], (int)$newReward[0]['value' . $ii], $uid, $now);
             }
         }
 

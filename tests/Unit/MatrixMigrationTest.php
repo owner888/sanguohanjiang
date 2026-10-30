@@ -8,7 +8,7 @@ use PDO;
 use PHPUnit\Framework\TestCase;
 
 /**
- * database/migrations/20261031_matrix_legacy.sql 的数据转换
+ * database/migrations/20261031_03_matrix_legacy.sql 的数据转换
  *
  * 在临时库里建升级前的三张表（只含迁移读写的列），写入测试数据后执行迁移，检查转换结果。
  * 表结构与 schema.sql 是否一致另行比对（SHOW CREATE TABLE），这里只看数据。
@@ -123,7 +123,7 @@ final class MatrixMigrationTest extends TestCase
 
     private function runMigration(): void
     {
-        $sql = (string)file_get_contents(dirname(__DIR__, 2) . '/database/migrations/20261031_matrix_legacy.sql');
+        $sql = (string)file_get_contents(dirname(__DIR__, 2) . '/database/migrations/20261031_03_matrix_legacy.sql');
         $lines = array_filter(explode("\n", $sql), fn (string $line): bool => !str_starts_with(ltrim($line), '--'));
         foreach (explode(";\n", implode("\n", $lines)) as $statement) {
             if (trim($statement) !== '') {

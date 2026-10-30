@@ -1,7 +1,7 @@
 -- 已有数据库升级：多人副本 / 团队副本（c=elite）改回旧版（controllers/elite.php + models/elite_model.php）
 --
 -- 新建库直接导入 schema.sql 即可，无需执行本文件。
--- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_elite_legacy.sql
+-- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_07_elite_legacy.sql
 --
 -- 升级前：elite 是新版自定的 3 个精英关卡（守军 / 银两奖励 / 掉落文字都是自定数值），今日次数只存 Redis（elite_times:{uid}），
 --         库里没有任何多人副本表或字段。

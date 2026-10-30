@@ -6340,15 +6340,15 @@ final class GameApiTest extends TestCase
             \Hanjiang\Cron\PassGeneralCron::run(17999);
             $this->assertSame(2, $this->passRow($q['uid'])['is_get']);
 
-            // 旧版循环计数的缺陷照搬：只有第一个待领取的玩家拿到奖励，其余玩家只收到信件与日志；全部重置
+            // 每个待领取的玩家都自动领到本层奖励（旧版只有第一个玩家拿到，已修正）；全部重置
             $repP = (int)DB::table('member')->where('uid', $p['uid'])->value('reputation');
             $repQ = (int)DB::table('member')->where('uid', $q['uid'])->value('reputation');
             $activity = \Hanjiang\Model\PassGeneral::activity();
             $this->assertSame(2, \Hanjiang\Cron\PassGeneralCron::updatePassGeneralInfo($activity, $now));
             $this->assertSame($repP + 5000, (int)DB::table('member')->where('uid', $p['uid'])->value('reputation'));
-            $this->assertSame($repQ, (int)DB::table('member')->where('uid', $q['uid'])->value('reputation'));
+            $this->assertSame($repQ + 5000, (int)DB::table('member')->where('uid', $q['uid'])->value('reputation'));
             $qMessages = $this->messagesOf($q['uid']);
-            $this->assertSame('亲爱的玩家！您今天未领取的过关斩将奖励，系统已自动领取，共获得：请查收!', end($qMessages)['message']);
+            $this->assertSame('亲爱的玩家！您今天未领取的过关斩将奖励，系统已自动领取，共获得：兑奖券10个，紫宝石50个，声望5000个，请查收!', end($qMessages)['message']);
             $qLog = DB::table('passgeneral_box_log')->where('uid', $q['uid'])->get();
             $this->assertCount(1, $qLog);
             $this->assertSame([27, 0, 4, 7], [(int)$qLog[0]['type1'], (int)$qLog[0]['value1'], (int)$qLog[0]['type2'], (int)$qLog[0]['type3']]);

@@ -1,7 +1,7 @@
 -- 已有数据库升级：阵法改回旧版存储（own_matrix 每个阵法一行 + member_field.matrixid 记启用的阵法）
 --
 -- 新建库直接导入 schema.sql 即可，无需执行本文件。
--- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_matrix_legacy.sql
+-- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_03_matrix_legacy.sql
 --
 -- 升级前：zc_sanguo_matrix 每个玩家一行（mid 为当前阵法、level 为该行等级），general.pos / general.matrix_id 是第二份站位记录。
 -- 升级后：zc_sanguo_matrix 主键 (uid, mid)、每个阵法一行；member_field.matrixid 为启用的阵法；
@@ -12,7 +12,7 @@
 --   2. member_field.matrixid = 该玩家原阵法行的 mid（同一玩家多行时取 id 最小的一行，即原代码 first() 读到的那行）；
 --      没有阵法行的玩家 matrixid 为 0（旧版「没有阵法信息」）；
 --   3. general.goout = 1：原 pos > 0（原代码的「出征」）或在阵法站位上的武将；其余为 0。
--- 列放在 race_dateline 之后：无论 20261031_p3_first_recharge.sql 先执行还是后执行，列顺序都与 schema.sql 一致。
+-- 列放在 race_dateline 之后：无论 20261031_02_p3_first_recharge.sql 先执行还是后执行，列顺序都与 schema.sql 一致。
 -- 只需执行一次；重复执行会在第一条 ADD COLUMN matrixid 处报错退出，不改动数据。
 
 ALTER TABLE `zc_sanguo_member_field`

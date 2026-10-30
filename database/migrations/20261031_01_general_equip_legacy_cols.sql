@@ -1,7 +1,7 @@
 -- 已有数据库升级：武将 / 装备补齐旧版字段（own_general / own_equip 语义）
 --
 -- 新建库直接导入 schema.sql 即可，无需执行本文件。
--- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_general_equip_legacy_cols.sql
+-- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_01_general_equip_legacy_cols.sql
 --
 -- 前提（开发者已确认）：升级前 general / equipment 表里只有测试数据，可以丢弃。
 --   旧行没有模板属性（武力/智力/体力/天赋/技能/初始值……），无法可靠回填，所以本文件会：

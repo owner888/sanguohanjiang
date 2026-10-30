@@ -3,7 +3,7 @@
 --   controllers/cron_acttask.php:worldboss）
 --
 -- 新建库直接导入 schema.sql 即可，无需执行本文件。
--- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_boss_legacy.sql
+-- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_08_boss_legacy.sql
 --
 -- 升级前：两个 BOSS 都是新版自定的玩法（自定血量、鼓舞系数、守军、奖励），状态只存 Redis，库里没有 BOSS 表：
 --         hj:worldboss_hp、hj:worldboss_buff:{uid}、hj:worldboss_dmg:{uid}、

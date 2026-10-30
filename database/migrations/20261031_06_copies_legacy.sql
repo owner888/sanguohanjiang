@@ -2,7 +2,7 @@
 -- 并新增旧版锻造材料存储（own_materials / own_materials_log，打造 equip_forge 移植时沿用）
 --
 -- 新建库直接导入 schema.sql 即可，无需执行本文件。
--- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_copies_legacy.sql
+-- 执行：mysql --default-character-set=utf8mb4 -u<user> -p <db> < database/migrations/20261031_06_copies_legacy.sql
 --
 -- 升级前：copies 是新版自定的 3 个战役（守军 / 银两奖励 / 掉落文字都是自定数值），只有 Redis 里的今日次数（copies_times:{uid}），
 --         库里没有任何副本表，也没有玩家锻造材料表。

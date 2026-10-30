@@ -51,8 +51,7 @@ final class PassGeneralCron
     /**
      * 每日清理过关斩将信息（update_pass_general_info）
      *
-     * 旧版照搬：循环计数 $i 按需要自动领取的玩家递增，发放的是 $new_reward[$i - 1]，
-     * 每层宝箱只有一行（超级大奖也只抽一行），所以每次只有第一个玩家真正拿到奖励，其余玩家只收到信件与日志。
+     * 旧版按循环计数发放 $new_reward[$i - 1]，只有第一个玩家拿到奖励；开发者要求修正为每人都发放（见 PassGeneral::autoBoxReward）。
      *
      * @param array<string, mixed> $activity
      * @return int 自动领取的人数
@@ -80,7 +79,7 @@ final class PassGeneralCron
                 continue;
             }
             $i++;
-            PassGeneral::autoBoxReward($val, $version, $i, $now);
+            PassGeneral::autoBoxReward($val, $version, $now);
         }
         // 零点初始化全部玩家（旧版按读到的 uid 列表，即本版本全部玩家；不更新刷新时间）
         PassGeneral::resetVersion($version);
