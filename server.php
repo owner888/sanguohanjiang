@@ -75,6 +75,8 @@ if (!empty($config['ws']['listen'])) {
         DB::init($dbConfig['mysql']);
         Redis::init($dbConfig['redis']);
         \Hanjiang\WebSocket\WebSocketHandler::init();
+        // 多人副本组队：清理本进程上次运行残留的队伍；多进程时启动跨进程投递
+        \Hanjiang\WebSocket\EliteRoom::init($worker->id, $worker->count);
     };
 
     $wsWorker->onWebSocketConnect = [Hanjiang\WebSocket\WebSocketHandler::class, 'onWebSocketConnect'];

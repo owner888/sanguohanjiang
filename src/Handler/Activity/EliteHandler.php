@@ -32,7 +32,9 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  *
  * 旧版是实时组队玩法：客户端 elitepop.js 用 io.connect 连 c=elite&m=get_server 返回的实时服务器，组队 / 队伍列表 /
  * 开战都走实时服务器；index、get_member_info、join_team、get_country_info、action 由实时服务器代为调用
- * （客户端没有直接调用），客户端直接调用的只有 get_server、buy_number、sendinvite。旧版实时服务器不在旧版代码包里。
+ * （客户端没有直接调用），客户端直接调用的只有 get_server、buy_number、sendinvite。旧版实时服务器不在旧版代码包里，
+ * 新版实时组队层是 Hanjiang\WebSocket\EliteRoom（按 elitepop.js 的事件还原），它直接调用这里的 memberInfo / fight 等静态方法；
+ * HTTP 的 action 不再开放（见 action 注释）。
  *
  * 依赖未移植：
  * - 春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(…, 24, uid) 计数）；
@@ -69,7 +71,19 @@ final class EliteHandler
     public static function index(Context $ctx): array
     {
         $return = ['status' => 0];
+        $list = self::rewardList();
+        $return['status'] = 1;
+        $return['list'] = $list;
+        return $return;
+    }
 
+    /**
+     * 军团列表及奖励说明（index 的列表；实时组队层的 teamlist 也带上当前军团这一行）
+     *
+     * @return list<array<string, mixed>>
+     */
+    public static function rewardList(): array
+    {
         // 获取军团列表
         $list = self::getCityList();
         foreach ($list as $key => $val) {
@@ -116,10 +130,7 @@ final class EliteHandler
                 }
             }
         }
-
-        $return['status'] = 1;
-        $return['list'] = $list;
-        return $return;
+        return $list;
     }
 
     /**
@@ -127,10 +138,20 @@ final class EliteHandler
      */
     public static function get_member_info(Context $ctx): array
     {
+        return self::memberInfo(MemberHandler::resolveUid($ctx));
+    }
+
+    /**
+     * get_member_info 的核心（实时组队层 eliteindex 直接调用）
+     *
+     * @return array<string, mixed>
+     */
+    public static function memberInfo(int $uid): array
+    {
         $return = ['status' => 0];
 
         // 判断用户信息
-        $member = self::member(MemberHandler::resolveUid($ctx));
+        $member = self::member($uid);
         if ($member === null) {
             return $return;
         }
@@ -240,23 +261,31 @@ final class EliteHandler
     }
 
     /**
-     * 开始战斗: c=elite&m=action（旧版由实时服务器在队长开战时调用）
+     * 开始战斗: c=elite&m=action —— 只供实时组队层内部调用，HTTP 一律拒绝
      *
-     * fid 军团id，teamid 队伍id（原样返回），topteam 1 为至尊组队，leader 队长uid，members 队员uid（逗号分隔，按出场顺序）
+     * 旧版由实时服务器在队长开战时以 HTTP 调用，参数（fid / teamid / topteam / leader / members）全由调用方给出，
+     * 任何玩家都能拿自己的 token 直接调用、替别人开战扣次数。新版开战只走 WebSocket 的 startfight
+     * （EliteRoom 按服务端的队伍状态调用 fight）。旧版没有「不允许调用」的状态码，这里按旧版第一个失败分支
+     * （用户信息无效）的返回 {status: 0, info: []}。
      */
     public static function action(Context $ctx): array
     {
+        return ['status' => 0, 'info' => []];
+    }
+
+    /**
+     * 开始战斗的核心（旧版 action 的全部流程；实时组队层 startfight 调用，selfUid 为队长）
+     *
+     * id 军团id，teamid 队伍id（原样返回），teamType 1 为至尊组队，leader 队长uid，members 队员uid（逗号分隔，按出场顺序）
+     *
+     * @return array<string, mixed>
+     */
+    public static function fight(int $selfUid, int $id, int $teamid, int $teamType, int $leader, string $members): array
+    {
         $return = ['status' => 0, 'info' => []];
 
-        $id = self::intInput($ctx, 'fid');
-        $teamid = self::intInput($ctx, 'teamid');
-        $teamType = self::intInput($ctx, 'topteam');
-        $leader = self::intInput($ctx, 'leader');
-        $membersInput = $ctx->input('members');
-        $members = is_scalar($membersInput) ? (string)$membersInput : '';
-
         // 判断用户信息
-        $self = self::member(MemberHandler::resolveUid($ctx));
+        $self = self::member($selfUid);
         if ($self === null) {
             return $return;
         }
@@ -600,11 +629,27 @@ final class EliteHandler
     }
 
     /**
+     * 军团存在且该玩家已开启（action / sendinvite 的「取通过的最大军团」判断）
+     */
+    public static function cityOpen(int $uid, int $id): bool
+    {
+        return isset(EliteCity::ROWS[$id]) && $id <= self::getMaxCity(self::getMissionMax($uid));
+    }
+
+    /**
+     * 该军团对玩家是否还是首杀（get_member_info 的 firstkill：没有首杀记录为 1）
+     */
+    public static function firstKill(int $uid, int $id): int
+    {
+        return self::getMissionLog($uid, $id) === null ? 1 : 0;
+    }
+
+    /**
      * 至尊组队价格和加成（elite_model->get_topteam_price：elite_price 第一行）
      *
      * @return array<string, int>
      */
-    private static function supperGroup(): array
+    public static function supperGroup(): array
     {
         $rows = ElitePrice::ROWS;
         ksort($rows);

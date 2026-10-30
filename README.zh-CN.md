@@ -63,9 +63,12 @@
 │   │   ├── Campaign/        # 九宫格战役关卡、战位与试炼 (Map, Matrix, Tower, Copies, Sanctum)
 │   │   ├── Pvp/             # 演武竞技、天下名城与国战 (Arena, Compete, Country, Siege, War)
 │   │   └── Activity/        # 四海通商、博彩、夜宴与任务 (Chat, Shop, Trade, Dice, Task)
-│   └── Http/                # HTTP 协议层与网关
-│       ├── Router.php       # 流水线驱动器及静态文件服务器
-│       └── Response.php     # 统一协议响应助手
+│   ├── Http/                # HTTP 协议层与网关
+│   │   ├── Router.php       # 流水线驱动器及静态文件服务器
+│   │   └── Response.php     # 统一协议响应助手
+│   └── WebSocket/           # WebSocket 网关（18101 端口）
+│       ├── WebSocketHandler.php # 连接生命周期、心跳、鉴权、世界聊天、跑马灯
+│       └── EliteRoom.php    # 多人副本实时组队房间（按旧版 elitepop.js 协议）
 ├── tools/
 │   ├── gen_master_data.php  # 从旧版 mysqldump 重新生成 src/MasterData
 │   └── scan_legacy_gap.php  # 刷新 docs/LEGACY_GAP.md 中脚本生成的部分
@@ -201,7 +204,8 @@
 - `c=sacredtree&m=index|watering`：聚宝通天摇钱神树、灵泉灌溉浇水成长与金叶玉果元宝银饷掉落收割
 - `c=flop&m=index|turnover`：九宫翻牌夺宝、金边卡牌翻转揭秘与至尊元宝大奖
 - `c=challenge&m=index|action`：英雄试炼擂台巅峰单挑、挑战守擂名将（马超/赵云/关羽）夺取擂主荣耀
-- `c=elite&m=index|get_member_info|join_team|get_country_info|get_server|action|buy_number|sendinvite`：多人副本 / 团队副本（按旧版移植）：`EliteCity` 的 83 个军团（主线打通该军团最后一关后开启），守军取 `EliteMission` → `EliteMonster`，按旧版三路团战（`BattleRush`，即旧版 `battle_rush`）结算，首杀 / 再打的经验与道具奖励，VIP 8 元宝「至尊组队」加成，每日 10 次挑战与元宝购买次数（`Price.elite`），12:00–14:00、19:00–21:00 开放。旧版 `index` / `get_member_info` / `join_team` / `get_country_info` / `action` 由独立的实时组队服务器调用，该服务器不在旧版代码包里；现有 WebSocket 组队处理还不符合它的协议（见 `docs/LEGACY_GAP.md`）
+- `c=elite&m=index|get_member_info|join_team|get_country_info|get_server|action|buy_number|sendinvite`：多人副本 / 团队副本（按旧版移植）：`EliteCity` 的 83 个军团（主线打通该军团最后一关后开启），守军取 `EliteMission` → `EliteMonster`，按旧版三路团战（`BattleRush`，即旧版 `battle_rush`）结算，首杀 / 再打的经验与道具奖励，VIP 8 元宝「至尊组队」加成，每日 10 次挑战与元宝购买次数（`Price.elite`），12:00–14:00、19:00–21:00 开放。旧版 `index` / `get_member_info` / `join_team` / `get_country_info` / `action` 由独立的实时组队服务器调用，该服务器不在旧版代码包里；新版在 WebSocket 网关上按客户端协议重建为 `EliteRoom`（见下条），`action` 只供内部调用：HTTP 返回 `{status: 0, info: []}`，开战只走 WebSocket 的 `startfight`
+- 多人副本实时组队（WebSocket，`Hanjiang\WebSocket\EliteRoom`）：旧版客户端 `elitepop.js` 经 `socket.io.min.js` 适配层（上行 `{action, data}`、下行 `{type, data}`，每 20 秒发一次应用层 `ping`）连 `c=elite&m=get_server` 返回的地址（`socket_server_url`，留空则用 `HJ_CONFIG.wsUrl`）。事件：`login`（与 HTTP 同一套 Redis token；`loginstatus` 1 / 0 / -1 / -2 / -3）、`eliteindex`、`teamlist`（只推给正在查看该军团的玩家）、`createTeam`、`jointeam`（最多 3 人，国家队伍只限同国）、`exitteam`、`fireteam`、`firemember`、`changeorder`、`teaminvited`、`startfight`（先给全队 `readyfight`，再把 `EliteHandler::fight` 的结果作为 `enterfight` 推给每个队员）。队伍状态存 Redis，改动都在同一把全局锁内，多个 WebSocket 进程可共享；连接关闭或心跳超时即离开队伍（队长离开则解散）。客户端看不出旧版做法的部分见 `docs/LEGACY_GAP.md`
 - `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`：点将台；`index` / `get_general_info` / `go_battle` / `go_rest` 按旧版 `muster.php` 移植（出征名单 `general.goout`，最多 8 人；休息时从所有阵法撤下、`confrim` 确认后终止训练、卸下全部装备与坐骑、至少保留一名出征将领）；`sale_general` 仍是新版自定的遣散
 - `c=business&m=index|go_business|buy|refresh`：四海通商行商经商（洛阳/成都/建业/襄阳）、商市行情采购与暴利返航折现
 - `c=gambling&m=index|buy|cut|sell`：金银宝盆博彩、原石抛光雕琢与聚宝盆估价翻倍典当
@@ -242,6 +246,15 @@
 ```bash
 ./vendor/bin/phpunit                      # 全部测试
 ./vendor/bin/phpunit --testsuite Unit     # 公式与组队（TeamBuilder 需要 MySQL，不需要 Redis）
+node tests/js/socket_io_adapter.test.js   # socket.io.min.js 适配层（帧格式、心跳、连接地址）
+```
+
+多人副本实时组队端到端冒烟（启动真实服务，开放时间判断固定在开放时段内；只用于测试的入口）：
+
+```bash
+php tests/e2e/elite_smoke_server.php start -d
+node tests/e2e/elite_smoke.mjs            # 两个游客：创建 → 加入 → 开战，双方都收到 enterfight
+php tests/e2e/elite_smoke_server.php stop
 ```
 
 ---
@@ -277,7 +290,7 @@
 - [x] 前端网络层指数退避断线重连（Exponential Backoff with Jitter）与服务端超时僵尸连接自动回收扫描（`sweep`）
 - [x] 将魂星路 (`tower`) 按旧版移植：旧版关卡与守军、战报、首杀、扫荡、购买次数与每日原魂奖励
 - [x] 平乱副本 (`copies`) 按旧版移植：旧版怪物、战报、首杀与掉落奖励、锻造材料存储（`own_materials`）、扫荡与购买次数
-- [x] 多人副本 (`elite`) PHP 部分按旧版移植：军团、旧版团战（`battle_rush`）对 `EliteMonster`、首杀与掉落奖励、至尊组队、购买次数与每日重置（实时组队协议待补）
+- [x] 多人副本 (`elite`) 按旧版移植：军团、旧版团战（`battle_rush`）对 `EliteMonster`、首杀与掉落奖励、至尊组队、购买次数与每日重置，以及按 `elitepop.js` 协议重建的实时组队房间
 - [x] 过关斩将斩杀六大名将 (`pass_general`)、主线任务动态里程碑 (`mainquest`)
 - [x] 原版经典深度养成与宏观格局重现：玩家自建国家（军团）系统 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
 - [x] 全面打通前端全量高频日常交互系统：每日签到福利 (`dailysign`)、VIP 特权俸禄与晋级礼包 (`vip`)、系统信箱与飞鸽传书 (`message`)、好友社交系统 (`friend`)、银矿占领挂机采矿 (`mine`)

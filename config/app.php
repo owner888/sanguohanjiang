@@ -17,11 +17,13 @@ return [
         'public_port' => (int)(getenv('WS_PUBLIC_PORT') ?: 18101),
     ],
     'server_base_port' => (int)(getenv('SERVER_BASE_PORT') ?: 18100),
-    // 多人副本实时服务器地址（旧版 application/config/config.php 的 socket_server_url，c=elite&m=get_server 原样返回）
-    // 旧版实时服务器不在旧版代码包里；新版客户端的 io.connect 适配层优先连 HJ_CONFIG.wsUrl，不读这个地址
-    'socket_server_url' => getenv('SOCKET_SERVER_URL') ?: 'http://127.0.0.1:8001',
+    // 多人副本实时服务器地址（旧版 application/config/config.php 的 socket_server_url，c=elite&m=get_server 原样返回，
+    // 客户端 elitepop.js 拿它 io.connect）。新版实时组队就在上面的 ws 网关（Hanjiang\WebSocket\EliteRoom）：
+    // 留空时 socket.io.min.js 适配层改连 HJ_CONFIG.wsUrl（页面同主机 + ws.public_port）；ws 网关在别的域名 / 端口时
+    // 配成该地址（http(s):// 或 ws(s):// 均可，适配层会转换）
+    'socket_server_url' => getenv('SOCKET_SERVER_URL') ?: '',
     'assets' => [
-        'version'    => getenv('ASSET_VERSION') ?: '20261030_2',
+        'version'    => getenv('ASSET_VERSION') ?: '20261031_1',
         'static_url' => getenv('STATIC_URL') ?: 'static/',
         'cdn_url'    => getenv('CDN_URL') ?: 'static/',
         'api_url'    => getenv('API_URL') ?: 'index.php',

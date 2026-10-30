@@ -3243,6 +3243,26 @@ final class GameApiTest extends TestCase
     }
 
     /**
+     * 多人副本开战核心 EliteHandler::fight（旧版实时服务器以 HTTP 调 c=elite&m=action 的参数：token 为调用者，
+     * fid / teamid / topteam / leader / members）；新版 HTTP action 不开放，只由 EliteRoom 的 startfight 调用
+     *
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private function eliteFight(array $params): array
+    {
+        $self = MemberHandler::resolveUid(Context::mock(['token' => $params['token'] ?? '']));
+        return \Hanjiang\Handler\Activity\EliteHandler::fight(
+            $self,
+            (int)($params['fid'] ?? 0),
+            (int)($params['teamid'] ?? 0),
+            (int)($params['topteam'] ?? 0),
+            (int)($params['leader'] ?? 0),
+            (string)($params['members'] ?? ''),
+        );
+    }
+
+    /**
      * 旧版直接 json_encode 非数组返回值的接口（join_team / get_country_info）：返回响应体原文
      *
      * @param array<string, mixed> $params
@@ -3454,41 +3474,41 @@ final class GameApiTest extends TestCase
         $members = "{$a['uid']},{$b['uid']}";
         $base = $a['auth'] + ['fid' => 1, 'teamid' => 3, 'leader' => $a['uid'], 'members' => $members];
 
-        $this->assertSame(['status' => -1, 'info' => []], $this->eliteRequest('action', ['members' => ''] + $base));
-        $this->assertSame(['status' => -1, 'info' => []], $this->eliteRequest('action', ['leader' => 0] + $base));
+        $this->assertSame(['status' => -1, 'info' => []], $this->eliteFight(['members' => ''] + $base));
+        $this->assertSame(['status' => -1, 'info' => []], $this->eliteFight(['leader' => 0] + $base));
         // 自己不能和自己组队
-        $this->assertSame(['status' => 0, 'info' => []], $this->eliteRequest('action', ['members' => "{$a['uid']},{$a['uid']}"] + $base));
+        $this->assertSame(['status' => 0, 'info' => []], $this->eliteFight(['members' => "{$a['uid']},{$a['uid']}"] + $base));
 
         // 次数不足（含没有活动记录的玩家）返回该玩家 uid
         DB::table('member_activity')->where('uid', $b['uid'])->update(['elitetimes' => 0, 'elitesurplustimes' => 0]);
-        $this->assertSame(['status' => -2, 'info' => [], 'uid' => (string)$b['uid']], $this->eliteRequest('action', $base));
+        $this->assertSame(['status' => -2, 'info' => [], 'uid' => (string)$b['uid']], $this->eliteFight($base));
         $c = $this->newGuestPlayer();
-        $this->assertSame(['status' => -2, 'info' => [], 'uid' => (string)$c['uid']], $this->eliteRequest('action', ['members' => "{$a['uid']},{$c['uid']}"] + $base));
+        $this->assertSame(['status' => -2, 'info' => [], 'uid' => (string)$c['uid']], $this->eliteFight(['members' => "{$a['uid']},{$c['uid']}"] + $base));
         DB::table('member_activity')->where('uid', $b['uid'])->update(['elitesurplustimes' => 1]);
 
         // 任一队员没开启该军团
-        $this->assertSame(['status' => -4, 'info' => []], $this->eliteRequest('action', ['fid' => 2] + $base));
+        $this->assertSame(['status' => -4, 'info' => []], $this->eliteFight(['fid' => 2] + $base));
         $this->eliteMissionProgress($b['uid'], 49);
-        $this->assertSame(['status' => -4, 'info' => []], $this->eliteRequest('action', $base));
+        $this->assertSame(['status' => -4, 'info' => []], $this->eliteFight($base));
         $this->eliteMissionProgress($b['uid'], 50);
 
         // 至尊组队：队长 VIP 8 以上、元宝够
         DB::table('member')->where('uid', $a['uid'])->update(['vip' => 7, 'gold' => 1000]);
-        $this->assertSame(['status' => -7, 'info' => []], $this->eliteRequest('action', ['topteam' => 1] + $base));
+        $this->assertSame(['status' => -7, 'info' => []], $this->eliteFight(['topteam' => 1] + $base));
         DB::table('member')->where('uid', $a['uid'])->update(['vip' => 8, 'gold' => \Hanjiang\MasterData\ElitePrice::ROWS[1]['gold'] - 1]);
-        $this->assertSame(['status' => -6, 'info' => []], $this->eliteRequest('action', ['topteam' => 1] + $base));
+        $this->assertSame(['status' => -6, 'info' => []], $this->eliteFight(['topteam' => 1] + $base));
 
         // 以上都不扣次数、不记战斗记录
         $this->assertSame([10, 0], [$this->eliteActivity($a['uid'])['elitetimes'], $this->eliteActivity($b['uid'])['elitetimes']]);
         $this->assertSame(0, DB::table('elite_log')->where('leader', $a['uid'])->count());
 
         // 同一队长 10 秒内不能再次开战
-        $this->assertSame(1, $this->eliteRequest('action', $base)['status']);
+        $this->assertSame(1, $this->eliteFight($base)['status']);
         $this->assertSame([9, 0, 0], [$this->eliteActivity($a['uid'])['elitetimes'], $this->eliteActivity($b['uid'])['elitetimes'], $this->eliteActivity($b['uid'])['elitesurplustimes']]);
         DB::table('member_activity')->where('uid', $b['uid'])->update(['elitetimes' => 1]);
-        $this->assertSame(['status' => -8, 'info' => []], $this->eliteRequest('action', $base));
+        $this->assertSame(['status' => -8, 'info' => []], $this->eliteFight($base));
         DB::table('elite_log')->where('leader', $a['uid'])->update(['dateline' => time() - 11]);
-        $this->assertSame(1, $this->eliteRequest('action', $base)['status']);
+        $this->assertSame(1, $this->eliteFight($base)['status']);
     }
 
     public function testEliteActionLoseStructure(): void
@@ -3499,7 +3519,7 @@ final class GameApiTest extends TestCase
         $c = $this->elitePlayer(false);
         DB::table('member_activity')->where('uid', $c['uid'])->update(['elitetimes' => 0, 'elitesurplustimes' => 2]);
         $members = "{$a['uid']},{$b['uid']},{$c['uid']}";
-        $res = $this->eliteRequest('action', $a['auth'] + ['fid' => 1, 'teamid' => 9, 'leader' => $a['uid'], 'members' => $members]);
+        $res = $this->eliteFight($a['auth'] + ['fid' => 1, 'teamid' => 9, 'leader' => $a['uid'], 'members' => $members]);
 
         $this->assertSame(['status', 'info', 'battle'], array_keys($res));
         $this->assertSame(1, $res['status']);
@@ -3584,7 +3604,7 @@ final class GameApiTest extends TestCase
         $expBefore = [$a['uid'] => $exp($a['uid']), $b['uid'] => $exp($b['uid']), $c['uid'] => $exp($c['uid'])];
 
         // 首杀：首杀经验 + 首杀奖励（军团 1 为整件装备）
-        $res = $this->eliteRequest('action', $params);
+        $res = $this->eliteFight($params);
         $this->assertSame(1, $res['status']);
         $this->assertSame(1, $res['battle']['win']);
         $this->assertSame(['win' => 1, 'teamid' => 4], array_slice($res['info'], 3, null, true));
@@ -3639,7 +3659,7 @@ final class GameApiTest extends TestCase
         $rolls = [mt_rand(1, 100), mt_rand(1, 100), mt_rand(1, 100)];
         mt_srand(20261031);
         $expBefore = [$a['uid'] => $exp($a['uid']), $b['uid'] => $exp($b['uid']), $c['uid'] => $exp($c['uid'])];
-        $res = $this->eliteRequest('action', $params);
+        $res = $this->eliteFight($params);
         $this->assertSame(1, $res['battle']['win']);
         foreach ([$a, $b, $c] as $i => $p) {
             $uid = $p['uid'];
@@ -3659,12 +3679,385 @@ final class GameApiTest extends TestCase
         $top = \Hanjiang\MasterData\ElitePrice::ROWS[1];
         DB::table('member')->where('uid', $a['uid'])->update(['vip' => 8, 'gold' => 100]);
         DB::table('elite_log')->where('leader', $a['uid'])->update(['dateline' => time() - 11]);
-        $res = $this->eliteRequest('action', ['topteam' => 1] + $params);
+        $res = $this->eliteFight(['topteam' => 1] + $params);
         $this->assertSame(1, $res['battle']['win']);
         $this->assertSame([$city['exp'] * 3, $city['first_exp'] * 3], [$res['info'][(string)$a['uid']]['exp'], $res['info'][(string)$a['uid']]['first_exp']]);
         $this->assertSame([$city['exp'] * 2, $city['first_exp'] * 2], [$res['info'][(string)$b['uid']]['exp'], $res['info'][(string)$b['uid']]['first_exp']]);
         $this->assertSame(100 - $top['gold'], (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
         $this->assertSame(1, (int)DB::table('elite_log')->where('leader', $a['uid'])->where('topteam', 1)->count());
+    }
+
+    /**
+     * 多人副本实时组队：elitepop.js 经 socket.io.min.js 适配层发 {action, data}
+     */
+    private function eliteWs(string $action, mixed $data = '', ?int $uid = null): \OmniPHP\WebSocket\Context
+    {
+        $ctx = \OmniPHP\WebSocket\Context::mock(['action' => $action, 'data' => $data, 'time' => 0], uid: $uid);
+        \Hanjiang\WebSocket\WebSocketHandler::dispatch($ctx);
+        return $ctx;
+    }
+
+    /**
+     * 登录实时组队（开放时间内），返回该玩家的会话收件箱（之后推给他的帧都追加到这里）
+     *
+     * @param array{uid: int, auth: array{token: string, uid: int}} $p
+     */
+    private function eliteWsLogin(array $p): \OmniPHP\WebSocket\Context
+    {
+        \Hanjiang\WebSocket\EliteRoom::useClock(static fn (): int => (int)strtotime('2026-10-30 12:30:00'));
+        $inbox = $this->eliteWs('login', ['uid' => $p['uid'], 'token' => $p['auth']['token'], 'serverid' => 1]);
+        $this->assertSame([['loginstatus', 1]], $this->eliteFrames($inbox));
+        return $inbox;
+    }
+
+    /**
+     * 清掉多人副本实时组队的 Redis 状态（各用例都看军团 1 的队伍列表，避免互相影响）
+     */
+    private function eliteRoomReset(): void
+    {
+        $prefix = (string)Redis::instance()->getOption(\Redis::OPT_PREFIX);
+        foreach (Redis::keys('elite:*') as $key) {
+            Redis::del(substr($key, strlen($prefix)));
+        }
+    }
+
+    /**
+     * 取出并清空收到的帧：[[事件名, 载荷], ...]
+     *
+     * @return list<array{0: string, 1: mixed}>
+     */
+    private function eliteFrames(\OmniPHP\WebSocket\Context $inbox): array
+    {
+        $frames = [];
+        foreach ($inbox->sentMessages as $raw) {
+            $frame = json_decode($raw, true);
+            $frames[] = [$frame['type'], $frame['data']];
+        }
+        $inbox->sentMessages = [];
+        return $frames;
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function eliteFrameTypes(\OmniPHP\WebSocket\Context $inbox): array
+    {
+        return array_column($this->eliteFrames($inbox), 0);
+    }
+
+    public function testEliteRoomLoginAndIndex(): void
+    {
+        $this->eliteRoomReset();
+        $p = $this->elitePlayer();
+        $at = static fn (string $hm): \Closure => static fn (): int => (int)strtotime('2026-10-30 ' . $hm . ':00');
+        $login = fn (array $data): array => $this->eliteFrames($this->eliteWs('login', $data));
+
+        // 缺 token -1；token 无效 / 与 uid 不符 0（只认 token，不回退到 uid）；不在开放时间 -3
+        \Hanjiang\WebSocket\EliteRoom::useClock($at('12:30'));
+        $this->assertSame([['loginstatus', -1]], $login(['uid' => $p['uid'], 'serverid' => 1]));
+        $this->assertSame([['loginstatus', 0]], $login(['uid' => $p['uid'], 'token' => 'tk_forged', 'serverid' => 1]));
+        $this->assertSame([['loginstatus', 0]], $login(['uid' => $p['uid'] + 1, 'token' => $p['auth']['token'], 'serverid' => 1]));
+        foreach (['11:59' => -3, '14:01' => -3, '18:59' => -3, '21:01' => -3] as $hm => $code) {
+            \Hanjiang\WebSocket\EliteRoom::useClock($at($hm));
+            $this->assertSame([['loginstatus', $code]], $login(['uid' => $p['uid'], 'token' => $p['auth']['token']]), $hm);
+        }
+        \Hanjiang\WebSocket\EliteRoom::useClock($at('19:00'));
+        $this->assertSame([['loginstatus', 1]], $login(['uid' => $p['uid'], 'token' => $p['auth']['token']]));
+
+        // 没登录的连接发组队事件：loginstatus 0（客户端提示失去登录状态）
+        $q = $this->newGuestPlayer();
+        foreach (['eliteindex', 'teamlist', 'createTeam', 'startfight'] as $action) {
+            $this->assertSame([['loginstatus', 0]], $this->eliteFrames($this->eliteWs($action, ['id' => 1], $q['uid'])), $action);
+        }
+
+        // eliteindex：军团列表（fid / name / open / firstkill）、今日次数、至尊组队价格
+        $inbox = $this->eliteWsLogin($p);
+        $this->eliteWs('eliteindex', '', $p['uid']);
+        [[$type, $index]] = $this->eliteFrames($inbox);
+        $this->assertSame('eliteindex', $type);
+        $this->assertSame(['list', 'number', 'supper_group', 'countryname'], array_keys($index));
+        $this->assertCount(count(\Hanjiang\MasterData\EliteCity::ROWS), $index['list']);
+        $this->assertSame(['fid' => 1, 'name' => \Hanjiang\MasterData\EliteCity::ROWS[1]['name'], 'open' => 1, 'firstkill' => 1], $index['list'][0]);
+        $this->assertSame(0, $index['list'][1]['open']);
+        $this->assertSame(10, $index['number']);
+        $this->assertSame(\Hanjiang\MasterData\ElitePrice::ROWS[1], $index['supper_group']);
+        \Hanjiang\WebSocket\EliteRoom::disconnect($p['uid']);
+    }
+
+    public function testEliteRoomTeamRules(): void
+    {
+        $this->eliteRoomReset();
+        [$a, $b, $c, $d] = [$this->elitePlayer(), $this->elitePlayer(), $this->elitePlayer(), $this->elitePlayer()];
+        $locked = $this->newGuestPlayer();
+        [$ia, $ib, $ic, $id, $il] = array_map(fn (array $p): \OmniPHP\WebSocket\Context => $this->eliteWsLogin($p), [$a, $b, $c, $d, $locked]);
+
+        // teamlist：军团奖励行 + id / firstkill / list；军团不存在 -1，未开启 -2
+        $this->eliteWs('teamlist', ['id' => 1], $a['uid']);
+        [[$type, $list]] = $this->eliteFrames($ia);
+        $this->assertSame('teamlist', $type);
+        $city = array_column(\Hanjiang\Handler\Activity\EliteHandler::rewardList(), null, 'id')[1];
+        $this->assertSame($city + ['firstkill' => 1, 'list' => []], $list);
+        $this->eliteWs('teamlist', ['id' => 999], $locked['uid']);
+        $this->eliteWs('teamlist', ['id' => 1], $locked['uid']);
+        $this->assertSame([['teamlist_error', -1], ['teamlist_error', -2]], $this->eliteFrames($il));
+        $this->eliteWs('teamlist', ['id' => 1], $b['uid']);
+        $this->eliteFrames($ib);
+
+        // 创建：createteamdone + getteamdone；正在看军团 1 的玩家收到 teamlist，没在看的（c）收不到
+        $this->eliteWs('createTeam', ['id' => 1, 'type' => 1, 'topteam' => false], $a['uid']);
+        $frames = $this->eliteFrames($ia);
+        $this->assertSame(['createteamdone', 'getteamdone', 'teamlist'], array_column($frames, 0));
+        $teamId = $frames[0][1]['teamid'];
+        $nick = static fn (int $uid): string => (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $this->assertSame([
+            'teamid' => $teamId, 'fid' => 1, 'name' => $nick($a['uid']), 'leader' => $a['uid'], 'topteam' => 0,
+            'countryid' => 0, 'countryname' => '', 'invited' => 0, 'num' => 1,
+            'list' => [['uid' => $a['uid'], 'nickname' => $nick($a['uid']), 'level' => 20000, 'order' => 1, 'leader' => true]],
+        ], $frames[1][1]);
+        $summary = ['teamid' => $teamId, 'name' => $nick($a['uid']), 'num' => 1, 'countryid' => 0, 'countryname' => '', 'topteam' => 0];
+        $this->assertSame([$summary], $frames[2][1]['list']);
+        $this->assertSame([['teamlist', $city + ['firstkill' => 1, 'list' => [$summary]]]], $this->eliteFrames($ib));
+        $this->assertSame([], $this->eliteFrames($ic));
+
+        // 创建失败：已在队伍 -1，国家队伍没国家 -2，军团未开启 -3
+        $this->eliteWs('createTeam', ['id' => 1, 'type' => 1], $a['uid']);
+        $this->eliteWs('createTeam', ['id' => 1, 'type' => 2], $b['uid']);
+        $this->eliteWs('createTeam', ['id' => 2, 'type' => 1], $b['uid']);
+        $this->assertSame([['createteam_error', -1]], $this->eliteFrames($ia));
+        $this->assertSame([['createteam_error', -2], ['createteam_error', -3]], $this->eliteFrames($ib));
+
+        // 加入：军团未开启 -1，队伍不存在 -2；成功后全队 getteamdone，按空位排第 2
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $locked['uid']);
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId + 1000], $b['uid']);
+        $this->assertSame([['jointeam_error', -1]], $this->eliteFrames($il));
+        $this->assertSame([['jointeam_error', -2]], $this->eliteFrames($ib));
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->assertSame(['jointeamdone', 'getteamdone', 'teamlist'], $this->eliteFrameTypes($ib));
+        [[, $detail], [, $list]] = $this->eliteFrames($ia);
+        $this->assertSame([2, [1, 2]], [$detail['num'], array_column($detail['list'], 'order')]);
+        $this->assertSame(2, $list['list'][0]['num']);
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->assertSame([['jointeam_error', 0]], $this->eliteFrames($ib));
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $c['uid']);
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $d['uid']);
+        $this->assertSame([['jointeam_error', -3]], $this->eliteFrames($id));
+        $this->eliteFrames($ia);
+        $this->eliteFrames($ib);
+        $this->eliteFrames($ic);
+
+        // 调位置：只有队长 -3；from 位置的人换到 to
+        $this->eliteWs('changeorder', ['id' => 1, 'teamid' => $teamId, 'from' => 2, 'to' => 3], $b['uid']);
+        $this->assertSame([['changeorder_error', -3]], $this->eliteFrames($ib));
+        $this->eliteWs('changeorder', ['id' => 1, 'teamid' => $teamId, 'from' => 2, 'to' => 3], $a['uid']);
+        [[$type, $detail]] = $this->eliteFrames($ic);
+        $this->assertSame('getteamdone', $type);
+        $this->assertSame([$a['uid'] => 1, $b['uid'] => 3, $c['uid'] => 2], array_column($detail['list'], 'order', 'uid'));
+
+        // 踢人：不是队长 -3，对方不在队伍 -4；被踢者 beenfire，队长 firememberdone
+        $this->eliteWs('firemember', ['id' => 1, 'teamid' => $teamId, 'uid' => $c['uid']], $b['uid']);
+        $this->assertSame([['firemember_error', -3]], array_slice($this->eliteFrames($ib), -1));
+        $this->eliteWs('firemember', ['id' => 1, 'teamid' => $teamId, 'uid' => $d['uid']], $a['uid']);
+        $this->assertSame([['firemember_error', -4]], array_slice($this->eliteFrames($ia), -1));
+        $this->eliteWs('firemember', ['id' => 1, 'teamid' => $teamId, 'uid' => $c['uid']], $a['uid']);
+        // c 加入时已在看军团 1，被踢后仍会收到列表更新
+        $this->assertSame(['beenfire', 'teamlist'], $this->eliteFrameTypes($ic));
+        $this->assertSame(['firememberdone', 'getteamdone', 'teamlist'], $this->eliteFrameTypes($ia));
+        [[$type, $detail]] = $this->eliteFrames($ib);
+        $this->assertSame(['getteamdone', 2], [$type, $detail['num']]);
+
+        // 退出：队长不能退 -3，队伍不存在 -2，军团不对 -1，不在该队伍 0
+        $this->eliteWs('exitteam', ['id' => 1, 'teamid' => $teamId], $a['uid']);
+        $this->assertSame([['exitteam_error', -3]], $this->eliteFrames($ia));
+        $this->eliteWs('exitteam', ['id' => 1, 'teamid' => $teamId + 1000], $b['uid']);
+        $this->eliteWs('exitteam', ['id' => 2, 'teamid' => $teamId], $b['uid']);
+        $this->assertSame([['exitteam_error', -2], ['exitteam_error', -1]], $this->eliteFrames($ib));
+        $this->eliteWs('exitteam', ['id' => 1, 'teamid' => $teamId], $c['uid']);
+        $this->assertSame([['exitteam_error', 0]], $this->eliteFrames($ic));
+        // 解散：只有队长 -3
+        $this->eliteWs('fireteam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->assertSame([['fireteam_error', -3]], $this->eliteFrames($ib));
+        $this->eliteWs('exitteam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->assertSame(['exitteamdone', 'teamlist'], $this->eliteFrameTypes($ib));
+        [[, $detail]] = $this->eliteFrames($ia);
+        $this->assertSame(1, $detail['num']);
+
+        // 邀请标记
+        $this->eliteWs('teaminvited', ['id' => 1, 'teamid' => $teamId], $a['uid']);
+        $this->assertSame(1, $this->eliteFrames($ia)[0][1]['invited']);
+
+        // 解散：队长 fireteamdone，队员 teambeenfire，列表清空
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->eliteFrames($ia);
+        $this->eliteFrames($ib);
+        $this->eliteWs('fireteam', ['id' => 1, 'teamid' => $teamId], $a['uid']);
+        $this->assertSame([['fireteamdone', ['teamid' => $teamId]], ['teamlist', $city + ['firstkill' => 1, 'list' => []]]], $this->eliteFrames($ia));
+        $this->assertSame(['teambeenfire', 'teamlist'], $this->eliteFrameTypes($ib));
+
+        // 国家队伍：只有同国家可加入（没有国家 -4，国家不符 -5）
+        $country = static fn (string $name, int $uid): int => (int)DB::table('country')->insertGetId(['name' => $name . substr((string)hrtime(true), -6), 'member' => 1, 'uid' => $uid, 'nickname' => 'k']);
+        $ca = $country('组', $a['uid']);
+        $cb = $country('队', $b['uid']);
+        DB::table('member')->where('uid', $a['uid'])->update(['country' => $ca]);
+        $this->eliteWs('createTeam', ['id' => 1, 'type' => 2, 'topteam' => true], $a['uid']);
+        $frames = $this->eliteFrames($ia);
+        $teamId = $frames[0][1]['teamid'];
+        $this->assertSame([$ca, (string)DB::table('country')->where('id', $ca)->value('name'), 1], [$frames[1][1]['countryid'], $frames[1][1]['countryname'], $frames[1][1]['topteam']]);
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        DB::table('member')->where('uid', $b['uid'])->update(['country' => $cb]);
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->assertSame([['jointeam_error', -4], ['jointeam_error', -5]], array_values(array_filter($this->eliteFrames($ib), static fn (array $f): bool => $f[0] === 'jointeam_error')));
+        DB::table('member')->where('uid', $b['uid'])->update(['country' => $ca]);
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->assertSame('jointeamdone', $this->eliteFrames($ib)[0][0]);
+
+        foreach ([$a, $b, $c, $d, $locked] as $p) {
+            \Hanjiang\WebSocket\EliteRoom::disconnect($p['uid']);
+        }
+    }
+
+    public function testEliteRoomStartFight(): void
+    {
+        $this->eliteRoomReset();
+        // 阵法为空：每场直接大败，结果确定（同 testEliteActionLoseStructure）
+        [$a, $b, $c] = [$this->elitePlayer(false), $this->elitePlayer(false), $this->elitePlayer(false)];
+        [$ia, $ib, $ic] = array_map(fn (array $p): \OmniPHP\WebSocket\Context => $this->eliteWsLogin($p), [$a, $b, $c]);
+        $this->eliteWs('teamlist', ['id' => 1], $c['uid']);
+        $create = function (array $leader, \OmniPHP\WebSocket\Context $inbox, array $members, bool $topteam = false): int {
+            $this->eliteWs('createTeam', ['id' => 1, 'type' => 1, 'topteam' => $topteam], $leader['uid']);
+            $teamId = $this->eliteFrames($inbox)[0][1]['teamid'];
+            foreach ($members as $m) {
+                $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $m['uid']);
+            }
+            return $teamId;
+        };
+
+        // 不在队伍 0；人数不够 -3；不是队长 -2
+        $this->eliteWs('startfight', 1, $a['uid']);
+        $this->assertSame([['startfight_error', 0]], $this->eliteFrames($ia));
+        $teamId = $create($a, $ia, []);
+        $this->eliteWs('startfight', 1, $a['uid']);
+        $this->assertSame([['startfight_error', -3]], array_slice($this->eliteFrames($ia), -1));
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->eliteWs('changeorder', ['id' => 1, 'teamid' => $teamId, 'from' => 1, 'to' => 2], $a['uid']);
+        $this->eliteFrames($ib);
+        $this->eliteWs('startfight', 1, $b['uid']);
+        $this->assertSame([['startfight_error', -2]], $this->eliteFrames($ib));
+        $this->eliteFrames($ia);
+        $this->eliteFrames($ic);
+
+        // 开战：全队先 readyfight，再收到同一份 enterfight（fight 的返回值，出场顺序按位置：b 第 1、a 第 2）
+        $this->eliteWs('startfight', 1, $a['uid']);
+        $fa = $this->eliteFrames($ia);
+        $fb = $this->eliteFrames($ib);
+        $this->assertSame(['readyfight', 'enterfight', 'teamlist'], array_column($fa, 0));
+        $this->assertSame(['readyfight', 'enterfight', 'teamlist'], array_column($fb, 0));
+        $enter = $fa[1][1];
+        $this->assertSame($enter, $fb[1][1]);
+        $this->assertSame(1, $enter['status']);
+        $this->assertSame([$b['uid'] => ['number' => 9], $a['uid'] => ['number' => 9], 'win' => 2, 'teamid' => $teamId], $enter['info']);
+        $this->assertSame([(string)$b['uid'], (string)$a['uid']], [$enter['battle']['battle_ready']['1']['left']['uid'], $enter['battle']['battle_ready']['2']['left']['uid']]);
+        $this->assertSame("{$b['uid']},{$a['uid']}", DB::table('elite_log')->where('leader', $a['uid'])->value('member'));
+        // 开战成功后队伍清除，正在看军团的玩家列表更新
+        $this->assertSame([], $fa[2][1]['list']);
+        $this->assertSame([['teamlist', []]], array_map(static fn (array $f): array => [$f[0], $f[1]['list']], $this->eliteFrames($ic)));
+        $this->eliteWs('startfight', 1, $a['uid']);
+        $this->assertSame([['startfight_error', 0]], $this->eliteFrames($ia));
+
+        // 10 秒内再开战 → startfight_error -5，队员 readyfight_error；队伍保留
+        $teamId = $create($a, $ia, [$b]);
+        $this->eliteFrames($ia);
+        $this->eliteFrames($ib);
+        $this->eliteWs('startfight', 1, $a['uid']);
+        $this->assertSame([['readyfight', ['teamid' => $teamId]], ['startfight_error', -5]], $this->eliteFrames($ia));
+        $this->assertSame([['readyfight', ['teamid' => $teamId]], ['readyfight_error', -5]], $this->eliteFrames($ib));
+        DB::table('elite_log')->where('leader', $a['uid'])->update(['dateline' => time() - 11]);
+
+        // 次数不足 → 全队 enterfight {status -2, uid}，队伍保留
+        DB::table('member_activity')->where('uid', $b['uid'])->update(['elitetimes' => 0, 'elitesurplustimes' => 0]);
+        $this->eliteWs('startfight', 1, $a['uid']);
+        $expect = [['readyfight', ['teamid' => $teamId]], ['enterfight', ['status' => -2, 'info' => [], 'uid' => (string)$b['uid']]]];
+        $this->assertSame($expect, $this->eliteFrames($ia));
+        $this->assertSame($expect, $this->eliteFrames($ib));
+        $this->eliteWs('fireteam', ['id' => 1, 'teamid' => $teamId], $a['uid']);
+        DB::table('member_activity')->where('uid', $b['uid'])->update(['elitetimes' => 1]);
+        $this->eliteFrames($ia);
+        $this->eliteFrames($ib);
+
+        // 至尊组队：队长不到 VIP8 → -7；元宝不足 → -4
+        $teamId = $create($a, $ia, [$b], true);
+        $this->eliteFrames($ib);
+        DB::table('member')->where('uid', $a['uid'])->update(['vip' => 7, 'gold' => 100000]);
+        $this->eliteWs('startfight', 1, $a['uid']);
+        DB::table('member')->where('uid', $a['uid'])->update(['vip' => 8, 'gold' => \Hanjiang\MasterData\ElitePrice::ROWS[1]['gold'] - 1]);
+        $this->eliteWs('startfight', 1, $a['uid']);
+        $this->assertSame([['startfight_error', -7], ['startfight_error', -4]], array_values(array_filter($this->eliteFrames($ia), static fn (array $f): bool => $f[0] === 'startfight_error')));
+        $this->assertSame([['readyfight_error', -7], ['readyfight_error', -4]], array_values(array_filter($this->eliteFrames($ib), static fn (array $f): bool => $f[0] === 'readyfight_error')));
+        // 以上失败都不扣次数
+        $this->assertSame([9, 1], [$this->eliteActivity($a['uid'])['elitetimes'], $this->eliteActivity($b['uid'])['elitetimes']]);
+
+        foreach ([$a, $b, $c] as $p) {
+            \Hanjiang\WebSocket\EliteRoom::disconnect($p['uid']);
+        }
+    }
+
+    public function testEliteRoomDisconnectAndRelogin(): void
+    {
+        $this->eliteRoomReset();
+        [$a, $b, $c] = [$this->elitePlayer(), $this->elitePlayer(), $this->elitePlayer()];
+        [$ia, $ib, $ic] = array_map(fn (array $p): \OmniPHP\WebSocket\Context => $this->eliteWsLogin($p), [$a, $b, $c]);
+        $this->eliteWs('teamlist', ['id' => 1], $c['uid']);
+        $this->eliteWs('createTeam', ['id' => 1, 'type' => 1], $a['uid']);
+        $teamId = $this->eliteFrames($ia)[0][1]['teamid'];
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->eliteFrames($ia);
+        $this->eliteFrames($ib);
+        $this->eliteFrames($ic);
+
+        // 队员断线：从队伍移除，队长 getteamdone，观众 teamlist
+        \Hanjiang\WebSocket\EliteRoom::disconnect($b['uid']);
+        [[$type, $detail]] = $this->eliteFrames($ia);
+        $this->assertSame(['getteamdone', 1], [$type, $detail['num']]);
+        $this->assertSame(1, $this->eliteFrames($ic)[0][1]['list'][0]['num']);
+        $this->assertSame([['loginstatus', 0]], $this->eliteFrames($this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid'])));
+
+        // 重复登录：旧会话作废（旧队伍按离开处理），新会话可正常加入
+        $ib = $this->eliteWsLogin($b);
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->assertSame('jointeamdone', $this->eliteFrames($ib)[0][0]);
+        $this->eliteFrames($ia);
+        $old = $ib;
+        $ib = $this->eliteWsLogin($b);
+        $this->assertSame([], $this->eliteFrames($old));
+        [[$type, $detail]] = $this->eliteFrames($ia);
+        $this->assertSame(['getteamdone', 1], [$type, $detail['num']]);
+        $this->eliteWs('jointeam', ['id' => 1, 'teamid' => $teamId], $b['uid']);
+        $this->eliteFrames($ia);
+        $this->eliteFrames($ib);
+        $this->eliteFrames($ic);
+
+        // 队长断线：队伍解散，队员 teambeenfire，观众列表清空
+        \Hanjiang\WebSocket\EliteRoom::disconnect($a['uid']);
+        $this->assertSame([['teambeenfire', ['teamid' => $teamId]]], array_slice($this->eliteFrames($ib), 0, 1));
+        $this->assertSame([], $this->eliteFrames($ic)[0][1]['list']);
+        $this->assertNull(Redis::get('elite:team:' . $teamId));
+        $this->assertNull(Redis::get('elite:player:' . $b['uid']));
+        // 断线的观众不再收到 teamlist
+        \Hanjiang\WebSocket\EliteRoom::disconnect($c['uid']);
+        $this->eliteWs('createTeam', ['id' => 1, 'type' => 1], $b['uid']);
+        $this->assertSame([], $this->eliteFrames($ic));
+        $this->assertArrayNotHasKey($c['uid'], Redis::get('elite:viewers:1'));
+        \Hanjiang\WebSocket\EliteRoom::disconnect($b['uid']);
+        $this->assertNull(Redis::get('elite:player:' . $b['uid']));
+    }
+
+    public function testEliteHttpActionIsInternalOnly(): void
+    {
+        $a = $this->elitePlayer();
+        $b = $this->elitePlayer();
+        $res = $this->eliteRequest('action', $a['auth'] + ['fid' => 1, 'teamid' => 3, 'leader' => $a['uid'], 'members' => "{$a['uid']},{$b['uid']}"]);
+        $this->assertSame(['status' => 0, 'info' => []], $res);
+        $this->assertSame(0, DB::table('elite_log')->where('leader', $a['uid'])->count());
+        $this->assertSame([10, 10], [$this->eliteActivity($a['uid'])['elitetimes'], $this->eliteActivity($b['uid'])['elitetimes']]);
     }
 
     public function testEliteDailyCronResetsTimes(): void

@@ -63,9 +63,12 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   │   ├── Campaign/        # 9-grid campaign maps, tactics & towers (Map, Matrix, Tower, Copies, Sanctum)
 │   │   ├── Pvp/             # Military rankings, nations & siege wars (Arena, Compete, Country, Siege, War)
 │   │   └── Activity/        # Commerce, gambling, banquets & quests (Chat, Shop, Trade, Dice, Task)
-│   └── Http/                # HTTP Gateway & Router
-│       ├── Router.php       # Pipeline runner & static asset server
-│       └── Response.php     # Protocol response helper
+│   ├── Http/                # HTTP Gateway & Router
+│   │   ├── Router.php       # Pipeline runner & static asset server
+│   │   └── Response.php     # Protocol response helper
+│   └── WebSocket/           # WebSocket gateway (port 18101)
+│       ├── WebSocketHandler.php # Connection lifecycle, heartbeat, auth, world chat, marquee
+│       └── EliteRoom.php    # Elite campaign real-time team rooms (legacy elitepop.js protocol)
 ├── tools/
 │   ├── gen_master_data.php  # Regenerates src/MasterData from the legacy mysqldump
 │   └── scan_legacy_gap.php  # Refreshes the generated part of docs/LEGACY_GAP.md
@@ -201,7 +204,8 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=sacredtree&m=index|watering`: Money-growing sacred tree cultivation, canopy watering, and gold/silver harvests
 - `c=flop&m=index|turnover`: Nine-grid card flips, card turnovers, and golden jackpot awards
 - `c=challenge&m=index|action`: Hero trial arenas, master duels (Ma Chao, Zhao Yun, Guan Yu), and arena honors
-- `c=elite&m=index|get_member_info|join_team|get_country_info|get_server|action|buy_number|sendinvite`: Elite team campaigns (legacy port): 83 legions from `EliteCity` (open once the player has cleared the legion's last main-campaign mission), defenders from `EliteMission` → `EliteMonster` fought as a legacy 3-lane team battle (`BattleRush`, legacy `battle_rush`), first-kill / repeat experience and item rewards, VIP 8 "supreme team" bonus for gold, 10 daily attempts plus gold-bought extras (`Price.elite`), open 12:00–14:00 and 19:00–21:00. In the legacy game `index` / `get_member_info` / `join_team` / `get_country_info` / `action` are called by a separate real-time team server that is not in the legacy package; the current WebSocket team handlers do not speak its protocol yet (see `docs/LEGACY_GAP.md`)
+- `c=elite&m=index|get_member_info|join_team|get_country_info|get_server|action|buy_number|sendinvite`: Elite team campaigns (legacy port): 83 legions from `EliteCity` (open once the player has cleared the legion's last main-campaign mission), defenders from `EliteMission` → `EliteMonster` fought as a legacy 3-lane team battle (`BattleRush`, legacy `battle_rush`), first-kill / repeat experience and item rewards, VIP 8 "supreme team" bonus for gold, 10 daily attempts plus gold-bought extras (`Price.elite`), open 12:00–14:00 and 19:00–21:00. In the legacy game `index` / `get_member_info` / `join_team` / `get_country_info` / `action` are called by a separate real-time team server that is not in the legacy package; that server is rebuilt as `EliteRoom` on the WebSocket gateway (below), and `action` is internal-only: the HTTP route returns `{status: 0, info: []}` and battles start only from the WebSocket `startfight`
+- Elite real-time teams (WebSocket, `Hanjiang\WebSocket\EliteRoom`): the legacy client `elitepop.js` connects through the `socket.io.min.js` adapter (frames `{action, data}` up, `{type, data}` down, an app-level `ping` every 20 s) to the address from `c=elite&m=get_server` (`socket_server_url`; empty → `HJ_CONFIG.wsUrl`). Events: `login` (same Redis token as HTTP; `loginstatus` 1 / 0 / -1 / -2 / -3), `eliteindex`, `teamlist` (pushed only to players viewing that legion), `createTeam`, `jointeam` (max 3, country teams same-country only), `exitteam`, `fireteam`, `firemember`, `changeorder`, `teaminvited`, `startfight` (`readyfight` then the `EliteHandler::fight` result as `enterfight` to every member). Team state lives in Redis under one global lock, so several WebSocket workers can share it; a closed or idle connection leaves its team (a leader leaving dissolves it). See `docs/LEGACY_GAP.md` for the parts the client does not reveal
 - `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`: Muster platform; `index` / `get_general_info` / `go_battle` / `go_rest` ported from the legacy `muster.php` (dispatch roster `general.goout`, at most 8 heroes; resting removes the hero from every formation, stops training on `confrim`, unequips all items and mounts, keeps at least one hero dispatched); `sale_general` is still the new-version severance
 - `c=business&m=index|go_business|buy|refresh`: Four Seas commerce, merchant fleet caravans (Luoyang, Chengdu, Jianye), and trade profits
 - `c=gambling&m=index|buy|cut|sell`: Treasure bowl gambling, rough stone cuts, and pawnshop silver liquidations
@@ -242,6 +246,15 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 ```bash
 ./vendor/bin/phpunit                      # all suites
 ./vendor/bin/phpunit --testsuite Unit     # formulas and team building (TeamBuilder needs MySQL, no Redis)
+node tests/js/socket_io_adapter.test.js   # socket.io.min.js adapter (frame shape, heartbeat, address)
+```
+
+Elite real-time end-to-end smoke (starts the real server with the open-hours check pinned inside the window; test-only entry point):
+
+```bash
+php tests/e2e/elite_smoke_server.php start -d
+node tests/e2e/elite_smoke.mjs            # two guests: create → join → startfight, both receive enterfight
+php tests/e2e/elite_smoke_server.php stop
 ```
 
 ---
@@ -277,7 +290,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Client network layer with exponential backoff auto-reconnect, jitter, and zombie connection sweeping (`sweep`)
 - [x] Soul Star Road (`tower`) ported from legacy: legacy missions and defenders, battle reports, first kills, sweeps, attempt purchases and the daily soul reward
 - [x] Pacification copies (`copies`) ported from legacy: legacy monsters, battle reports, first-kill and drop rewards, forge material storage (`own_materials`), sweeps and attempt purchases
-- [x] Elite team campaigns (`elite`) PHP side ported from legacy: legions, legacy team battle (`battle_rush`) against `EliteMonster`, first-kill and drop rewards, supreme teams, attempt purchases and the daily reset (the real-time team protocol is still pending)
+- [x] Elite team campaigns (`elite`) ported from legacy: legions, legacy team battle (`battle_rush`) against `EliteMonster`, first-kill and drop rewards, supreme teams, attempt purchases and the daily reset, plus the real-time team rooms rebuilt from the `elitepop.js` protocol
 - [x] Six-Stage Pass General campaign (`pass_general`) and dynamic storyline quests (`mainquest`)
 - [x] Player-founded nation (guild) system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
