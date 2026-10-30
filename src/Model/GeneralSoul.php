@@ -30,22 +30,4 @@ class GeneralSoul extends Model
         'slot7' => 'int',
         'slot8' => 'int',
     ];
-
-    /**
-     * 计算将魂额外提供的攻防血量属性加成
-     *
-     * @return array{hp: int, attack: int, defense: int}
-     */
-    public function calculateBonus(): array
-    {
-        $addHp = ((int)($this->attributes['slot1'] ?? 0)) * 200;
-        $addAtk = (((int)($this->attributes['slot2'] ?? 0)) * 40) + (((int)($this->attributes['slot5'] ?? 0)) * 35);
-        $addDef = (((int)($this->attributes['slot3'] ?? 0)) * 25) + (((int)($this->attributes['slot6'] ?? 0)) * 20);
-
-        return [
-            'hp' => $addHp,
-            'attack' => $addAtk,
-            'defense' => $addDef,
-        ];
-    }
 }

@@ -5,8 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Pvp;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
-use Hanjiang\Battle\Position;
+use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\Activity\MessageHandler;
 use Hanjiang\Handler\Campaign\MatrixHandler;
 use Hanjiang\Handler\City\MemberHandler;
@@ -1573,6 +1572,12 @@ final class CountryHandler
             }
             // pk
             $battle = self::battlePk($myUid, (int)$member['uid']);
+            if ((int)$battle['status'] !== 1) {
+                // 挑战失败
+                $return['status'] = -3;
+                return $return;
+            }
+            unset($battle['status']);
 
             if ((int)$battle['assess'] >= 1) {
                 if (self::updateMemberInfo(['job' => $job], $myUid) !== 1) {
@@ -3135,49 +3140,38 @@ final class CountryHandler
     }
 
     /**
-     * 玩家对战（battle_model->battle_pk），双方以各自上阵武将出战
+     * 玩家对战（移植 battle_model->battle_pk 的组队与状态判断），双方以各自阵法出战
      *
-     * 依赖未移植：battle_model->battle_pk 的旧版回放战报格式（美人/名将/坐骑加成及客户端 loadBattle 帧数据），
-     * 此处以 BattleEngine 推演，返回 assess/win/rounds/logs。
+     * 旧版 battle_pk 先按左侧 check_user_team 设 status，再被右侧的结果覆盖：
+     * 只有右侧（被挑战方）-1（没有阵法）/ -3（武将信息错误）时返回失败；任一侧 -2（阵法里没有武将）或左侧 -1 / -3
+     * 都按空队伍继续战斗（空队伍直接判负）。这里照旧版保留该行为。
+     * 依赖未移植：process 战斗过程格式与 leftbuff / rightbuff（P5 移植 battle()），这里返回 BattleEngine 的 logs。
      *
-     * @return array<string, mixed>
+     * @return array<string, mixed> status 1 成功，否则为旧版 battle_pk 的失败状态
      */
     private static function battlePk(int $uid, int $touid): array
     {
-        $engine = new BattleEngine(self::pkTeam($uid), self::pkTeam($touid));
+        $left = TeamBuilder::forMember($uid);
+        $right = TeamBuilder::forMember($touid, defense: true, self: false);
+        if ($right['status'] === -1 || $right['status'] === -3) {
+            return ['status' => $right['status']];
+        }
+
+        $leftHeroes = TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']);
+        $rightHeroes = TeamBuilder::heroes($right['team'], $right['matrix_type'], $right['matrix_coe']);
+        $engine = new BattleEngine(array_values($leftHeroes), array_values($rightHeroes));
         $sim = $engine->simulate();
         return [
+            'status' => 1,
+            'leftteam' => TeamBuilder::teamReturnArr($left['team']),
+            'rightteam' => TeamBuilder::teamReturnArr($right['team']),
             'assess' => $sim['assess'],
+            'leftresult' => TeamBuilder::teamReturnArr($left['team'], true, $leftHeroes),
+            'rightresult' => TeamBuilder::teamReturnArr($right['team'], true, $rightHeroes),
             'win' => $sim['win'] ? 1 : 0,
             'rounds' => $sim['rounds'],
             'logs' => $sim['logs'],
         ];
-    }
-
-    /**
-     * 构建玩家上阵队伍（无上阵武将时为空队伍，同旧版容错处理）
-     *
-     * @return list<Hero>
-     */
-    private static function pkTeam(int $uid): array
-    {
-        $generals = DB::table('general')->where('uid', $uid)->where('pos', '>', 0)->whereNull('deleted_at')->get();
-        $matrix = DB::table('matrix')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $matrixMid = (int)($matrix['mid'] ?? 1);
-        $matrixLevel = max(1, (int)($matrix['level'] ?? 1));
-        $matrixAddition = 1.0 + 0.05 + ($matrixLevel - 1) * 0.01;
-
-        $heroes = [];
-        foreach ($generals as $g) {
-            $gid = (int)$g['id'];
-            $pos = Position::tryFrom((int)$g['pos']) ?? Position::FrontMiddle;
-            $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->whereNull('deleted_at')->get();
-            $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
-            $atk = $matrixMid === 1 ? (int)round($stats['attack'] * $matrixAddition) : $stats['attack'];
-            $def = $matrixMid === 3 ? (int)round($stats['defense'] * $matrixAddition) : $stats['defense'];
-            $heroes[] = new Hero($gid, (string)$g['name'], $pos, $stats['hp'], $stats['hp'], $atk, $def, $stats['speed']);
-        }
-        return $heroes;
     }
 
     /**

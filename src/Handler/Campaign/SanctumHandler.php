@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Campaign;
 
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\Handler\General\GeneralHandler;
 
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
+use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -62,38 +62,19 @@ final class SanctumHandler
         $cfg = self::REALMS[$realmId];
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
 
-        // 1. 构建我方出战英雄
-        $generals = DB::table('general')->where('uid', $uid)->where('pos', '>', 0)->whereNull('deleted_at')->get();
-        if (empty($generals)) {
-            $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
+        // 1. 我方队伍（旧版 sanctum 控制器走 battle_model->battle_sanctum：init_member_team_info，PVE）
+        $left = TeamBuilder::forMember($uid, pve: true);
+        if ($left['status'] === -1 || $left['status'] === -3) {
+            // 旧版 battle_model 返回 -1（没有阵法）/ -3（武将信息错误）；本玩法尚未按旧版控制器移植，直接回传该状态
+            return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
-
-        $matrix = DB::table('matrix')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $matrixMid = (int)($matrix['mid'] ?? 1);
-        $matrixLevel = max(1, (int)($matrix['level'] ?? 1));
-        $matrixAddition = 1.0 + 0.05 + ($matrixLevel - 1) * 0.01;
-
-        $leftHeroes = [];
-        foreach ($generals as $g) {
-            $gid = (int)$g['id'];
-            $posInt = (int)$g['pos'] > 0 ? (int)$g['pos'] : 2;
-            $pos = Position::tryFrom($posInt) ?? Position::FrontMiddle;
-            $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->whereNull('deleted_at')->get();
-            $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
-
-            $finalAtk = ($matrixMid === 1) ? (int)round($stats['attack'] * $matrixAddition) : $stats['attack'];
-            $finalDef = ($matrixMid === 3) ? (int)round($stats['defense'] * $matrixAddition) : $stats['defense'];
-
-            $heroName = $g['name'] ?: ($member['nickname'] ?? '天命主公');
-            $leftHeroes[] = new Hero($gid, $heroName, $pos, $stats['hp'], $stats['hp'], $finalAtk, $finalDef, $stats['speed']);
-        }
-        if (empty($leftHeroes)) {
-            $leftHeroes[] = new Hero(1, '天命主公', Position::FrontMiddle, 2000, 2000, 380, 150, 150);
-        }
+        // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
+        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 圣域神尊
+        // 依赖未移植：旧版四象圣域守军取 sanctum_mission 的 position1~9 → sanctum_monster（TeamBuilder::MONSTER_SANCTUM），本玩法的关卡 id 与守军数值是新版自定的，对不上旧版关卡
         $rightHeroes = [
-            new Hero(5000 + $cfg['id'], $cfg['boss'], Position::FrontMiddle, (int)$cfg['hp'], (int)$cfg['hp'], (int)$cfg['attack'], (int)$cfg['defense'], 140),
+            Hero::unported(5000 + $cfg['id'], $cfg['boss'], Position::FrontMiddle, (int)$cfg['hp'], (int)$cfg['attack'], (int)$cfg['defense']),
         ];
 
         // 3. 推演

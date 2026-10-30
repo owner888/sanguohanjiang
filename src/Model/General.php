@@ -11,7 +11,7 @@ use OmniPHP\Database\SoftDeletes;
 use OmniPHP\Model;
 
 /**
- * 武将英雄数据模型 (自动过滤软删除，内聚升级经验算法与全维属性推算)
+ * 武将英雄数据模型 (自动过滤软删除；战斗数值见 Battle\TeamBuilder 与 Battle\LegacyStats)
  */
 class General extends Model
 {
@@ -155,79 +155,5 @@ class General extends Model
     public static function getLevelUpExp(int $level): int
     {
         return max(80, 80 * $level * $level);
-    }
-
-    /**
-     * 计算武将的综合战斗属性 (基础成长 + 穿戴装备 + 将魂命格 + 洗髓培养)
-     *
-     * @param list<array<string, mixed>> $equippedItems
-     * @return array<string, mixed>
-     */
-    public function calculateStats(array $equippedItems = []): array
-    {
-        $level = max(1, (int)($this->attributes['level'] ?? 1));
-        $wuli = (int)($this->attributes['wuli'] ?? 85);
-        $zhili = (int)($this->attributes['zhili'] ?? 70);
-        $tili = (int)($this->attributes['tili'] ?? 90);
-
-        // 基础血量与攻防：体力决定气血厚度，武力/智力决定物理/策术攻击力，智力+体力决定防御
-        $baseHp = 800 + $tili * 10 + ($level - 1) * 120;
-        $baseAtk = 160 + max($wuli, $zhili) * 2 + ($level - 1) * 25;
-        $baseDef = 60 + (int)(($zhili + $tili) / 2) + ($level - 1) * 12;
-        $baseSpeed = 100 + (int)($wuli * 0.5) + ($level - 1) * 5;
-
-        $addAtk = 0;
-        $addDef = 0;
-        $addHp = 0;
-
-        // 1. 穿戴装备加成
-        foreach ($equippedItems as $item) {
-            $eqModel = Equipment::fromArray($item);
-            $bonus = $eqModel->calculateBonus();
-            $addAtk += $bonus['attack'];
-            $addDef += $bonus['defense'];
-            $addHp += $bonus['hp'];
-        }
-
-        // 2. 将魂命格加成
-        $uid = (int)($this->attributes['uid'] ?? 0);
-        $gid = (int)($this->attributes['id'] ?? 0);
-        if ($uid > 0 && $gid > 0) {
-            $soul = GeneralSoul::query()->where('uid', $uid)->where('gid', $gid)->first();
-            if ($soul !== null) {
-                $soulModel = GeneralSoul::fromArray($soul);
-                $soulBonus = $soulModel->calculateBonus();
-                $addHp += $soulBonus['hp'];
-                $addAtk += $soulBonus['attack'];
-                $addDef += $soulBonus['defense'];
-            }
-        }
-
-        // 3. 武将洗髓培养永久加成 (体力加生命，武力加攻击，智力加防御)
-        $wuliUp = (int)($this->attributes['wuliup'] ?? 0);
-        $zhiliUp = (int)($this->attributes['zhiliup'] ?? 0);
-        $tiliUp = (int)($this->attributes['tiliup'] ?? 0);
-        $addAtk += $wuliUp * 2;
-        $addDef += $zhiliUp * 2;
-        $addHp += $tiliUp * 10;
-
-        $totalHp = $baseHp + $addHp;
-        $totalAtk = $baseAtk + $addAtk;
-        $totalDef = $baseDef + $addDef;
-
-        return [
-            'level' => $level,
-            'hp' => $totalHp,
-            'allblood' => $totalHp,
-            'attack' => $totalAtk,
-            'defense' => $totalDef,
-            'speed' => $baseSpeed,
-            'base_hp' => $baseHp,
-            'base_attack' => $baseAtk,
-            'base_defense' => $baseDef,
-            'add_hp' => $addHp,
-            'add_attack' => $addAtk,
-            'add_defense' => $addDef,
-        ];
     }
 }

@@ -859,6 +859,19 @@
 | `General::createFromTemplate` | 依赖未移植：获得武将气泡（`ongeneral`）、主公 80 级以上名将成就加成重算、主线任务 19 |
 | `Equipment::addFromTemplate` | 依赖未移植：碎片分支（旧版 `add_item` `$type = 1`、`itemchip_log`） |
 
+## 战斗
+
+组队已按旧版移植到 `src/Battle/TeamBuilder.php`（`init_member_team_info` / `init_monster_team_info` / `team_return_arr`），推演仍是新版自定的。
+
+| 位置 | 现状 |
+|---|---|
+| 推演（`BattleEngine`） | 伤害公式、出手顺序、怒气、暴击、技能、天赋攻防系数、阵法 coe、命中 / 闪避 / 抗晕、`process` 帧格式、`leftbuff` / `rightbuff` 都是新版自定的；`Hero::fromUnit` 临时把旧版字段换算成引擎用的 hp / atk / def / speed |
+| 组队加成（`TeamBuilder::forMember`） | 依赖未移植，按 0 计：宝石 `gem_power`、坐骑（主战 100% / 备战 30% 及模板特殊属性）、锻造套装、将魂、主公天赋（91 级）、名将成就（81 级）、美人（60 级）、星魄（80 级）、国家学院（国家 30 级）、名将进阶（100 级）、神树 |
+| 阵法存储 | 新版 `matrix` 每个玩家一行（`mid` 当前阵法、`level` 该行等级）；旧版 `own_matrix` 每个阵法一行、各自有等级，当前阵法记在 `member_field.matrixid` |
+| 守军 | 只有 `c=map&m=action` 按旧版取 `Mission` → `Monster`。`elite`、`challenge`、`copies`、`epic`、`pass_general`、`sanctum`、`tower`、`compete`、`countryboss`、`countrymine`、`heaven`、`herothrone`、`island`、`siege`、`worldboss`、`arena`（预设 NPC）的守军数值是新版自定的（`Hero::unported`）；旧版对应怪物表见 `TeamBuilder::MONSTER_*` |
+| `c=map&m=mission` / `get_mission_list`，`c=map&m=action` 经验 | 据点名称、等级、经验仍取新版自定的 `MapHandler::getEnemyConfig`，与战斗中的旧版 `Mission` 守军不一致；`get_mission_by_id` 的场景 / 关卡开启校验、攻击 CD、强攻元宝未移植 |
+| `c=muster&m=go_battle` / `go_rest` | 只改 `general.pos`，不改 `matrix` 站位；战斗按 `matrix` 站位组队（同旧版 `own_matrix`） |
+
 ## 数据结构缺口
 
 旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 22 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
@@ -897,7 +910,7 @@
 ## 建议补齐顺序
 
 0. 旧版配置表已生成到 `src/MasterData/`（`tools/gen_master_data.php`），补玩法时数值一律取自这里，不再手写配置。
-1. `general` / `equipment` 字段已按旧版补齐（公式见 `src/Battle/LegacyStats.php`），将领界面、背包、强化已按旧版读写；下一步把战力计算、组队改为读这些字段（各战斗 Handler 仍调用新版自定的 `General::calculateStats` / `Equipment::calculateBonus`）。
+1. 战斗推演：按旧版 `battle_model` 移植 `process_attack` / `process_hurt`、技能、天赋、阵法加成，删除 `Hero::fromUnit` 临时适配层；之后各玩法改用旧版怪物表（`TeamBuilder::forMonsters`）。
 2. 军团体系的外围依赖：国战（`countryfight`）、税金、谏言、国家庆典等（代码中 `依赖未移植` 注释标出）。
 3. 将魂、tower、beauty、gem、heaven 等缺口大的玩法。
 4. 跨服 god / war / worldarena（含 `pack.use_item`），节日活动。

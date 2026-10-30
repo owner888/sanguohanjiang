@@ -45,9 +45,10 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 ├── src/
 │   ├── Battle/              # Deterministic 9-grid combat engine
 │   │   ├── BattleEngine.php # Core simulation logic (ported from battle_model.php)
-│   │   ├── Hero.php         # Combat entity model
+│   │   ├── Hero.php         # Combat unit (legacy fields + temporary adapter for the current engine)
 │   │   ├── Position.php     # 9-grid tactical positions (1-9) enum
-│   │   └── LegacyStats.php  # Legacy general/equipment formulas (pure functions, each cites its legacy source)
+│   │   ├── LegacyStats.php  # Legacy general/equipment formulas (pure functions, each cites its legacy source)
+│   │   └── TeamBuilder.php  # Legacy team building (player / monster teams, team_return_arr)
 │   ├── MasterData/          # Legacy config tables as const arrays (generated, do not edit)
 │   ├── Middleware/          # Middleware pipeline (aligned with smart-book)
 │   │   ├── MiddlewareInterface.php
@@ -148,7 +149,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=map&m=get_scene_list`: Campaign scene list (e.g., Daxing Mountain)
 - `c=map&m=get_mission_list`: Enemy nodes and warlord defense lineups
 - `c=map&m=mission`: Pre-battle enemy intelligence and lineup preparation dialog
-- `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation; on victory the legacy `Mission` probabilistic drop (`getrate` / `gettype` / `getvalue`) is rolled and granted
+- `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation (player team from the legacy formation / equipment formulas, defenders from the legacy `Mission` → `Monster` tables); on victory the legacy `Mission` probabilistic drop (`getrate` / `gettype` / `getvalue`) is rolled and granted
 - `c=map&m=get_newreward_index|get_newreward|get_newresult`: Campaign node milestone chests & chapter clear grand reward claims
 - `c=general&m=index|get_info|equip|unequip`: Hero panel ported from the legacy `general.php` (deployed heroes only, legacy `info_field`, equipment display power with refine / enhancement-achievement bonuses, legacy HP formula, legacy equip validations and status codes)
 - `c=matrix&m=index`: 9-grid tactical battle formation & hero slot updates
@@ -235,11 +236,11 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 
 ## 🧪 Automated Testing
 
-All core API endpoints and combat simulation loops are covered by PHPUnit integration tests (`tests/Feature`); legacy formulas in `LegacyStats` are checked against real legacy database rows (`tests/Unit`):
+All core API endpoints and combat simulation loops are covered by PHPUnit integration tests (`tests/Feature`); legacy formulas in `LegacyStats` and team building in `TeamBuilder` are checked against real legacy database rows (`tests/Unit`):
 
 ```bash
 ./vendor/bin/phpunit                      # all suites
-./vendor/bin/phpunit --testsuite Unit     # formulas only, no DB / Redis needed
+./vendor/bin/phpunit --testsuite Unit     # formulas and team building (TeamBuilder needs MySQL, no Redis)
 ```
 
 ---
@@ -295,7 +296,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Operational giftings & achievement telemetry: Universal CDKeys (`activationcode`), military drills (`exercise`), lord combat overview (`information`), and brotherhood recruitment (`invitation`)
 - [x] Lightweight domain thin models (`src/Model/`) with native `SoftDeletes`, automatic type casting, and encapsulated domain methods (`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`)
 - [x] High-concurrency debouncing & anti-cheat: Atomic request reentrancy protection via `ThrottleMiddleware`
-- [x] PHPUnit Unit + Feature suites (112 tests, 1967 assertions)
+- [x] PHPUnit Unit + Feature suites (123 tests, 6837 assertions)
 
 ---
 

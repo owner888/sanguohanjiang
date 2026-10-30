@@ -72,32 +72,15 @@ final class InformationHandler
             return ((int)($a['id'] ?? 0)) <=> ((int)($b['id'] ?? 0));
         });
 
-        // 查所有装备
-        $allEquips = DB::table('equipment')->where('uid', $targetUid)->whereNull('deleted_at')->get();
-        $equipsByGeneral = [];
-        foreach ($allEquips as $eq) {
-            $gid = (int)$eq['generalid'];
-            if ($gid > 0) {
-                $equipsByGeneral[$gid][] = $eq;
-            }
-        }
-
         $list = [];
         $idx = 1;
-        $totalPower = 0;
         foreach ($generals as $g) {
-            $gid = (int)$g['id'];
-            $equipped = $equipsByGeneral[$gid] ?? [];
-            // 武将展示字段按旧版 general get_info（info_field + hp）
-            $heroData = GeneralHandler::legacyInfo($targetUid, $g) ?? [];
-            // total_power 是新版自定字段（非旧版），仍用新版自定 calculateGeneralStats，随战斗重写一并处理
-            $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
-            $totalPower += (int)($stats['attack'] * 2 + $stats['defense'] + $stats['hp'] * 0.2);
-
-            if ($idx <= 8) {
-                $list[(string)$idx] = $heroData;
-                $idx++;
+            if ($idx > 8) {
+                break;
             }
+            // 武将展示字段按旧版 general get_info（info_field + hp）
+            $list[(string)$idx] = GeneralHandler::legacyInfo($targetUid, $g) ?? [];
+            $idx++;
         }
 
         $isFriend = ($myUid === $targetUid) ? 1 : 0;
@@ -115,7 +98,6 @@ final class InformationHandler
             'country' => $countryId,
             'country_name' => $countryName,
             'vip' => $player['vip'],
-            'total_power' => max(5000, $totalPower),
             'general_count' => count($generals),
             'message' => 'ok',
         ];

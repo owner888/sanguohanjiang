@@ -286,9 +286,10 @@ final class MusterHandler
             'name' => (string)$g['name'],
             'turn' => (int)($g['turn'] ?? 0),
             'level' => $level,
-            'wuli' => 85,
-            'zhili' => 70,
-            'tili' => 90,
+            // 旧版 muster 输出 own_general 原始三围（培养值单独在 *up 字段）
+            'wuli' => (int)$g['wuli'],
+            'zhili' => (int)$g['zhili'],
+            'tili' => (int)$g['tili'],
             'wuliup' => (int)($g['wuliup'] ?? 0),
             'zhiliup' => (int)($g['zhiliup'] ?? 0),
             'tiliup' => (int)($g['tiliup'] ?? 0),

@@ -37,18 +37,6 @@ final class GeneralHandler
     ];
 
     /**
-     * 计算武将的综合战斗属性（新版自定公式，非旧版；仅供尚未移植的战斗代码使用）
-     *
-     * @param array<string, mixed> $general
-     * @param list<array<string, mixed>> $equippedItems
-     * @return array<string, mixed>
-     */
-    public static function calculateGeneralStats(array $general, array $equippedItems = []): array
-    {
-        return (new General($general))->calculateStats($equippedItems);
-    }
-
-    /**
      * 原版经典武将升级经验公式 (80 * 等级^2)
      */
     public static function getLevelUpExp(int $level): int

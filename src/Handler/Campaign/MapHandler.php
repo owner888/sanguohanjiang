@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Campaign;
 
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\Handler\General\GeneralHandler;
 use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\Map as MapTemplate;
 use Hanjiang\MasterData\Mission as MissionTemplate;
@@ -13,8 +12,7 @@ use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
-use Hanjiang\Battle\Position;
+use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 use OmniPHP\Cache\Redis;
@@ -412,97 +410,49 @@ final class MapHandler
         $missionId = (int)($ctx->input('id', 1));
 
         $member = DB::table('member')->where('uid', $uid)->first();
-        $nickname = $member['nickname'] ?? '天命主公';
 
-        // 1. 构建我方出战英雄 (支持多武将战位、装备穿戴加成与阵法加成)
-        $matrix = DB::table('matrix')->where('uid', $uid)->first();
-        $matrixMid = (int)($matrix['mid'] ?? 1);
-        $matrixLevel = max(1, (int)($matrix['level'] ?? 1));
-        $matrixAddition = 1.0 + 0.05 + ($matrixLevel - 1) * 0.01;
-
-        $generals = DB::table('general')->where('uid', $uid)->where('pos', '>', 0)->get();
-        if (empty($generals)) {
-            $generals = DB::table('general')->where('uid', $uid)->get();
+        // 关卡行（旧版 map_model->get_mission_by_id：zc_sanguo_mission 按 missionlevel / missionstage / missionid 查，查不到返回 -6）
+        // 依赖未移植：get_mission_by_id 的地图记录 / 场景开启 / 关卡开启校验（-3 / -4 / -5），以及攻击 CD、强攻元宝
+        $missionRow = self::missionRow($level, $stage, $missionId);
+        if ($missionRow === null) {
+            return ['status' => -6];
         }
 
-        $leftHeroes = [];
-        $leftTeamData = [];
-        $memberGender = (int)($member['gender'] ?? 1);
+        // 1. 我方队伍（旧版 battle_model->battle_mission：PVE，init_member_team_info）
+        $left = TeamBuilder::forMember($uid, pve: true);
+        $teamError = false;
+        // 2. 守军（init_monster_team_info，Monster 表）
+        $right = TeamBuilder::forMonsters($missionRow, TeamBuilder::MONSTER_MISSION);
 
-        foreach ($generals as $g) {
-            $gid = (int)$g['id'];
-            $posInt = (int)$g['pos'] > 0 ? (int)$g['pos'] : 2;
-            $pos = Position::tryFrom($posInt) ?? Position::FrontMiddle;
-            $heroName = (string)($g['name'] ?: $nickname);
+        if ($left['status'] === -1 || $left['status'] === -3) {
+            // 旧版 battle_mission 返回 -1（没有阵法）/ -3（武将信息错误）：map 控制器把 assess 记 0，按未胜利处理，battle 为空
+            $battleReport = ['assess' => 0];
+            $simResult = ['win' => false];
+            $teamError = true;
+        } else {
+            // -2（阵法里没有武将）旧版按空队伍继续战斗：空队伍直接判大败（assess -3），没有战斗过程
+            $leftHeroes = TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']);
+            $rightHeroes = TeamBuilder::heroes($right['team']);
 
-            $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->get();
-            $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
+            // 3. 调用确定性纯内存九宫格推演引擎
+            $engine = new BattleEngine(array_values($leftHeroes), array_values($rightHeroes));
+            $simResult = $engine->simulate();
 
-            // 应用阵法加成
-            $finalAtk = ($matrixMid === 1) ? (int)round($stats['attack'] * $matrixAddition) : $stats['attack'];
-            $finalDef = ($matrixMid === 3) ? (int)round($stats['defense'] * $matrixAddition) : $stats['defense'];
-
-            $leftHeroes[] = new Hero($gid, $heroName, $pos, $stats['hp'], $stats['hp'], $finalAtk, $finalDef, $stats['speed']);
-
-            // 形象 / 职业取自武将行，天赋与技能名取自 MasterData Talent / Skill
-            $heroImage = (int)$g['image'];
-            $talentObj = GeneralHandler::talentById((int)$g['talentid']);
-            $skillObj = GeneralHandler::skillById((int)$g['skillid']);
-
-            $leftTeamData[$posInt] = [
-                'heroid' => (string)$gid,
-                'name' => $heroName,
-                'herotype' => (string)$g['type'],
-                'level' => (string)$stats['level'],
-                'allblood' => $stats['hp'],
-                'blood' => $stats['hp'],
-                'power' => 50,
-                'image' => (string)$heroImage,
-                'star' => (int)($g['star'] ?? 1),
-                'talent' => $talentObj['name'],
-                'skill' => $skillObj['name'],
+            // 4. 组装战斗回放（旧版 battle()：leftteam / rightteam / leftresult / rightresult 均为 team_return_arr）
+            // 依赖未移植：process 战斗过程格式（P5 移植 process_attack）；leftbuff / rightbuff（buff_return）
+            $battleReport = [
+                'leftteam' => TeamBuilder::teamReturnArr($left['team']),
+                'rightteam' => TeamBuilder::teamReturnArr($right['team']),
+                'process' => self::buildBattleProcess($simResult['logs']),
+                'assess' => (int)$simResult['assess'],
+                'leftresult' => TeamBuilder::teamReturnArr($left['team'], true, $leftHeroes),
+                'rightresult' => TeamBuilder::teamReturnArr($right['team'], true, $rightHeroes),
+                'leftbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
+                'rightbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
             ];
         }
-
-        if (empty($leftHeroes)) {
-            $defaultHeroImage = $memberGender === 2 ? 2 : 1;
-            $leftHeroes[] = new Hero(1, $nickname, Position::FrontMiddle, 1500, 1500, 320, 120, 150);
-            $leftTeamData[2] = [
-                'heroid' => '1',
-                'name' => $nickname,
-                'herotype' => '1',
-                'level' => (string)($member['level'] ?? 1),
-                'allblood' => 1500,
-                'blood' => 1500,
-                'power' => 50,
-                'image' => (string)$defaultHeroImage,
-                'star' => 1,
-                'talent' => '坚强',
-                'skill' => '会心一击',
-            ];
-        }
-
-        // 2. 构建敌方据点九宫格军团 (多敌人梯次排兵布阵)
+        // 依赖未移植：经验结算仍取新版自定的 getEnemyConfig 等级公式（旧版取 Mission 行的 firstkillexp / exp / gfirstkillexp / gexp）
         $enemyCfg = self::getEnemyConfig($level, $stage, $missionId);
-        $enemyTroop = self::buildEnemyTroop($level, $stage, $missionId, $enemyCfg);
-        $rightHeroes = $enemyTroop['heroes'];
-        $rightTeamData = $enemyTroop['teamData'];
-
-        // 3. 调用确定性纯内存九宫格推演引擎
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-
-        // 4. 组装符合原版 battleworld.js 的战斗回放结构
-        $battleReport = [
-            'leftteam' => $leftTeamData,
-            'rightteam' => $rightTeamData,
-            'leftresult' => $simResult['win'] ? $leftTeamData : [],
-            'rightresult' => $simResult['win'] ? [] : $rightTeamData,
-            'process' => self::buildBattleProcess($simResult['logs']),
-            'assess' => (int)($simResult['assess'] ?? ($simResult['win'] ? 3 : -3)),
-            'leftbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
-            'rightbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
-        ];
 
         // 5. 战斗胜利关卡推进、升级与经验结算
         $isWin = $simResult['win'];
@@ -627,7 +577,7 @@ final class MapHandler
         }
 
         $resultInfo = [
-            'win' => $isWin ? 1 : -1,
+            'win' => $teamError ? 0 : ($isWin ? 1 : -1),
             'exp' => $gainExp,
             'gexp' => $gainGexp,
             'get_number' => $drop['get_number'],
@@ -684,13 +634,7 @@ final class MapHandler
     {
         $drop = ['get_number' => 0, 'gettype' => 0, 'getvalue' => 0, 'itemid' => 0, 'itemname' => ''];
 
-        $mission = null;
-        foreach (MissionTemplate::ROWS as $row) {
-            if ((int)$row['missionlevel'] === $level && (int)$row['missionstage'] === $stage && (int)$row['missionid'] === $missionId) {
-                $mission = $row;
-                break;
-            }
-        }
+        $mission = self::missionRow($level, $stage, $missionId);
         if ($mission === null) {
             return $drop;
         }
@@ -804,80 +748,18 @@ final class MapHandler
     }
 
     /**
-     * 构建关卡敌方九宫格军团 (支持 1~5 人多敌军梯次排兵布阵)
+     * 关卡行（旧版 map_model->get_mission_by_id 的查表部分：zc_sanguo_mission 按 missionlevel / missionstage / missionid）
      *
-     * @return array{heroes: list<Hero>, teamData: array<int, array<string, mixed>>}
+     * @return array<string, mixed>|null
      */
-    public static function buildEnemyTroop(int $level, int $stage, int $missionId, array $bossCfg): array
+    private static function missionRow(int $level, int $stage, int $missionId): ?array
     {
-        $heroes = [];
-        $teamData = [];
-
-        $bossHp = (int)$bossCfg['hp'];
-        $bossAtk = (int)$bossCfg['atk'];
-        $bossDef = (int)$bossCfg['def'];
-        $bossName = (string)$bossCfg['name'];
-        $bossImage = (string)($bossCfg['image'] ?? '27');
-        $bossStar = (int)($bossCfg['star'] ?? 1);
-        $bossLvl = (string)$bossCfg['level'];
-
-        // 根据据点编号确定敌军上阵站位与随从编制
-        // missionId: 1 -> 2人, 2 -> 3人, 3 -> 4人, 4 -> 4人, 5 -> 5人满编大决战
-        $layout = match ($missionId) {
-            1 => [
-                2 => ['name' => $bossName, 'is_boss' => true, 'hp' => $bossHp, 'atk' => $bossAtk, 'def' => $bossDef, 'image' => $bossImage, 'star' => $bossStar],
-                3 => ['name' => '前哨斥候', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.5), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.5), 'image' => '1', 'star' => 1],
-            ],
-            2 => [
-                1 => ['name' => '精锐步卒', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.5), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.5), 'image' => '1', 'star' => 1],
-                3 => ['name' => '前军死士', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.5), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.5), 'image' => '2', 'star' => 1],
-                5 => ['name' => $bossName, 'is_boss' => true, 'hp' => $bossHp, 'atk' => $bossAtk, 'def' => $bossDef, 'image' => $bossImage, 'star' => $bossStar],
-            ],
-            3 => [
-                1 => ['name' => '铁甲护卫', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.5), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.6), 'image' => '2', 'star' => 1],
-                3 => ['name' => '护法锐卒', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.5), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.6), 'image' => '3', 'star' => 1],
-                5 => ['name' => $bossName, 'is_boss' => true, 'hp' => $bossHp, 'atk' => $bossAtk, 'def' => $bossDef, 'image' => $bossImage, 'star' => $bossStar],
-                8 => ['name' => '强弩射手', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.4), 'atk' => (int)round($bossAtk * 0.6), 'def' => (int)round($bossDef * 0.4), 'image' => '4', 'star' => 1],
-            ],
-            4 => [
-                1 => ['name' => '重甲前锋', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.6), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.6), 'image' => '2', 'star' => 2],
-                2 => ['name' => '铁壁战将', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.6), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.6), 'image' => '3', 'star' => 2],
-                3 => ['name' => '陷阵精骑', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.6), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.6), 'image' => '4', 'star' => 2],
-                5 => ['name' => $bossName, 'is_boss' => true, 'hp' => $bossHp, 'atk' => $bossAtk, 'def' => $bossDef, 'image' => $bossImage, 'star' => $bossStar],
-            ],
-            default => [ // 关底决战大 Boss：5人满编军团！
-                1 => ['name' => '左翼铁骑', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.6), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.6), 'image' => '2', 'star' => 2],
-                2 => ['name' => '中军重铠近卫', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.7), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.7), 'image' => '3', 'star' => 2],
-                3 => ['name' => '右翼陷阵锐士', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.6), 'atk' => (int)round($bossAtk * 0.5), 'def' => (int)round($bossDef * 0.6), 'image' => '4', 'star' => 2],
-                5 => ['name' => $bossName, 'is_boss' => true, 'hp' => $bossHp, 'atk' => $bossAtk, 'def' => $bossDef, 'image' => $bossImage, 'star' => $bossStar],
-                8 => ['name' => '后军策士', 'is_boss' => false, 'hp' => (int)round($bossHp * 0.5), 'atk' => (int)round($bossAtk * 0.6), 'def' => (int)round($bossDef * 0.5), 'image' => '5', 'star' => 2],
-            ],
-        };
-
-        foreach ($layout as $posVal => $m) {
-            $pos = Position::from($posVal);
-            $hId = 100 + $missionId * 10 + $posVal;
-            $heroes[] = new Hero($hId, $m['name'], $pos, $m['hp'], $m['hp'], $m['atk'], $m['def'], 80);
-
-            $teamData[$posVal] = [
-                'heroid' => (string)$hId,
-                'name' => $m['name'],
-                'herotype' => $m['is_boss'] ? (string)($bossCfg['type'] ?? 1) : '1',
-                'level' => $bossLvl,
-                'allblood' => $m['hp'],
-                'blood' => $m['hp'],
-                'power' => 0,
-                'image' => $m['image'],
-                'star' => $m['star'],
-                'talent' => '坚强',
-                'skill' => '会心一击',
-            ];
+        foreach (MissionTemplate::ROWS as $row) {
+            if ((int)$row['missionlevel'] === $level && (int)$row['missionstage'] === $stage && (int)$row['missionid'] === $missionId) {
+                return $row;
+            }
         }
-
-        return [
-            'heroes' => $heroes,
-            'teamData' => $teamData,
-        ];
+        return null;
     }
 
     /**

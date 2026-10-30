@@ -245,19 +245,40 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $res['status']);
         $this->assertSame(1, $res['info']['win']);
         $this->assertArrayHasKey('battle', $res);
-        $this->assertSame('黄巾前哨', $res['battle']['rightteam'][2]['name']);
-        $this->assertCount(2, $res['battle']['rightteam'], '据点 1 应当包含 2 名守军对抗');
-        $this->assertArrayHasKey(2, $res['battle']['rightteam']);
-        $this->assertArrayHasKey(3, $res['battle']['rightteam']);
+        // 守军取旧版 Mission 1（1-1-1）的 position5 = Monster 1 长枪兵：blood 20 × 平庸 1.0
+        $monster = \Hanjiang\MasterData\Monster::ROWS[1];
+        $this->assertSame([5], array_keys($res['battle']['rightteam']));
+        $this->assertSame([
+            'heroid' => '1',
+            'name' => '长枪兵',
+            'herotype' => '1',
+            'level' => '1',
+            'allblood' => 20,
+            'power' => 0,
+            'image' => $monster['image'],
+            'star' => 0,
+            'talent' => '平庸',
+            'skill' => '会心一击',
+            'quality' => '1',
+        ], $res['battle']['rightteam'][5]);
+        $this->assertSame(0, $res['battle']['rightresult'][5]['blood'], '战后结果带剩余血量');
+        // 我方取 matrix 站位，字段为旧版 team_return_arr
+        $matrix = DB::table('matrix')->where('uid', self::$uid)->whereNull('deleted_at')->first();
+        foreach ($res['battle']['leftteam'] as $pos => $unit) {
+            $this->assertSame((string)$matrix['position' . $pos], $unit['heroid']);
+            $this->assertSame(['heroid', 'name', 'herotype', 'level', 'allblood', 'power', 'image', 'star', 'talent', 'skill', 'quality'], array_keys($unit));
+        }
         $this->assertSame(3, $res['battle']['assess']);
         $this->assertNotEmpty($res['battle']['process']);
 
-        // 验证关底大 Boss 战役 (id: 5)：拥有 5 人满编军团对决
+        // 1-1-5：Mission 5 只有 position5 = Monster 5 邓茂
         $bossRes = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 5]);
         $this->assertSame(1, $bossRes['status']);
-        $this->assertCount(5, $bossRes['battle']['rightteam'], '关底决战应当拥有 5 人满编敌军军团');
-        $this->assertArrayHasKey(5, $bossRes['battle']['rightteam'], '5号中排统帅位必须为关底大Boss');
-        $this->assertSame('黄巾渠帅·张梁', $bossRes['battle']['rightteam'][5]['name']);
+        $this->assertCount(1, $bossRes['battle']['rightteam']);
+        $this->assertSame('邓茂', $bossRes['battle']['rightteam'][5]['name']);
+
+        // 旧版 get_mission_by_id 查不到关卡返回 -6
+        $this->assertSame(-6, $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 99])['status']);
 
         // 验证重刷已打通的据点时，玩家全局最高进度单向锁定不回滚
         $memBefore = \OmniPHP\Database\DB::table('member')->where('uid', self::$uid)->first();
@@ -321,6 +342,37 @@ final class GameApiTest extends TestCase
         });
     }
 
+    public function testMapActionWithoutFormationFollowsLegacy(): void
+    {
+        $this->withFreshPlayer(function (int $uid): void {
+            $before = DB::table('member')->where('uid', $uid)->first();
+
+            // 阵法里没有武将：旧版 battle_mission 把 -2 当空队伍继续战斗，空队伍直接判大败 assess -3，没有战斗过程，不再造「天命主公」
+            $positions = [];
+            for ($i = 1; $i <= 9; $i++) {
+                $positions['position' . $i] = 0;
+            }
+            DB::table('matrix')->where('uid', $uid)->update($positions);
+            $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(-1, $res['info']['win']);
+            $this->assertSame([], $res['battle']['leftteam']);
+            $this->assertSame([], $res['battle']['process']);
+            $this->assertSame(-3, $res['battle']['assess']);
+            $this->assertSame('长枪兵', $res['battle']['rightteam'][5]['name']);
+            $this->assertSame(0, $res['info']['exp']);
+            $after = DB::table('member')->where('uid', $uid)->first();
+            $this->assertSame((int)$before['missionid'], (int)$after['missionid']);
+
+            // 没有阵法：旧版 battle_mission 返回 -1，map 控制器把 assess 记 0（win 0），battle 为空
+            DB::table('matrix')->where('uid', $uid)->update(['deleted_at' => date('Y-m-d H:i:s')]);
+            $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(0, $res['info']['win']);
+            $this->assertSame(['assess' => 0], $res['battle']);
+        });
+    }
+
     /**
      * 临时切换到一个新注册的游客账号执行 $fn（新号：1 级、VIP 1、银币 88888、元宝 9999、廖化在 1 号阵 2 号位）
      */
@@ -338,6 +390,35 @@ final class GameApiTest extends TestCase
         } finally {
             self::$token = $oldToken;
             self::$uid = $oldUid;
+        }
+    }
+
+    /**
+     * 临时把当前账号阵法里的武将提到 60 级执行 $fn，结束后恢复等级
+     *
+     * 这些玩法的守军仍是新版自定的数值（依赖未移植），而我方已按旧版公式组队：
+     * 低级武将打不过自定守军，测试奖励流程时需要一支够强的阵容。
+     */
+    private function withStrongFormation(callable $fn): void
+    {
+        $matrix = DB::table('matrix')->where('uid', self::$uid)->whereNull('deleted_at')->first();
+        $gids = [];
+        for ($i = 1; $i <= 9; $i++) {
+            if ((int)$matrix['position' . $i] > 0) {
+                $gids[] = (int)$matrix['position' . $i];
+            }
+        }
+        $levels = [];
+        foreach (DB::table('general')->whereIn('id', $gids)->get() as $g) {
+            $levels[(int)$g['id']] = (int)$g['level'];
+        }
+        DB::table('general')->whereIn('id', $gids)->update(['level' => 60]);
+        try {
+            $fn();
+        } finally {
+            foreach ($levels as $id => $level) {
+                DB::table('general')->where('id', $id)->update(['level' => $level]);
+            }
         }
     }
 
@@ -899,50 +980,54 @@ final class GameApiTest extends TestCase
 
     public function testTowerSystem(): void
     {
-        $res = $this->request('tower', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertSame(1, $res['floor']);
-        $this->assertNotEmpty($res['boss_name']);
+        $this->withStrongFormation(function (): void {
+            $res = $this->request('tower', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(1, $res['floor']);
+            $this->assertNotEmpty($res['boss_name']);
 
-        // 挑战试炼塔第 1 层
-        $action = $this->request('tower', 'action');
-        $this->assertSame(1, $action['status']);
-        $this->assertSame(1, $action['win']);
-        $this->assertSame(1, $action['cleared_floor']);
-        $this->assertSame(2, $action['next_floor']);
-        $this->assertGreaterThan(0, $action['silver']);
-        $this->assertGreaterThan(0, $action['soul']);
+            // 挑战试炼塔第 1 层
+            $action = $this->request('tower', 'action');
+            $this->assertSame(1, $action['status']);
+            $this->assertSame(1, $action['win']);
+            $this->assertSame(1, $action['cleared_floor']);
+            $this->assertSame(2, $action['next_floor']);
+            $this->assertGreaterThan(0, $action['silver']);
+            $this->assertGreaterThan(0, $action['soul']);
 
-        // 扫荡已通关层数
-        $sweep = $this->request('tower', 'sweep');
-        $this->assertSame(1, $sweep['status']);
-        $this->assertSame(1, $sweep['cleared_layers']);
-        $this->assertGreaterThan(0, $sweep['silver']);
+            // 扫荡已通关层数
+            $sweep = $this->request('tower', 'sweep');
+            $this->assertSame(1, $sweep['status']);
+            $this->assertSame(1, $sweep['cleared_layers']);
+            $this->assertGreaterThan(0, $sweep['silver']);
+        });
     }
 
     public function testPassGeneralSystem(): void
     {
-        $res = $this->request('pass_general', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertSame(1, $res['current_pass']);
-        $this->assertCount(6, $res['list']);
+        $this->withStrongFormation(function (): void {
+            $res = $this->request('pass_general', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(1, $res['current_pass']);
+            $this->assertCount(6, $res['list']);
 
-        // 1. 发起挑战第 1 关【华雄】
-        $battle = $this->request('pass_general', 'action', ['pass_id' => 1]);
-        $this->assertSame(1, $battle['status']);
-        $this->assertSame(1, $battle['win']);
-        $this->assertSame('华雄', $battle['boss_name']);
-        $this->assertSame(2, $battle['next_pass']);
-        $this->assertGreaterThan(0, $battle['silver']);
+            // 1. 发起挑战第 1 关【华雄】
+            $battle = $this->request('pass_general', 'action', ['pass_id' => 1]);
+            $this->assertSame(1, $battle['status']);
+            $this->assertSame(1, $battle['win']);
+            $this->assertSame('华雄', $battle['boss_name']);
+            $this->assertSame(2, $battle['next_pass']);
+            $this->assertGreaterThan(0, $battle['silver']);
 
-        // 2. 尝试越级挑战第 3 关【文丑】被拦截
-        $skip = $this->request('pass_general', 'action', ['pass_id' => 3]);
-        $this->assertSame(0, $skip['status']);
+            // 2. 尝试越级挑战第 3 关【文丑】被拦截
+            $skip = $this->request('pass_general', 'action', ['pass_id' => 3]);
+            $this->assertSame(0, $skip['status']);
 
-        // 3. 每日重置
-        $reset = $this->request('pass_general', 'reset');
-        $this->assertSame(1, $reset['status']);
-        $this->assertSame(1, $reset['current_pass']);
+            // 3. 每日重置
+            $reset = $this->request('pass_general', 'reset');
+            $this->assertSame(1, $reset['status']);
+            $this->assertSame(1, $reset['current_pass']);
+        });
     }
 
     public function testShopSystem(): void
@@ -981,52 +1066,54 @@ final class GameApiTest extends TestCase
 
     public function testArenaSystem(): void
     {
-        $res = $this->request('arena', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertGreaterThan(0, $res['left_times']);
-        $oldRank = $res['rank'];
+        $this->withStrongFormation(function (): void {
+            $res = $this->request('arena', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertNotEmpty($res['list']);
+            $this->assertGreaterThan(0, $res['left_times']);
+            $oldRank = $res['rank'];
 
-        // 挑战 10002 号天梯对手
-        $battle = $this->request('arena', 'action', ['target_uid' => 10002]);
-        $this->assertSame(1, $battle['status']);
-        $this->assertSame(1, $battle['win']);
-        $this->assertLessThanOrEqual($oldRank, $battle['rank']);
-        $this->assertSame($res['left_times'] - 1, $battle['left_times']);
-        $this->assertGreaterThan(0, $battle['reputation']);
+            // 挑战 10002 号天梯对手
+            $battle = $this->request('arena', 'action', ['target_uid' => 10002]);
+            $this->assertSame(1, $battle['status']);
+            $this->assertSame(1, $battle['win']);
+            $this->assertLessThanOrEqual($oldRank, $battle['rank']);
+            $this->assertSame($res['left_times'] - 1, $battle['left_times']);
+            $this->assertGreaterThan(0, $battle['reputation']);
 
-        // 领取每日演武排名俸禄
-        $reward = $this->request('arena', 'get_reward');
-        $this->assertSame(1, $reward['status']);
-        $this->assertGreaterThan(0, $reward['silver']);
-        $this->assertGreaterThan(0, $reward['reputation']);
+            // 领取每日演武排名俸禄
+            $reward = $this->request('arena', 'get_reward');
+            $this->assertSame(1, $reward['status']);
+            $this->assertGreaterThan(0, $reward['silver']);
+            $this->assertGreaterThan(0, $reward['reputation']);
 
-        // 再次尝试同日领取被拦截
-        $dupReward = $this->request('arena', 'get_reward');
-        $this->assertSame(0, $dupReward['status']);
+            // 再次尝试同日领取被拦截
+            $dupReward = $this->request('arena', 'get_reward');
+            $this->assertSame(0, $dupReward['status']);
 
-        // 购买演武挑战次数测试 (c=arena&m=buy_pk_num)
-        $price = $this->request('arena', 'buy_pk_num', ['t' => 0]);
-        $this->assertSame(1, $price['status']);
-        $this->assertGreaterThan(0, $price['price']);
+            // 购买演武挑战次数测试 (c=arena&m=buy_pk_num)
+            $price = $this->request('arena', 'buy_pk_num', ['t' => 0]);
+            $this->assertSame(1, $price['status']);
+            $this->assertGreaterThan(0, $price['price']);
 
-        $buy = $this->request('arena', 'buy_pk_num', ['t' => 1]);
-        $this->assertSame(1, $buy['status']);
-        $this->assertGreaterThan(0, $buy['times']);
+            $buy = $this->request('arena', 'buy_pk_num', ['t' => 1]);
+            $this->assertSame(1, $buy['status']);
+            $this->assertGreaterThan(0, $buy['times']);
 
-        // 测试演武积分商城主页
-        $arenaShop = $this->request('arena', 'shop_index');
-        $this->assertSame(1, $arenaShop['status']);
-        $this->assertArrayHasKey('act_arena_int', $arenaShop);
-        $this->assertNotEmpty($arenaShop['list']);
+            // 测试演武积分商城主页
+            $arenaShop = $this->request('arena', 'shop_index');
+            $this->assertSame(1, $arenaShop['status']);
+            $this->assertArrayHasKey('act_arena_int', $arenaShop);
+            $this->assertNotEmpty($arenaShop['list']);
 
-        // 测试演武积分兑换 (银两包 id: 1)
-        $exch = $this->request('arena', 'shop_exchange', ['id' => 1]);
-        $this->assertSame(1, $exch['status']);
-        $this->assertArrayHasKey('act_arena_int', $exch);
-        $this->assertArrayHasKey('reward', $exch);
-        $this->assertSame(2, $exch['reward']['re_type']); // 2 为银币奖励
-        $this->assertNotEmpty($exch['list']);
+            // 测试演武积分兑换 (银两包 id: 1)
+            $exch = $this->request('arena', 'shop_exchange', ['id' => 1]);
+            $this->assertSame(1, $exch['status']);
+            $this->assertArrayHasKey('act_arena_int', $exch);
+            $this->assertArrayHasKey('reward', $exch);
+            $this->assertSame(2, $exch['reward']['re_type']); // 2 为银币奖励
+            $this->assertNotEmpty($exch['list']);
+        });
     }
 
     public function testWebSocketAndBroadcasterSystem(): void
@@ -1604,22 +1691,24 @@ final class GameApiTest extends TestCase
 
     public function testHeavenSystem(): void
     {
-        // 1. 查看观星主界面
-        $res = $this->request('heaven', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['stars']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看观星主界面
+            $res = $this->request('heaven', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertNotEmpty($res['stars']);
 
-        // 2. 挑战星宿守护神 (星宿 1)
-        $pk = $this->request('heaven', 'pk', ['id' => 1]);
-        $this->assertSame(1, $pk['status']);
-        $this->assertSame(1, $pk['win']);
-        $this->assertSame(2, $pk['next_star']);
-        $this->assertGreaterThan(0, $pk['silver']);
+            // 2. 挑战星宿守护神 (星宿 1)
+            $pk = $this->request('heaven', 'pk', ['id' => 1]);
+            $this->assertSame(1, $pk['status']);
+            $this->assertSame(1, $pk['win']);
+            $this->assertSame(2, $pk['next_star']);
+            $this->assertGreaterThan(0, $pk['silver']);
 
-        // 3. 一键观星扫荡
-        $sweep = $this->request('heaven', 'mop_up');
-        $this->assertSame(1, $sweep['status']);
-        $this->assertGreaterThan(0, $sweep['cleared_stars']);
+            // 3. 一键观星扫荡
+            $sweep = $this->request('heaven', 'mop_up');
+            $this->assertSame(1, $sweep['status']);
+            $this->assertGreaterThan(0, $sweep['cleared_stars']);
+        });
     }
 
     public function testWorldBossSystem(): void
@@ -1708,22 +1797,24 @@ final class GameApiTest extends TestCase
 
     public function testSiegeSystem(): void
     {
-        // 1. 查看名城列表
-        $res = $this->request('siege', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(6, $res['list']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看名城列表
+            $res = $this->request('siege', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertCount(6, $res['list']);
 
-        // 2. 攻打并占领濮阳城 (id: 6)
-        $action = $this->request('siege', 'action', ['city_id' => 6]);
-        $this->assertSame(1, $action['status']);
-        $this->assertSame(1, $action['win']);
-        $this->assertSame('中原·濮阳', $action['city_name']);
+            // 2. 攻打并占领濮阳城 (id: 6)
+            $action = $this->request('siege', 'action', ['city_id' => 6]);
+            $this->assertSame(1, $action['status']);
+            $this->assertSame(1, $action['win']);
+            $this->assertSame('中原·濮阳', $action['city_name']);
 
-        // 3. 领取已占领城池的每日岁贡
-        $reward = $this->request('siege', 'get_reward');
-        $this->assertSame(1, $reward['status']);
-        $this->assertGreaterThan(0, $reward['silver']);
-        $this->assertGreaterThan(0, $reward['gold']);
+            // 3. 领取已占领城池的每日岁贡
+            $reward = $this->request('siege', 'get_reward');
+            $this->assertSame(1, $reward['status']);
+            $this->assertGreaterThan(0, $reward['silver']);
+            $this->assertGreaterThan(0, $reward['gold']);
+        });
     }
 
     public function testGvgSystem(): void
@@ -2018,36 +2109,40 @@ final class GameApiTest extends TestCase
 
     public function testSanctumSystem(): void
     {
-        // 1. 查看四象圣域
-        $res = $this->request('sanctum', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(4, $res['list']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看四象圣域
+            $res = $this->request('sanctum', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertCount(4, $res['list']);
 
-        // 2. 挑战青龙圣域 (realm: 1)
-        $action = $this->request('sanctum', 'action', ['id' => 1]);
-        $this->assertSame(1, $action['status']);
-        $this->assertSame(1, $action['win']);
-        $this->assertGreaterThan(0, $action['silver']);
-        $this->assertGreaterThan(0, $action['gold']);
+            // 2. 挑战青龙圣域 (realm: 1)
+            $action = $this->request('sanctum', 'action', ['id' => 1]);
+            $this->assertSame(1, $action['status']);
+            $this->assertSame(1, $action['win']);
+            $this->assertGreaterThan(0, $action['silver']);
+            $this->assertGreaterThan(0, $action['gold']);
+        });
     }
 
     public function testCompeteSystem(): void
     {
-        // 1. 查看跨服论剑比武
-        $res = $this->request('compete', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['opponents']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看跨服论剑比武
+            $res = $this->request('compete', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertNotEmpty($res['opponents']);
 
-        // 2. 发起比武单挑 (对手 1)
-        $pk = $this->request('compete', 'action', ['id' => 1]);
-        $this->assertSame(1, $pk['status']);
-        $this->assertSame(1, $pk['win']);
-        $this->assertSame(50, $pk['add_score']);
+            // 2. 发起比武单挑 (对手 1)
+            $pk = $this->request('compete', 'action', ['id' => 1]);
+            $this->assertSame(1, $pk['status']);
+            $this->assertSame(1, $pk['win']);
+            $this->assertSame(50, $pk['add_score']);
 
-        // 3. 领取每日比武段位俸禄
-        $reward = $this->request('compete', 'get_reward');
-        $this->assertSame(1, $reward['status']);
-        $this->assertGreaterThan(0, $reward['silver']);
+            // 3. 领取每日比武段位俸禄
+            $reward = $this->request('compete', 'get_reward');
+            $this->assertSame(1, $reward['status']);
+            $this->assertGreaterThan(0, $reward['silver']);
+        });
     }
 
     /**
@@ -2234,35 +2329,39 @@ final class GameApiTest extends TestCase
 
     public function testChallengeSystem(): void
     {
-        // 1. 查看擂台
-        $res = $this->request('challenge', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['masters']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看擂台
+            $res = $this->request('challenge', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertNotEmpty($res['masters']);
 
-        // 2. 挑战擂主 1
-        $pk = $this->request('challenge', 'action', ['id' => 1]);
-        $this->assertSame(1, $pk['status']);
-        $this->assertSame(1, $pk['win']);
-        $this->assertGreaterThan(0, $pk['silver']);
+            // 2. 挑战擂主 1
+            $pk = $this->request('challenge', 'action', ['id' => 1]);
+            $this->assertSame(1, $pk['status']);
+            $this->assertSame(1, $pk['win']);
+            $this->assertGreaterThan(0, $pk['silver']);
+        });
     }
 
     public function testEliteSystem(): void
     {
-        // 1. 获取多人副本 WebSocket 实时服务地址 (c=elite&m=get_server)
-        $srv = $this->request('elite', 'get_server');
-        $this->assertSame(1, $srv['status']);
-        $this->assertNotEmpty($srv['url']);
+        $this->withStrongFormation(function (): void {
+            // 1. 获取多人副本 WebSocket 实时服务地址 (c=elite&m=get_server)
+            $srv = $this->request('elite', 'get_server');
+            $this->assertSame(1, $srv['status']);
+            $this->assertNotEmpty($srv['url']);
 
-        // 2. 查看精英副本
-        $res = $this->request('elite', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['maps']);
+            // 2. 查看精英副本
+            $res = $this->request('elite', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertNotEmpty($res['maps']);
 
-        // 3. 挑战精英大兴山
-        $battle = $this->request('elite', 'action', ['id' => 1]);
-        $this->assertSame(1, $battle['status']);
-        $this->assertSame(1, $battle['win']);
-        $this->assertGreaterThan(0, $battle['silver']);
+            // 3. 挑战精英大兴山
+            $battle = $this->request('elite', 'action', ['id' => 1]);
+            $this->assertSame(1, $battle['status']);
+            $this->assertSame(1, $battle['win']);
+            $this->assertGreaterThan(0, $battle['silver']);
+        });
     }
 
     public function testMusterSystem(): void
@@ -2507,49 +2606,55 @@ final class GameApiTest extends TestCase
 
     public function testCopiesSystem(): void
     {
-        // 1. 查看平乱副本
-        $res = $this->request('copies', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看平乱副本
+            $res = $this->request('copies', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertNotEmpty($res['list']);
 
-        // 2. 挑战十常侍之乱 (copy: 1)
-        $battle = $this->request('copies', 'pk', ['id' => 1]);
-        $this->assertSame(1, $battle['status']);
-        $this->assertSame(1, $battle['win']);
-        $this->assertGreaterThan(0, $battle['silver']);
+            // 2. 挑战十常侍之乱 (copy: 1)
+            $battle = $this->request('copies', 'pk', ['id' => 1]);
+            $this->assertSame(1, $battle['status']);
+            $this->assertSame(1, $battle['win']);
+            $this->assertGreaterThan(0, $battle['silver']);
 
-        // 3. 一键平乱扫荡
-        $sweep = $this->request('copies', 'mop_up');
-        $this->assertSame(1, $sweep['status']);
-        $this->assertGreaterThan(0, $sweep['silver']);
+            // 3. 一键平乱扫荡
+            $sweep = $this->request('copies', 'mop_up');
+            $this->assertSame(1, $sweep['status']);
+            $this->assertGreaterThan(0, $sweep['silver']);
+        });
     }
 
     public function testIslandSystem(): void
     {
-        // 1. 查看金银岛
-        $res = $this->request('island', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(3, $res['islands']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看金银岛
+            $res = $this->request('island', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertCount(3, $res['islands']);
 
-        // 2. 挑战蓬莱仙境岛 (island: 1)
-        $battle = $this->request('island', 'pk', ['id' => 1]);
-        $this->assertSame(1, $battle['status']);
-        $this->assertSame(1, $battle['win']);
-        $this->assertGreaterThan(0, $battle['silver']);
+            // 2. 挑战蓬莱仙境岛 (island: 1)
+            $battle = $this->request('island', 'pk', ['id' => 1]);
+            $this->assertSame(1, $battle['status']);
+            $this->assertSame(1, $battle['win']);
+            $this->assertGreaterThan(0, $battle['silver']);
+        });
     }
 
     public function testHerothroneSystem(): void
     {
-        // 1. 查看英雄王座
-        $res = $this->request('herothrone', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(3, $res['thrones']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看英雄王座
+            $res = $this->request('herothrone', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertCount(3, $res['thrones']);
 
-        // 2. 冲击青铜铁血王座 (throne: 1)
-        $action = $this->request('herothrone', 'action', ['id' => 1]);
-        $this->assertSame(1, $action['status']);
-        $this->assertSame(1, $action['win']);
-        $this->assertGreaterThan(0, $action['silver']);
+            // 2. 冲击青铜铁血王座 (throne: 1)
+            $action = $this->request('herothrone', 'action', ['id' => 1]);
+            $this->assertSame(1, $action['status']);
+            $this->assertSame(1, $action['win']);
+            $this->assertGreaterThan(0, $action['silver']);
+        });
     }
 
     public function testBeatengodSystem(): void
@@ -2592,26 +2697,28 @@ final class GameApiTest extends TestCase
 
     public function testCountryMineSystem(): void
     {
-        // 1. 查看国家矿山
-        $res = $this->request('countrymine', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['mines']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看国家矿山
+            $res = $this->request('countrymine', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertNotEmpty($res['mines']);
 
-        // 2. 占领官渡铜矿
-        $claim = $this->request('countrymine', 'caikuang', ['id' => 1]);
-        $this->assertSame(1, $claim['status']);
-        $this->assertSame(1, $claim['mine_id']);
+            // 2. 占领官渡铜矿
+            $claim = $this->request('countrymine', 'caikuang', ['id' => 1]);
+            $this->assertSame(1, $claim['status']);
+            $this->assertSame(1, $claim['mine_id']);
 
-        // 3. 掠夺敌国矿车
-        $rob = $this->request('countrymine', 'rob', ['id' => 2]);
-        $this->assertSame(1, $rob['status']);
-        $this->assertSame(1, $rob['win']);
-        $this->assertGreaterThan(0, $rob['rob_silver']);
+            // 3. 掠夺敌国矿车
+            $rob = $this->request('countrymine', 'rob', ['id' => 2]);
+            $this->assertSame(1, $rob['status']);
+            $this->assertSame(1, $rob['win']);
+            $this->assertGreaterThan(0, $rob['rob_silver']);
 
-        // 4. 收取开采银饷
-        $harvest = $this->request('countrymine', 'get_reward');
-        $this->assertSame(1, $harvest['status']);
-        $this->assertGreaterThan(0, $harvest['silver']);
+            // 4. 收取开采银饷
+            $harvest = $this->request('countrymine', 'get_reward');
+            $this->assertSame(1, $harvest['status']);
+            $this->assertGreaterThan(0, $harvest['silver']);
+        });
     }
 
     public function testCountryBossSystem(): void
@@ -2728,16 +2835,18 @@ final class GameApiTest extends TestCase
 
     public function testEpicSystem(): void
     {
-        // 1. 查看史诗战纪
-        $res = $this->request('epic', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(3, $res['list']);
+        $this->withStrongFormation(function (): void {
+            // 1. 查看史诗战纪
+            $res = $this->request('epic', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertCount(3, $res['list']);
 
-        // 2. 挑战史诗白马之战
-        $battle = $this->request('epic', 'force', ['id' => 1]);
-        $this->assertSame(1, $battle['status']);
-        $this->assertSame(1, $battle['win']);
-        $this->assertGreaterThan(0, $battle['silver']);
+            // 2. 挑战史诗白马之战
+            $battle = $this->request('epic', 'force', ['id' => 1]);
+            $this->assertSame(1, $battle['status']);
+            $this->assertSame(1, $battle['win']);
+            $this->assertGreaterThan(0, $battle['silver']);
+        });
     }
 
     public function testActivationCodeSystem(): void
@@ -2773,10 +2882,10 @@ final class GameApiTest extends TestCase
 
     public function testInformationSystem(): void
     {
-        // 1. 查看主公总战力总览
+        // 1. 查看主公资料；新版自定的 total_power 旧版没有对应字段（客户端也不读），已删除
         $res = $this->request('information', 'get_info');
         $this->assertSame(1, $res['status']);
-        $this->assertGreaterThan(0, $res['total_power']);
+        $this->assertArrayNotHasKey('total_power', $res);
         $this->assertGreaterThanOrEqual(1, $res['general_count']);
 
         // 2. 查看个人成就勋章
@@ -2820,17 +2929,10 @@ final class GameApiTest extends TestCase
         $firstGen = General::fromArray($generals[0]);
         $this->assertIsInt($firstGen->level);
 
-        $stats = $firstGen->calculateStats();
-        $this->assertArrayHasKey('attack', $stats);
-        $this->assertArrayHasKey('defense', $stats);
-        $this->assertArrayHasKey('hp', $stats);
-
-        // 3. 验证 Equipment 模型属性推算
+        // 3. 验证 Equipment 模型装配位置（战斗数值不再在模型里推算，见 Battle\TeamBuilder）
         $equips = Equipment::query()->where('uid', self::$uid)->get();
         $this->assertNotEmpty($equips);
         $firstEq = Equipment::fromArray($equips[0]);
-        $bonus = $firstEq->calculateBonus();
-        $this->assertIsArray($bonus);
         $this->assertGreaterThan(0, $firstEq->getSite());
     }
 

@@ -45,9 +45,10 @@
 ├── src/
 │   ├── Battle/              # 确定性九宫格战斗引擎
 │   │   ├── BattleEngine.php # 核心战斗推演逻辑 (源自 battle_model.php 重构)
-│   │   ├── Hero.php         # 战斗英雄实体模型
+│   │   ├── Hero.php         # 战斗单位（旧版字段 + 给当前引擎用的临时适配层）
 │   │   ├── Position.php     # 九宫格战位 (1-9号位) 枚举
-│   │   └── LegacyStats.php  # 旧版武将/装备数值公式（纯函数，逐条注明旧版出处）
+│   │   ├── LegacyStats.php  # 旧版武将/装备数值公式（纯函数，逐条注明旧版出处）
+│   │   └── TeamBuilder.php  # 旧版组队（玩家 / 怪物队伍、team_return_arr）
 │   ├── MasterData/          # 旧版配置表常量数组（脚本生成，勿手改）
 │   ├── Middleware/          # 中间件流水线 (完全对齐 smart-book 架构)
 │   │   ├── MiddlewareInterface.php
@@ -148,7 +149,7 @@
 - `c=map&m=get_scene_list`：战役势力关卡场景列表（如：大兴山）
 - `c=map&m=get_mission_list`：据点敌人阵容与关卡敌将数据
 - `c=map&m=mission`：战前敌将情报与布阵确认弹窗
-- `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发；胜利后按旧版 `Mission` 概率掉落（`getrate` / `gettype` / `getvalue`）结算发放
+- `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发（我方按旧版阵法 / 装备公式组队，守军取旧版 `Mission` → `Monster`）；胜利后按旧版 `Mission` 概率掉落（`getrate` / `gettype` / `getvalue`）结算发放
 - `c=map&m=get_newreward_index|get_newreward|get_newresult`：战役势力据点关卡宝箱、整势力通关大礼奖励领取与防重校验
 - `c=general&m=index|get_info|equip|unequip`：将领界面，按旧版 `general.php` 移植（只列出征将领、旧版 `info_field`、装备显示能力含精炼 / 强化成就加成、旧版血量公式、旧版装配校验与状态码）
 - `c=matrix&m=index`：九宫格战位阵法管理与上阵站位调换
@@ -235,11 +236,11 @@
 
 ## 🧪 自动化测试套件
 
-所有 16 个核心业务接口与战斗推演闭环均由 PHPUnit 自动化集成测试全量覆盖（`tests/Feature`）；`LegacyStats` 中的旧版公式用旧版库真实行做金标准校验（`tests/Unit`）：
+所有 16 个核心业务接口与战斗推演闭环均由 PHPUnit 自动化集成测试全量覆盖（`tests/Feature`）；`LegacyStats` 中的旧版公式与 `TeamBuilder` 组队用旧版库真实行做金标准校验（`tests/Unit`）：
 
 ```bash
 ./vendor/bin/phpunit                      # 全部测试
-./vendor/bin/phpunit --testsuite Unit     # 只测公式，不需要 DB / Redis
+./vendor/bin/phpunit --testsuite Unit     # 公式与组队（TeamBuilder 需要 MySQL，不需要 Redis）
 ```
 
 ---
@@ -295,7 +296,7 @@
 - [x] 运营激活与战力成就基石就绪：至尊CDKey激活码兑换 (`activationcode`)、整军经武演武礼包 (`exercise`)、主公全军总战力透视 (`information`)、结义邀请拉新分红 (`invitation`)
 - [x] 核心业务轻量薄模型 (`src/Model/`) 落地：引入 `SoftDeletes` 自动软删除过滤、强类型属性转换与内聚领域方法（`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`）
 - [x] 高并发防连击与防重入机制：基于 Redis 的核心资产操作原子防刷中间件 `ThrottleMiddleware`
-- [x] PHPUnit Unit + Feature 测试套件（112 个测试，1967 个断言）
+- [x] PHPUnit Unit + Feature 测试套件（123 个测试，6837 个断言）
 
 ---
 

@@ -5,11 +5,11 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Pvp;
 
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\Handler\General\GeneralHandler;
 
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
+use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -96,29 +96,23 @@ final class WorldBossHandler
         $myBuff = (int)(Redis::get('worldboss_buff:' . $uid) ?: 0);
         $buffMultiplier = 1.0 + ($myBuff / 100);
 
-        // 1. 构建我方出战英雄
-        $generals = DB::table('general')->where('uid', $uid)->where('pos', '>', 0)->get();
-        if (empty($generals)) {
-            $generals = DB::table('general')->where('uid', $uid)->get();
+        // 1. 我方队伍（旧版 worldboss 控制器走 battle_model->battle_worldboss：init_member_team_info，PVE）
+        $left = TeamBuilder::forMember($uid, pve: true);
+        if ($left['status'] === -1 || $left['status'] === -3) {
+            // 旧版 battle_model 返回 -1（没有阵法）/ -3（武将信息错误）；本玩法尚未按旧版控制器移植，直接回传该状态
+            return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
-
-        $leftHeroes = [];
-        foreach ($generals as $g) {
-            $gid = (int)$g['id'];
-            $posInt = (int)$g['pos'] > 0 ? (int)$g['pos'] : 2;
-            $pos = Position::tryFrom($posInt) ?? Position::FrontMiddle;
-            $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->get();
-            $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
-            $boostedAtk = (int)round($stats['attack'] * $buffMultiplier);
-            $leftHeroes[] = new Hero($gid, $g['name'], $pos, $stats['hp'], $stats['hp'], $boostedAtk, $stats['defense'], $stats['speed']);
+        // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
+        // 临时适配（P5 删除）：旧版鼓舞系数 _attack_coe 在 process_hurt 里乘到伤害上，当前引擎没有该入口，暂乘到攻击上
+        foreach ($left['team'] as $pos => $unit) {
+            $left['team'][$pos]['attack'] = (int)round($unit['attack'] * $buffMultiplier);
         }
-        if (empty($leftHeroes)) {
-            $leftHeroes[] = new Hero(1, '天命主公', Position::FrontMiddle, 2000, 2000, (int)(400 * $buffMultiplier), 150, 150);
-        }
+        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 世界 BOSS 董卓
+        // 依赖未移植：旧版世界 BOSS 信息取自 world_boss 配置（battle_worldboss 的 $bossinfo），本玩法的数值是新版自定的；站位按旧版 5 号位
         $rightHeroes = [
-            new Hero(9999, '极·魔王董卓', Position::FrontMiddle, 50000, 50000, 450, 200, 100),
+            Hero::unported(9999, '极·魔王董卓', Position::MidMiddle, 50000, 450, 200),
         ];
 
         // 3. 推演
