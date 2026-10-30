@@ -54,7 +54,7 @@ final class StrengthenHandler
             $curBonus = GeneralHandler::calculateEquipBonus($item);
             $nextBonus = GeneralHandler::calculateEquipBonus(array_merge($item, ['level' => $curLevel + 1]));
 
-            $list[$idx] = [
+            $itemData = [
                 'id' => $eid,
                 'equipid' => (int)$item['equipid'],
                 'name' => $item['name'],
@@ -62,11 +62,20 @@ final class StrengthenHandler
                 'quality' => (int)$item['quality'],
                 'level' => $curLevel,
                 'gid' => $gid,
-                'generalname' => $generalMap[$gid] ?? '',
+                'hammer' => 0,
+                'hammer_quality' => 0,
                 'cost_silver' => $costSilver,
                 'bonus' => $curBonus,
                 'next_bonus' => $nextBonus,
             ];
+
+            // 仅当装备穿在武将身上时才下发武将名称，未穿戴时不设该键
+            if ($gid > 0 && isset($generalMap[$gid])) {
+                $itemData['generalname'] = $generalMap[$gid];
+                $itemData['generalid'] = $gid;
+            }
+
+            $list[$idx] = $itemData;
             $idx++;
         }
 
@@ -84,6 +93,8 @@ final class StrengthenHandler
             'powerup' => $powerup,
             'gid' => $firstItem['gid'] ?? 0,
             'gidname' => $firstItem['generalname'] ?? '',
+            'hammer' => 0,
+            'hammer_quality' => 0,
         ];
 
         $infoObj = [
@@ -153,18 +164,24 @@ final class StrengthenHandler
         Redis::del('player:' . $uid);
 
         $newBonus = GeneralHandler::calculateEquipBonus(array_merge($equip, ['level' => $newLevel]));
+        $newPower = $newBonus['attack'] ?: ($newBonus['defense'] ?: $newBonus['hp']);
 
         return [
             'status' => 1,
             'message' => '强化成功',
             'level' => $newLevel,
+            'newlevel' => $newLevel,
             'cost_silver' => $costSilver,
-            'silver' => $remainSilver,
+            'silver' => $costSilver,
+            'all_silver' => $remainSilver,
             'gold' => 0,
+            'all_gold' => (int)($member['gold'] ?? 0),
             'rate' => 100,
-            'power' => $newBonus['attack'] ?: ($newBonus['defense'] ?: $newBonus['hp']),
+            'power' => $newPower,
+            'newpower' => $newPower,
             'bonus' => $newBonus,
             'cd' => 0,
+            'baoji' => 1,
         ];
     }
 
@@ -184,6 +201,13 @@ final class StrengthenHandler
             ];
         }
 
+        $gid = (int)$equip['generalid'];
+        $gidName = '';
+        if ($gid > 0) {
+            $gen = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
+            $gidName = $gen['name'] ?? '';
+        }
+
         $curLevel = max(1, (int)$equip['level']);
         $costSilver = $curLevel * 150;
         $curBonus = GeneralHandler::calculateEquipBonus($equip);
@@ -199,8 +223,10 @@ final class StrengthenHandler
             'level' => $curLevel,
             'power' => 50,
             'powerup' => $powerup,
-            'gid' => (int)$equip['generalid'],
-            'gidname' => '',
+            'gid' => $gid,
+            'gidname' => $gidName,
+            'hammer' => 0,
+            'hammer_quality' => 0,
             'cost_silver' => $costSilver,
             'rate' => 100,
             'bonus' => $curBonus,

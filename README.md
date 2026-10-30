@@ -24,6 +24,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 | **Concurrency / IO** | Synchronous blocking MySQL and file IO | **Event-driven non-blocking IO** (Revolt / EventLoop) |
 | **Combat Simulation** | Database-dependent sequential execution (~10-50ms) | **Pure in-memory deterministic simulation** (< 0.1ms) |
 | **State Sync** | Client HTTP short-polling every second | Native **WebSocket duplex real-time broadcasting** |
+| **Media Streaming** | Full-payload response (fails on Safari / iOS WebKit) | Standard **HTTP 206 Partial Content** Byte-Range slices & Capture-phase unlock |
 | **Language Standards** | Dynamic typeless PHP 5.3, procedural helpers | **`declare(strict_types=1)`**, Enums, Readonly classes, Match |
 | **Deployment** | Heavy Windows / WAMP / IIS dependencies | Single-command CLI / Docker containerization |
 
@@ -281,6 +282,8 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Pinnacle tier ascensions: Quality ascension (`advanced`), gear affix refinement (`refine`), seven-star breakthrough (`star`), and War College technologies (`war_college`)
 - [x] Chronicles & campaign expeditions: Fortune lottery (`lottery`), warlord expeditions (`generaltask`), heroes chronicle bonds (`general_book`), and campaign pacifications (`copies`)
 - [x] Epic holy wars & overseas frontiers: Gold & Silver treasure islands (`island`), Hero Throne dominance (`herothrone`), martial god golden body trials (`beatengod`), and Imperial Capital Holy War (`war`)
+- [x] Protocol & media fidelity: HTTP 206 Partial Content byte-range media streaming, Web Audio capture unlock, classic hero asset binding (`HERO_CONFIGS`), levelup exp bar normalization, and defeat zero-yield rule
+
 - [x] Border battlegrounds & growth milestones: Nation border mines (`countrymine`), national beast altars (`countryboss`), golden egg smashings (`hitegg`), and level-up milestone packages (`levelgift`)
 - [x] National trade & celestial forges: National prestige stores (`countryshop`), gear fabrications (`equip_forge`), continuous login festivals (`totallogin`), and historical epics (`epic`)
 - [x] Operational giftings & achievement telemetry: Universal CDKeys (`activationcode`), military drills (`exercise`), lord combat overview (`information`), and brotherhood recruitment (`invitation`)

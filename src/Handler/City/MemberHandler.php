@@ -78,7 +78,7 @@ final class MemberHandler
                 'country' => 1,
                 'level' => 1,
                 'exp' => 0,
-                'maxexp' => 100,
+                'maxexp' => 80,
                 'silver' => 88888,
                 'gold' => 9999,
                 'reputation' => 100,
@@ -98,6 +98,11 @@ final class MemberHandler
         }
 
         $now = time();
+        $level = max(1, (int)$member['level']);
+        $vip = max(0, (int)$member['vip']);
+        $levelUpExp = (int)($member['maxexp'] ?? 0) > 0 ? (int)$member['maxexp'] : Member::getLevelUpExp($level);
+        $actLimit = Member::getActLimit($vip);
+
         $data = [
             'status' => 1,
             'uid' => $uid,
@@ -107,16 +112,18 @@ final class MemberHandler
             'gender' => (int)$member['gender'],
             'roleid' => (int)$member['roleid'],
             'country' => (int)$member['country'],
-            'Level' => (int)$member['level'],
-            'level' => (int)$member['level'],
+            'Level' => $level,
+            'level' => $level,
             'silver' => (int)$member['silver'],
             'gold' => (int)$member['gold'],
             'reputation' => (int)$member['reputation'],
             'act' => (int)$member['act'],
-            'maxact' => (int)$member['maxact'],
-            'vip' => (int)$member['vip'],
+            'act_limit' => $actLimit,
+            'maxact' => $actLimit,
+            'vip' => $vip,
             'exp' => (int)$member['exp'],
-            'maxexp' => (int)$member['maxexp'],
+            'levelupexp' => $levelUpExp,
+            'maxexp' => $levelUpExp,
             'bagnum' => (int)$member['bagnum'],
             'guide' => (int)$member['guide'],
             'guidestep' => (int)$member['guidestep'],
@@ -260,7 +267,7 @@ final class MemberHandler
             DB::table('member')->where('uid', $uid)->update([
                 'level' => 1,
                 'exp' => 0,
-                'maxexp' => 100,
+                'maxexp' => 80,
                 'silver' => 88888,
                 'gold' => 9999,
                 'reputation' => 100,

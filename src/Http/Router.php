@@ -85,7 +85,14 @@ JS;
                 return;
             }
 
-            // 2. 静态文件直出 (autoload 动态注入端口兼容，其余统一走 OmniPHP 官方 StaticServer)
+            // 2. 媒体流式分段请求 (针对 Safari / iOS WebKit 提供标准的 HTTP 206 Partial Content 支持)
+            if (preg_match('/\.(mp3|wav|ogg|m4a|aac)$/i', $path) === 1) {
+                if ($this->serveMediaWithRange($connection, $request, $path)) {
+                    return;
+                }
+            }
+
+            // 3. 静态文件直出 (autoload 动态注入端口兼容，其余统一走 OmniPHP 官方 StaticServer)
             if (str_ends_with($path, 'autoload.js')) {
                 $realFile = realpath($this->publicPath . $path);
                 if ($realFile !== false && is_file($realFile)) {
@@ -166,5 +173,86 @@ JS;
             'status' => 0,
             'message' => '未定义执行动作',
         ];
+    }
+
+    /**
+     * 静态音频/媒体流式文件直出 (支持 HTTP 206 Partial Content 与 Byte-Range 请求)
+     */
+    private function serveMediaWithRange(TcpConnection $connection, Request $request, string $path): bool
+    {
+        $realDir = realpath($this->publicPath);
+        if ($realDir === false) {
+            return false;
+        }
+
+        $targetFile = $realDir . '/' . ltrim($path, '/');
+        $realFile = realpath($targetFile);
+
+        // 防路径穿越安全沙箱
+        if ($realFile === false || !str_starts_with($realFile, $realDir) || !is_file($realFile)) {
+            return false;
+        }
+
+        $fileSize = (int)filesize($realFile);
+        $mtime = (int)filemtime($realFile);
+        $etag = sprintf('"%x-%x"', $mtime, $fileSize);
+
+        $ifNoneMatch = $request->header('if-none-match');
+        if ($ifNoneMatch === $etag) {
+            $connection->send(new WorkermanResponse(304));
+            return true;
+        }
+
+        $mime = StaticServer::detectMimeType($realFile);
+        $range = $request->header('range');
+
+        $headers = [
+            'Content-Type' => $mime,
+            'Accept-Ranges' => 'bytes',
+            'ETag' => $etag,
+            'Cache-Control' => 'public, max-age=86400',
+            'Last-Modified' => gmdate('D, d M Y H:i:s', $mtime) . ' GMT',
+        ];
+
+        // 处理 Range: bytes=start-end (对标 Safari / iOS WebKit 分段请求规范)
+        if ($range !== null && preg_match('/bytes=(\d*)-(\d*)/i', $range, $matches)) {
+            $startStr = $matches[1] ?? '';
+            $endStr = $matches[2] ?? '';
+
+            if ($startStr === '' && $endStr === '') {
+                $connection->send(new WorkermanResponse(416, ['Content-Range' => "bytes */{$fileSize}"]));
+                return true;
+            }
+
+            if ($startStr === '') {
+                $length = (int)$endStr;
+                $start = max(0, $fileSize - $length);
+                $end = $fileSize - 1;
+            } else {
+                $start = (int)$startStr;
+                $end = ($endStr !== '') ? (int)$endStr : ($fileSize - 1);
+            }
+
+            if ($start > $end || $start >= $fileSize) {
+                $connection->send(new WorkermanResponse(416, ['Content-Range' => "bytes */{$fileSize}"]));
+                return true;
+            }
+
+            $end = min($end, $fileSize - 1);
+            $length = $end - $start + 1;
+
+            $headers['Content-Range'] = "bytes {$start}-{$end}/{$fileSize}";
+            $headers['Content-Length'] = (string)$length;
+
+            $chunk = (string)file_get_contents($realFile, false, null, $start, $length);
+            $connection->send(new WorkermanResponse(206, $headers, $chunk));
+            return true;
+        }
+
+        // 普通请求返回 200 并显式宣示 Accept-Ranges: bytes
+        $headers['Content-Length'] = (string)$fileSize;
+        $content = (string)file_get_contents($realFile);
+        $connection->send(new WorkermanResponse(200, $headers, $content));
+        return true;
     }
 }

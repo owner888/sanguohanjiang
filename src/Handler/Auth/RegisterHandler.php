@@ -133,7 +133,7 @@ final class RegisterHandler
             'country' => 0,
             'level' => 1,
             'exp' => 0,
-            'maxexp' => 100,
+            'maxexp' => 80,
             'silver' => 88888,
             'gold' => 9999,
             'reputation' => 100,

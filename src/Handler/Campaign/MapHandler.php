@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\Campaign;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
+use Hanjiang\Model\Member;
 
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\Hero;
@@ -348,6 +349,7 @@ final class MapHandler
      */
     public static function mission(Context $ctx): array
     {
+        $uid = MemberHandler::resolveUid($ctx);
         $level = (int)($ctx->input('l', 1));
         $stage = (int)($ctx->input('s', 1));
         $id = (int)($ctx->input('id', 1));
@@ -355,6 +357,10 @@ final class MapHandler
         $enemyCfg = self::getEnemyConfig($level, $stage, $id);
         $enemyName = (string)$enemyCfg['name'];
         $type = (int)$enemyCfg['type'];
+
+        // 检查该关卡是否首杀 (zc_sanguo_map 记录的 mission < 当前据点 id 则为首杀)
+        $existMap = DB::table('map')->where('uid', $uid)->where('level', $level)->where('stage', $stage)->first();
+        $isFirst = ($existMap === null || (int)$existMap['mission'] < $id) ? 1 : -1;
 
         return [
             'status' => 1,
@@ -371,7 +377,7 @@ final class MapHandler
                 'recruitrate' => 0,
                 'generalid' => 0,
                 'background' => 1,
-                'first' => 1,
+                'first' => $isFirst,
                 'firstkillexp' => 150 + $enemyCfg['level'] * 20,
                 'exp' => 100 + $enemyCfg['level'] * 10,
                 'gfirstkillexp' => 200 + $enemyCfg['level'] * 25,
@@ -417,12 +423,13 @@ final class MapHandler
 
         $leftHeroes = [];
         $leftTeamData = [];
-        $leftHeroImage = (string)($member['gender'] ?? 1);
+        $memberGender = (int)($member['gender'] ?? 1);
 
         foreach ($generals as $g) {
             $gid = (int)$g['id'];
             $posInt = (int)$g['pos'] > 0 ? (int)$g['pos'] : 2;
             $pos = Position::tryFrom($posInt) ?? Position::FrontMiddle;
+            $heroName = (string)($g['name'] ?: $nickname);
 
             $equipped = DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->get();
             $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
@@ -431,25 +438,32 @@ final class MapHandler
             $finalAtk = ($matrixMid === 1) ? (int)round($stats['attack'] * $matrixAddition) : $stats['attack'];
             $finalDef = ($matrixMid === 3) ? (int)round($stats['defense'] * $matrixAddition) : $stats['defense'];
 
-            $heroName = $g['name'] ?: $nickname;
             $leftHeroes[] = new Hero($gid, $heroName, $pos, $stats['hp'], $stats['hp'], $finalAtk, $finalDef, $stats['speed']);
+
+            // 形象 ID 解析：主公将领(generalid=1)依账号 gender 解析，名将依原型配置解析
+            $heroImage = GeneralHandler::resolveHeroImage($heroName, $memberGender, (int)($g['generalid'] ?? 1));
+
+            // 天赋与技能解析
+            $talentObj = GeneralHandler::getGeneralTalent($g);
+            $skillObj = GeneralHandler::getGeneralSkill($g);
 
             $leftTeamData[$posInt] = [
                 'heroid' => (string)$gid,
                 'name' => $heroName,
-                'herotype' => '1',
+                'herotype' => (string)($g['type'] ?? (isset(GeneralHandler::HERO_CONFIGS[$heroName]) ? GeneralHandler::HERO_CONFIGS[$heroName]['type'] : '1')),
                 'level' => (string)$stats['level'],
                 'allblood' => $stats['hp'],
                 'blood' => $stats['hp'],
                 'power' => 50,
-                'image' => (int)$g['generalid'] === 1 ? $leftHeroImage : (string)((int)$g['generalid'] % 20 + 10),
-                'star' => 1,
-                'talent' => '坚强',
-                'skill' => '会心一击',
+                'image' => (string)$heroImage,
+                'star' => (int)($g['star'] ?? 1),
+                'talent' => $talentObj['name'],
+                'skill' => $skillObj['name'],
             ];
         }
 
         if (empty($leftHeroes)) {
+            $defaultHeroImage = GeneralHandler::resolveHeroImage($nickname, $memberGender, 1);
             $leftHeroes[] = new Hero(1, $nickname, Position::FrontMiddle, 1500, 1500, 320, 120, 150);
             $leftTeamData[2] = [
                 'heroid' => '1',
@@ -459,7 +473,7 @@ final class MapHandler
                 'allblood' => 1500,
                 'blood' => 1500,
                 'power' => 50,
-                'image' => $leftHeroImage,
+                'image' => (string)$defaultHeroImage,
                 'star' => 1,
                 'talent' => '坚强',
                 'skill' => '会心一击',
@@ -496,19 +510,36 @@ final class MapHandler
         $openstatus = 0;
         $levelUp = 0;
 
-        $gainExp = 100 + ($enemyCfg['level'] ?? 1) * 10;
-        $gainGexp = 150 + ($enemyCfg['level'] ?? 1) * 15;
+        // 根据是否首通据点决定经验结算 (首杀使用 firstkillexp/gfirstkillexp，非首杀使用普通经验)
+        $existMapBefore = DB::table('map')->where('uid', $uid)->where('level', $level)->where('stage', $stage)->first();
+        $isFirstKill = ($existMapBefore === null || (int)$existMapBefore['mission'] < $missionId);
+
+        $gainExp = 0;
+        $gainGexp = 0;
+        $gainSilver = 0;
+
+        if ($isWin) {
+            $enemyLvl = (int)($enemyCfg['level'] ?? 1);
+            if ($isFirstKill) {
+                $gainExp = 150 + $enemyLvl * 20;
+                $gainGexp = 200 + $enemyLvl * 25;
+            } else {
+                $gainExp = 100 + $enemyLvl * 10;
+                $gainGexp = 150 + $enemyLvl * 15;
+            }
+            $gainSilver = 500;
+        }
 
         if ($member !== null) {
             $curLevel = max(1, (int)$member['level']);
-            $newExp = (int)$member['exp'] + ($isWin ? $gainExp : (int)round($gainExp * 0.2));
-            $reqExp = GeneralHandler::getLevelUpExp($curLevel);
+            $newExp = (int)$member['exp'] + $gainExp;
+            $reqExp = Member::getLevelUpExp($curLevel);
 
             while ($newExp >= $reqExp && $curLevel < 120) {
                 $newExp -= $reqExp;
                 $curLevel++;
                 $levelUp = 1;
-                $reqExp = GeneralHandler::getLevelUpExp($curLevel);
+                $reqExp = Member::getLevelUpExp($curLevel);
             }
 
             $curMemberLevel = max(1, (int)($member['missionlevel'] ?? 1));
@@ -628,9 +659,9 @@ final class MapHandler
             'win' => $isWin ? 1 : -1,
             'exp' => $gainExp,
             'gexp' => $gainGexp,
-            'silver' => 500,
-            'gettype' => 3,
-            'getvalue' => 500,
+            'silver' => $gainSilver,
+            'gettype' => $isWin ? 3 : 0,
+            'getvalue' => $gainSilver,
             'background' => 1,
             'openstatus' => $openstatus,
             'get_level' => $level, // 势力通关标记
@@ -639,6 +670,8 @@ final class MapHandler
             'missionid' => $nextMissionId,
             'itemname' => '青铜铠甲',
             'levelup' => $levelUp,
+            'levelexp' => $newExp ?? 0,
+            'levelupexp' => $reqExp ?? 80,
             'report' => 0,
         ];
 

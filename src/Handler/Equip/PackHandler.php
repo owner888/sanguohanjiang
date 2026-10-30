@@ -84,6 +84,8 @@ final class PackHandler
                 'full_num' => (int)$it['number'],
                 'gid' => (int)$it['generalid'],
                 'is_equipped' => (int)$it['generalid'] > 0 ? 1 : 0,
+                'hammer' => 0,
+                'hammer_quality' => 0,
                 'bonus' => $bonus,
             ];
         }

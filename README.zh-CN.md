@@ -24,6 +24,7 @@
 | **并发与 IO** | 同步阻塞式文件与数据库读写 | **事件驱动非阻塞 IO** (Revolt / EventLoop) |
 | **战斗推演** | 依赖数据库读写与串行逻辑，单次约 10~50ms | **纯内存确定性推演**，单次 < 0.1ms |
 | **状态同步** | 客户端每秒发送 HTTP 短轮询拉取聊天和战报 | 原生 **WebSocket 双工实时广播** |
+| **媒体流式传输** | 原版静态直出，Safari/iOS 流媒体加载挂起 | 标准 **HTTP 206 Partial Content** 字节范围切片与全捕获音频唤醒 |
 | **语言规范** | 无类型约束、数组 Notice 频繁的 PHP 5.3 | **严格类型 `declare(strict_types=1)`**、枚举、只读类、Match 表达式 |
 | **部署维护** | 强依赖 Windows / WAMP / IIS 一键端 | 纯单命令 CLI / Docker 一键容器化部署 |
 
@@ -281,6 +282,8 @@
 - [x] 终极养成进阶体系全线贯通：神将品质飞升 (`advanced`)、装备精炼词条 (`refine`)、武将七星突破 (`star`)、国家战争学院科技 (`war_college`)
 - [x] 英雄图谱与战役平乱全线就绪：幸运大转盘 (`lottery`)、武将远征试炼 (`generaltask`)、名将谱羁绊点亮 (`general_book`)、平乱战役副本 (`copies`)
 - [x] 跨服争霸与海外秘境全线贯通：东海金银岛秘境 (`island`)、英雄王座巅峰争霸 (`herothrone`)、真武战神金身试炼 (`beatengod`)、皇城跨服封神国战 (`war`)
+- [x] 协议一致性与媒体高保真：标准 HTTP 206 Partial Content 字节切片音频流、Web Audio 捕获级全兼容唤醒、名将原型资产严格对齐 (`HERO_CONFIGS`)、主公经验条分母归一化与战败零收益铁律
+
 - [x] 边境阵营战场与等级里程碑：国家边境矿山争夺 (`countrymine`)、国家神兽守护神祭坛 (`countryboss`)、金蛋纳福大暴击 (`hitegg`)、主公等级成长基金礼包 (`levelgift`)
 - [x] 官营特产与神装天铸体系全线贯通：国家特产商城 (`countryshop`)、天工神装铸造熔炼 (`equip_forge`)、开服十四日累登狂欢 (`totallogin`)、天命战纪史诗副本 (`epic`)
 - [x] 运营激活与战力成就基石就绪：至尊CDKey激活码兑换 (`activationcode`)、整军经武演武礼包 (`exercise`)、主公全军总战力透视 (`information`)、结义邀请拉新分红 (`invitation`)

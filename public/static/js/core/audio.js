@@ -48,11 +48,26 @@
                 }
             };
 
-            // 持续挂载用户触摸与点击交互监听，一旦产生手势即触发音频播放
-            document.addEventListener('touchstart', unlock, { passive: true });
-            document.addEventListener('touchend', unlock, { passive: true });
-            document.addEventListener('click', unlock, { passive: true });
-            document.addEventListener('keydown', unlock, { passive: true });
+            // 使用捕获阶段 (capture: true) 拦截全局原生手势，即使子元素调用 stopPropagation 也能 100% 触发音频解锁
+            var options = { capture: true, passive: true };
+            var events = ['pointerdown', 'touchstart', 'touchend', 'mousedown', 'mouseup', 'click', 'keydown'];
+            for (var i = 0; i < events.length; i++) {
+                window.addEventListener(events[i], unlock, options);
+                document.addEventListener(events[i], unlock, options);
+            }
+
+            // 监听切后台与切回前台 (VisibilityChange & Focus)
+            var onVisibilityChange = function() {
+                if (!document.hidden && self.musicstatus === true) {
+                    var targetBgm = self.current || 'city_bgm';
+                    if ($('#battleworld_page').length > 0 || (typeof battleWorld !== 'undefined' && battleWorld && battleWorld.isshow)) {
+                        targetBgm = 'battle_bgm';
+                    }
+                    self.playbgm(targetBgm);
+                }
+            };
+            document.addEventListener('visibilitychange', onVisibilityChange, { passive: true });
+            window.addEventListener('focus', onVisibilityChange, { passive: true });
         },
 
         loadMusic: function() {
@@ -115,7 +130,6 @@
                     } catch(e) {}
                 }
             }
-            this.current = null;
         },
 
         playbgm: function(audioid) {

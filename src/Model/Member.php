@@ -48,6 +48,30 @@ class Member extends Model
     ];
 
     /**
+     * 原版经典主公/武将升级经验公式 (80 * 等级^2)
+     */
+    public static function getLevelUpExp(int $level): int
+    {
+        return max(80, 80 * $level * $level);
+    }
+
+    /**
+     * 原版 VIP 军令上限公式 (VIP0:50, VIP1:60, VIP2:70, VIP3:80, VIP4:90, VIP5+:100)
+     */
+    public static function getActLimit(int $vip): int
+    {
+        $limits = [
+            0 => 50,
+            1 => 60,
+            2 => 70,
+            3 => 80,
+            4 => 90,
+            5 => 100,
+        ];
+        return $limits[min(5, max(0, $vip))];
+    }
+
+    /**
      * 根据 UID 快速查找主公记录 (自动过滤软删除)
      */
     public static function findByUid(int $uid): ?static

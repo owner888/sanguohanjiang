@@ -14,6 +14,72 @@ use OmniPHP\Database\DB;
 final class GeneralHandler
 {
     /**
+     * 原版经典名将原型主数据 (精准对齐原版美术资产与战斗数值)
+     *
+     * @var array<string, array<string, mixed>>
+     */
+    public const array HERO_CONFIGS = [
+        '诸葛亮' => [
+            'name' => '诸葛亮',
+            'image' => 76,  // 经典原版：八卦青芒、纶巾羽扇卧龙孔明
+            'type' => 2,    // 谋士(法术策略)
+            'quality' => 5, // 橙色神将
+            'wuli' => 55,
+            'zhili' => 100, // 智绝天下
+            'tili' => 88,
+            'talent' => ['id' => 4, 'name' => '智囊', 'blood' => 1, 'description' => '策略攻击防御综合提升15%'],
+            'skill' => ['id' => 5, 'name' => '卧龙天火', 'description' => '借东风降下神火天降，对敌军全阵型进行法术覆盖'],
+        ],
+        '关羽' => [
+            'name' => '关羽',
+            'image' => 58,  // 经典原版：绿袍长髯公、卧蚕眉丹凤眼
+            'type' => 1,    // 战法猛将
+            'quality' => 5,
+            'wuli' => 98,
+            'zhili' => 82,
+            'tili' => 95,
+            'talent' => ['id' => 5, 'name' => '武帝', 'blood' => 1, 'description' => '受到直接物理伤害降低10%，反击伤害提升15%'],
+            'skill' => ['id' => 4, 'name' => '春秋十字斩', 'description' => '神刀劈砍降下雷霆万钧，重创敌将并提升自身韧性'],
+        ],
+        '张飞' => [
+            'name' => '张飞',
+            'image' => 54,  // 经典原版：红巾黑须、怒目豹头张翼德
+            'type' => 1,    // 物理猛将
+            'quality' => 4,
+            'wuli' => 99,
+            'zhili' => 45,
+            'tili' => 96,
+            'talent' => ['id' => 2, 'name' => '勇士无双', 'blood' => 1, 'description' => '普通物理攻击伤害提升15%'],
+            'skill' => ['id' => 2, 'name' => '万夫莫敌', 'description' => '咆哮怒吼横扫千军，对横排敌方造成160%群体震慑'],
+        ],
+        '赵云' => [
+            'name' => '赵云',
+            'image' => 25,  // 经典原版：常山赵子龙白银战盔红缨
+            'type' => 1,    // 物理神将
+            'quality' => 5,
+            'wuli' => 96,
+            'zhili' => 78,
+            'tili' => 92,
+            'talent' => ['id' => 3, 'name' => '一身是胆', 'blood' => 1, 'description' => '出手先攻速度提升25点，必定暴击'],
+            'skill' => ['id' => 3, 'name' => '龙胆穿心', 'description' => '白马银枪直刺中路，必定暴击并破除敌军格挡'],
+        ],
+    ];
+
+    /**
+     * 解析武将正统头像 ID
+     */
+    public static function resolveHeroImage(string $name, int $gender = 1, int $fallback = 1): int
+    {
+        if (isset(self::HERO_CONFIGS[$name])) {
+            return (int)self::HERO_CONFIGS[$name]['image'];
+        }
+        if ($fallback === 1) {
+            return ($gender === 2) ? 2 : 1;
+        }
+        return $fallback;
+    }
+
+    /**
      * 计算单件装备提供的属性加成 (委托至 Equipment 领域模型)
      *
      * @param array<string, mixed> $equip
@@ -206,21 +272,47 @@ final class GeneralHandler
     public static function formatHeroData(array $g, array $equipped, int $uid): array
     {
         $gid = (int)$g['id'];
-        $stats = self::calculateGeneralStats($g, $equipped);
+        $name = (string)($g['name'] ?? '');
+        $cfg = self::HERO_CONFIGS[$name] ?? null;
+
+        // 查询玩家性别以决定主公头像 (女2/男1)
+        $memberGender = 1;
+        $member = DB::table('member')->where('uid', $uid)->first();
+        if ($member !== null) {
+            $memberGender = (int)($member['gender'] ?? 1);
+        }
+
+        $image = (int)($g['image'] ?? 0);
+        if ($image <= 0) {
+            $image = self::resolveHeroImage($name, $memberGender, (int)($g['generalid'] ?? 1));
+        }
+
+        $wuli = (int)($g['wuli'] ?? $cfg['wuli'] ?? 85);
+        $zhili = (int)($g['zhili'] ?? $cfg['zhili'] ?? 70);
+        $tili = (int)($g['tili'] ?? $cfg['tili'] ?? 90);
+        $quality = (int)($g['quality'] ?? $cfg['quality'] ?? 3);
+        $type = (int)($g['type'] ?? $cfg['type'] ?? 1);
+
+        $gWithAttributes = array_merge($g, [
+            'wuli' => $wuli,
+            'zhili' => $zhili,
+            'tili' => $tili,
+        ]);
+        $stats = self::calculateGeneralStats($gWithAttributes, $equipped);
         $level = $stats['level'];
 
         $equipSlot = [];
         $eids = [1 => '0', 2 => '0', 3 => '0', 4 => '0'];
 
         foreach ($equipped as $eq) {
-            $type = (int)$eq['type'];
+            $eType = (int)$eq['type'];
             $bonus = self::calculateEquipBonus($eq);
             $powerup = $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']);
             $eqItem = [
                 'id' => (int)$eq['id'],
                 'equipid' => (int)$eq['equipid'],
                 'name' => $eq['name'],
-                'type' => $type,
+                'type' => $eType,
                 'level' => (int)$eq['level'],
                 'quality' => (int)$eq['quality'],
                 'needlevel' => 1,
@@ -231,9 +323,9 @@ final class GeneralHandler
                 'hammer_quality' => 0,
                 'bonus' => $bonus,
             ];
-            $equipSlot[$type] = $eqItem;
-            if ($type >= 1 && $type <= 4) {
-                $eids[$type] = $eqItem;
+            $equipSlot[$eType] = $eqItem;
+            if ($eType >= 1 && $eType <= 4) {
+                $eids[$eType] = $eqItem;
             }
         }
 
@@ -241,13 +333,13 @@ final class GeneralHandler
             'id' => $gid,
             'uid' => $uid,
             'generalid' => (int)($g['generalid'] ?? 1),
-            'name' => $g['name'],
+            'name' => $name,
             'level' => $level,
             'exp' => (int)$g['exp'],
             'levelupexp' => self::getLevelUpExp($level),
-            'image' => (int)($g['image'] ?? $g['generalid'] ?? 1),
-            'quality' => (int)($g['quality'] ?? 3),
-            'type' => (int)($g['type'] ?? 1),
+            'image' => $image,
+            'quality' => $quality,
+            'type' => $type,
             'turn' => (int)($g['turn'] ?? 0),
             'isturn' => ($level >= 100) ? 1 : 0,
             'star' => (int)($g['star'] ?? 1),
@@ -255,11 +347,11 @@ final class GeneralHandler
             'achList' => [],
             'pos' => (int)$g['pos'],
             'goout' => (int)$g['pos'] > 0 ? 1 : 0,
-            'wuli' => 85,
+            'wuli' => $wuli,
             'wuliup' => (int)($g['wuliup'] ?? 0),
-            'zhili' => 70,
+            'zhili' => $zhili,
             'zhiliup' => (int)($g['zhiliup'] ?? 0),
-            'tili' => 90,
+            'tili' => $tili,
             'tiliup' => (int)($g['tiliup'] ?? 0),
             'hp' => $stats['hp'],
             'allblood' => $stats['allblood'],

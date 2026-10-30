@@ -67,21 +67,25 @@
             } else {//试玩未绑定账户
                 nickname = lang('unbind_account');
             }
-            that.e.find('#settings_name').html(nickname);
-            that.e.find('#settings_server').html(servername); 
+            nickname = nickname || '';
+            servername = servername || (xGame.server_name || '');
+            that.e.find('#settings_name').text(nickname);
+            that.e.find('#settings_server').text(servername); 
             //帐号信息 end
 
             /* 按钮处理与事件绑定 */
             if (xGame.xsGet('tryuid')) {//试玩用户，需要绑定帐号
                 var bindpw_btn = that.e.find('#bindpw_btn');
-                bindpw_btn.css('display', 'inline-block').unbind('touchend').bind('touchend',
-                function() {
-                    settingspop.hide();
-                    miscpop.bindPopConfirm();
-                });
+                if (bindpw_btn.length > 0) {
+                    bindpw_btn.css('display', 'inline-block').unbind('touchend').bind('touchend',
+                    function() {
+                        settingspop.hide();
+                        miscpop.bindPopConfirm();
+                    });
+                }
                 bindpw_btn = null;
             }
-            if (codestatus == 1 && player.info.appreview == 0) {//可以使用兑换码
+            if (codestatus == 1 && player && player.info && player.info.appreview == 0) {//可以使用兑换码
                 var code_btn = that.e.find('#code_btn');
                 code_btn.css('display', 'inline-block');
                 code_btn.unbind('click touchend').bind('click touchend',
@@ -224,25 +228,25 @@
             if (gAudio) {
                 that.setMusicBtn(gAudio.musicstatus);
                 var lastToggleTime = 0;
-                that.e.find('#music_btn').unbind('click touchend').bind('click touchend',
-                function(e) {
-                    var now = Date.now();
-                    if (now - lastToggleTime < 250) {
-                        return false;
-                    }
-                    lastToggleTime = now;
+                var onToggleMusic = function(e) {
                     if (e) {
                         e.preventDefault();
                         e.stopPropagation();
                     }
-                    if (gAudio) {
-                        var nextStatus = !gAudio.musicstatus;
-                        gAudio.settingmusic(nextStatus);
+                    var now = Date.now();
+                    if (now - lastToggleTime < 350) {
+                        return false;
+                    }
+                    lastToggleTime = now;
+                    if (window.gAudio) {
+                        var nextStatus = !window.gAudio.musicstatus;
+                        window.gAudio.settingmusic(nextStatus);
                         that.setMusicBtn(nextStatus);
                         xGame.toast.show(nextStatus ? '已开启背景音乐' : '已关闭背景音乐');
                     }
                     return false;
-                });
+                };
+                that.e.find('#music_btn').unbind('click touchend').bind('touchend click', onToggleMusic);
             } else {
                 that.e.find('#music_btn').hide();
             }
@@ -468,19 +472,4 @@
             this.unbindAll();
         },
     };
-
-    // 全局防丢委托：确保无论鼠标、触屏在任何时机点击关闭/开启音乐按钮均百分之百响应并同步静音
-    $(document).undelegate('#music_btn', 'click touchend').delegate('#music_btn', 'click touchend', function(e) {
-        if (e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-        if (window.gAudio) {
-            var nextStatus = !window.gAudio.musicstatus;
-            window.gAudio.settingmusic(nextStatus);
-            var text = nextStatus ? (lang('music_off') || '关闭音乐') : (lang('music_on') || '开启音乐');
-            $('#music_btn').text(text).html(text);
-        }
-        return false;
-    });
 })();

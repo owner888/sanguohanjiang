@@ -187,9 +187,10 @@
             var html = '';
             var avatar = null;
             if (!hero) hero = {};
-            
-            for (var i = 1; i <= 8; i++) {
-                avatar = (hero[i] !== undefined) ? hero[i] : (hero[i - 1] !== undefined ? hero[i - 1] : null);
+            var heroList = $.isArray(hero) ? hero : Object.values(hero);
+
+            for (var i = 0; i < 8; i++) {
+                avatar = heroList[i] || null;
                 if (avatar == null) {
                     html += '<li class="hero_item touch_item"></li>';
                     continue;

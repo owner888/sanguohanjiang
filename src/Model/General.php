@@ -49,10 +49,15 @@ class General extends Model
     public function calculateStats(array $equippedItems = []): array
     {
         $level = max(1, (int)($this->attributes['level'] ?? 1));
-        $baseHp = 1500 + ($level - 1) * 120;
-        $baseAtk = 320 + ($level - 1) * 25;
-        $baseDef = 120 + ($level - 1) * 12;
-        $baseSpeed = 150 + ($level - 1) * 5;
+        $wuli = (int)($this->attributes['wuli'] ?? 85);
+        $zhili = (int)($this->attributes['zhili'] ?? 70);
+        $tili = (int)($this->attributes['tili'] ?? 90);
+
+        // 基础血量与攻防：体力决定气血厚度，武力/智力决定物理/策术攻击力，智力+体力决定防御
+        $baseHp = 800 + $tili * 10 + ($level - 1) * 120;
+        $baseAtk = 160 + max($wuli, $zhili) * 2 + ($level - 1) * 25;
+        $baseDef = 60 + (int)(($zhili + $tili) / 2) + ($level - 1) * 12;
+        $baseSpeed = 100 + (int)($wuli * 0.5) + ($level - 1) * 5;
 
         $addAtk = 0;
         $addDef = 0;

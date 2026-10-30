@@ -101,12 +101,22 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('daily_task', $member);
         $this->assertSame(0, $member['daily_task']['status']);
 
+        // 断言经验与军令契约对齐客户端 player.info 期望
+        $this->assertArrayHasKey('levelupexp', $member);
+        $this->assertArrayHasKey('act_limit', $member);
+        $this->assertGreaterThan(0, $member['levelupexp']);
+        $this->assertGreaterThan(0, $member['act_limit']);
+        $this->assertSame($member['levelupexp'], $member['maxexp']);
+        $this->assertSame($member['act_limit'], $member['maxact']);
+
         $role = $this->request('member', 'select_role', ['sex' => 1, 'name' => '常山赵子龙']);
         $this->assertSame(1, $role['status']);
 
         $updated = $this->request('member', 'index');
         $this->assertSame('常山赵子龙', $updated['nickname']);
         $this->assertSame(1, (int)$updated['gender']);
+        $this->assertSame(80, (int)$updated['levelupexp']);
+        $this->assertSame(60, (int)$updated['act_limit']);
     }
 
     public function testCitySystem(): void
@@ -391,17 +401,30 @@ final class GameApiTest extends TestCase
         $eid = (int)$firstEquip['id'];
         $oldLevel = (int)$firstEquip['level'];
 
+        // 契约断言：必须具备 hammer 与 hammer_quality (防客户端显示 undefined)，未穿戴时不暴露 generalname
+        $this->assertArrayHasKey('hammer', $firstEquip);
+        $this->assertArrayHasKey('hammer_quality', $firstEquip);
+        $this->assertSame(0, $firstEquip['hammer']);
+        $this->assertSame(0, $firstEquip['hammer_quality']);
+        if ((int)$firstEquip['gid'] === 0) {
+            $this->assertArrayNotHasKey('generalname', $firstEquip, '未穿戴装备严禁输出 generalname 键，防客户端多余渲染');
+        }
+
         // 查询单件装备强化预览
         $info = $this->request('strengthen', 'strengthen_info', ['id' => $eid]);
         $this->assertSame(1, $info['status']);
         $this->assertArrayHasKey('cost_silver', $info['info']);
+        $this->assertArrayHasKey('hammer', $info['info']);
 
         // 执行铁匠铺装备强化
         $start = $this->request('strengthen', 'strengthen_start', ['id' => $eid]);
         $this->assertSame(1, $start['status']);
         $this->assertSame($oldLevel + 1, $start['level']);
+        $this->assertSame($oldLevel + 1, $start['newlevel']);
+        $this->assertGreaterThan(0, $start['newpower']);
         $this->assertGreaterThan(0, $start['cost_silver']);
         $this->assertArrayHasKey('silver', $start);
+        $this->assertArrayHasKey('all_silver', $start);
     }
 
     public function testTavernSystem(): void

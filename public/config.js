@@ -16,7 +16,7 @@
 
     window.HJ_CONFIG = {
         // 客户端资源版本戳 (用于打破过时文件缓存)
-        version: '20261029_1',
+        version: '20261030_1',
 
         // HTTP API 业务网关基础路径
         apiUrl: 'index.php',
