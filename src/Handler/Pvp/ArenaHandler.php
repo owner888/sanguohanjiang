@@ -356,23 +356,14 @@ final class ArenaHandler
         if ($touid === 0 || $report === 0 || $member === null) {
             return ['status' => -1];
         }
-        // 判断金币是否足够
-        if ((int)$member['gold'] < self::SHARE_PRICE) {
-            return ['status' => -2];
-        }
         // 取用户信息
         if (self::member($touid) === null) {
             return ['status' => -3];
         }
-        // 扣除金币
-        if (!Member::deductCurrency((int)$member['uid'], gold: self::SHARE_PRICE)) {
-            return ['status' => -2];
-        }
-        // 依赖未移植：chat_model->get_message_str(3, to / id / win) + send_message_to_all(…, 3, report) 聊天室战报广播
-        return [
-            'status' => 1,
-            'all_gold' => (int)$member['gold'] - self::SHARE_PRICE,
-        ];
+        // 依赖未移植：chat_model->get_message_str(3, to / id / win) + send_message_to_all(…, 3, report) 聊天室战报广播。
+        // 旧版在这里先校验元宝(-2)、扣 SHARE_PRICE 再广播；聊天室未移植前广播发不出去，
+        // 开发者要求暂不扣元宝，返回 0（失败），客户端提示「暂时无法分享战报」。聊天室移植后恢复旧版流程。
+        return ['status' => 0];
     }
 
     /**
