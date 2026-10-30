@@ -2,9 +2,10 @@
 
 对比基线：前端 `public/static/js` 中写死的 `c`/`m` 调用（含单行对象、多行对象、`?c=…&m=…` URL、`x.c = …; x.m = …` 赋值四种写法）vs 新版 `src/Handler` 的 `public static` 方法 vs 旧版 CodeIgniter `wwwroot/{s1,uc,battle,war}/application/controllers/` 下全部控制器（含 `newequip/`、`lc/` 等子目录）。完全动态拼接的调用未覆盖。
 
-- 前端调用：665；已实现：330；缺失：335（旧版有 329，旧版也无 6）
+- 前端调用：665；已实现：332；缺失：333（旧版有 327，旧版也无 6）
 - 「旧版位置」为相对旧服务端 `HJServer/wwwroot/` 的路径；「—」表示四个旧服务里都没有对应方法（多为渠道 SDK 登录），需按前端字段反推。
 - 标记 🆕 的控制器在新版中整个 Handler 都不存在。
+- 本节由 `tools/scan_legacy_gap.php` 生成，勿手改；其余章节手工维护。
 
 ## 缺失接口（按控制器，缺口多的在前）
 
@@ -549,13 +550,6 @@
 | `c=countryshop&m=red_item_list` | `s1/application/controllers/countryshop.php:219` | `static/js/view/countrytreasurepop.js:297` |
 | `c=countryshop&m=sale_red_item` | `s1/application/controllers/countryshop.php:293` | `static/js/view/countrytreasurepop.js:481` |
 
-### elite（2）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=elite&m=buy_number` | `s1/application/controllers/elite.php:566` | `static/js/view/elitepop.js:1073`<br>`static/js/view/elitepop.js:1101` |
-| `c=elite&m=sendinvite` | `s1/application/controllers/elite.php:629` | `static/js/view/elitepop.js:1027` |
-
 ### general_book（2）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -815,7 +809,6 @@
 | `c=overseastrade&m=get_trade_log`、`c=overseastrade&m=item_list` | 固定内容 |
 | `c=studfarm&m=index` | 固定内容 |
 | `c=practice&m=get_unlock_price` | 固定内容 |
-| `c=elite&m=get_server` | 固定内容 |
 | `c=user&m=get_info_by_temptoken` | 固定内容 |
 | `c=activationcode&m=index` | 固定文案（兑换走 `get_reward`，激活码表为代码内常量） |
 | `c=city&m=clear_cd` | 不扣元宝、不清 CD 状态 |
@@ -834,6 +827,8 @@
 | `c=lottery&m=action` | 依赖未移植：旧版按 `Lottery` 分组概率抽奖；新版写死转盘的装备格「青钢名剑」在 MasterData 中不存在，抽中不发装备 |
 | `c=arena&m=shop_exchange` | 依赖未移植：旧版扣积分后发放；re_type 6 玉石、9 宝石碎片、14~16 精炼石类、17~25 装备精华、26 坐骑、27 将魂、28 宝石的玩家存储新版没有，这些商品返回 -3 不扣积分（`ArenaExchange` 里有 6 / 9 / 26 / 27 / 28 共 15 件） |
 | `c=arena`（`ArenaHandler`） | 依赖未移植：聊天室战报（`action` 夺得第 1 名广播、`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、信件战报 `pm_report`（信件存 Redis `user_messages`，`info.report` 为其 id）、主线任务 8 / 9、日常任务 10、`edifice` 首次打开记录、神树 `tree`（恒 0）、消费统计 `stat_model`；酒馆获得日志 `add_pub_log` |
+| `c=elite`（`EliteHandler`） | 依赖未移植：聊天室组队邀请广播（`sendinvite` 暂返回 0）、装备碎片 / 天赋卷轴及碎片奖励（类型 2 / 3 / 4 只回报不发放）、主线任务 10、春节送福计数、元宝流水与消费统计；主线进度按新版 `map` 推算（旧版 `open_map` 未移植）。实时组队层见下一行 |
+| 多人副本实时组队（`WebSocketHandler` + `socket.io.min.js` 适配层） | 待按旧版协议重写。旧版实时服务器不在旧版代码包里；客户端 `elitepop.js` 的 `io.connect` 已被适配层换成原生 WebSocket（连 `HJ_CONFIG.wsUrl`，不用 `get_server` 的地址），事件名 / 载荷与新版 `WebSocketHandler` 对不上：`login` 读不到 token（载荷在 `data` 里）且不回 `loginstatus`；没有 `eliteindex`、`changeorder`、`firemember`、`startfight`、`teaminvited`；队伍详情回 `teamdetail` 而客户端听 `getteamdone`；`teamlist` 不带 `id`、奖励字段是写死的；队伍存 Redis `elite_teams:{fid}`，退队 / 解散只按队长 uid 删除；没有人调用 `c=elite&m=action`（旧版由实时服务器在 `startfight` 时以 `fid` / `teamid` / `topteam` / `leader` / `members` 调用并把返回值作为 `enterfight` 推给全队） |
 | `c=copies`（`CopiesHandler`） | 依赖未移植：聊天室战报（`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、装备碎片奖励（类型 2，`CopiesReward` 里没有）、元宝 / 军令 / 声望流水（`gold_log` / `act_log` / `reputation_log`）、日常任务 5、翻牌活动计数 |
 | `c=equip_forge&m=fabrication` | 依赖未移植：旧版打造走 newequip 体系；只有图纸 1 能对上模板（Equip 22 青龙偃月刀），图纸 2、3 不可锻造 |
 | `c=map&m=action` 关卡掉落 | 已按旧版 `Mission` 发 gettype 1（装备）/ 3 / 4；依赖未移植：2 装备碎片、5 / 6 天赋卷轴（及碎片）不发放；`times` 刷图未移植（按单次攻击） |
@@ -847,20 +842,20 @@
 
 ## 战斗
 
-组队（`src/Battle/TeamBuilder.php`：`init_member_team_info` / `init_monster_team_info` / `team_return_arr`）与推演（`src/Battle/BattleEngine.php`：`battle` / `process` / `process_attack` / `process_effect` / `process_position` / `process_hurt` / `_battle_assess`）已按旧版移植。
+组队（`src/Battle/TeamBuilder.php`：`init_member_team_info` / `init_monster_team_info` / `team_return_arr`）与推演（`src/Battle/BattleEngine.php`：`battle` / `process` / `process_attack` / `process_effect` / `process_position` / `process_hurt` / `_battle_assess`）已按旧版移植。团战 `battle_rush`（`src/Battle/BattleRush.php`）只移植了 PVE（type 1 国战怪物 / 2 多人副本），PVP（type 0）与 EVP（type 3）依赖未移植。
 
 | 位置 | 现状 |
 |---|---|
 | 组队加成（`TeamBuilder::forMember`） | 依赖未移植，按 0 计：宝石 `gem_power`、坐骑（主战 100% / 备战 30% 及模板特殊属性）、锻造套装、将魂、主公天赋（91 级）、名将成就（81 级）、美人（60 级）、星魄（80 级）、国家学院（国家 30 级）、名将进阶（100 级）、神树 |
 | 推演加成（`BattleEngine`） | 依赖未移植，旧版对应分支不移植：将魂（暴击率 / 闪避 / 识破 / 暴击伤害 / 抗晕 / 生命）、名将成就 / 美人 / 星魄 / 国家学院（暴击率 / 闪避 / 识破 / 暴击伤害）、锻造套装（`suitbuff` 吸血 / 回气 / 偷气 / 清气 / 反伤，最终增伤 / 免伤、暴击伤害、血量伤害倍增、抗晕）、名将进阶（天赋攻防系数、血量）；`leftbuff` / `rightbuff` 的 `tree`（神树）恒为 0、`mount`（坐骑）恒为 `[]` |
 | 技能 effect 30 / 31、攻击类型 16 | 旧版 `battle_model.php` 没有对应分支，按旧版照搬：655 袖里乾坤（type 16）没有受击位，656 飞花溅玉、668 地狱人间、669 逆命王轮只按 `ratio` 计伤害；技能描述里的偷气 / 眩晕 / 吸血 / 伤害上限等在这份旧版源码中没有实现 |
-| 守军 | 只有 `c=map&m=action` 按旧版取 `Mission` → `Monster`、`c=tower&m=pk` 按旧版取 `SoulMission` → `SoulMonster`、`c=copies&m=pk` 按旧版取 `CopiesInfo`（怪物行的 position1~9 → `CopiesInfo` 的行）。`elite`、`challenge`、`epic`、`pass_general`、`sanctum`、`compete`、`countryboss`、`countrymine`、`heaven`、`herothrone`、`island`、`siege`、`worldboss` 的守军数值是新版自定的（`TeamBuilder::unportedUnit`：类型 / 天赋 / 技能 / 武力 / 智力按 0；旧版 `process_hurt` 对没有天赋的防御方不计防御）；`worldboss` / `countryboss` 的鼓舞系数也是新版自定的；旧版对应怪物表见 `TeamBuilder::MONSTER_*` |
-| 上述玩法的响应 | 新版自定的结构（顶层 `win` / 奖励 / `message`），按 `assess >= 1` 判胜负，不带战报。客户端按旧版控制器读 `res.battle`（`xGame.loadBattle`）与 `res.info.win` 等：`challenge`（`miscpop.js`）、`compete`（`zhulupop.js`）、`countryboss` / `worldboss`（`miscpop.js`）、`countrymine`（`countrymineworld.js`）、`heaven`（`heavenworld.js`）、`herothrone`（`herothroneworld.js`）、`island`（`miscpop.js` 的 `c=island&m=pk`）、`sanctum`（`sanctumworld.js`）、`siege`（`countrybattleworld.js`，另读 `battle.battle_ready`）；`pass_general`（`breakthroughworld.js`）读 `is_succ` / `pass_id` 等非战斗字段；`epic&m=force`（`epicpop.js`）读 `member` / `add`，旧版不是战斗；`elite&m=action` 前端没有调用 |
+| 守军 | 只有 `c=map&m=action` 按旧版取 `Mission` → `Monster`、`c=tower&m=pk` 按旧版取 `SoulMission` → `SoulMonster`、`c=copies&m=pk` 按旧版取 `CopiesInfo`（怪物行的 position1~9 → `CopiesInfo` 的行）、`c=elite&m=action` 按旧版团战取 `EliteMission` → `EliteMonster`。`challenge`、`epic`、`pass_general`、`sanctum`、`compete`、`countryboss`、`countrymine`、`heaven`、`herothrone`、`island`、`siege`、`worldboss` 的守军数值是新版自定的（`TeamBuilder::unportedUnit`：类型 / 天赋 / 技能 / 武力 / 智力按 0；旧版 `process_hurt` 对没有天赋的防御方不计防御）；`worldboss` / `countryboss` 的鼓舞系数也是新版自定的；旧版对应怪物表见 `TeamBuilder::MONSTER_*` |
+| 上述玩法的响应 | 新版自定的结构（顶层 `win` / 奖励 / `message`），按 `assess >= 1` 判胜负，不带战报。客户端按旧版控制器读 `res.battle`（`xGame.loadBattle`）与 `res.info.win` 等：`challenge`（`miscpop.js`）、`compete`（`zhulupop.js`）、`countryboss` / `worldboss`（`miscpop.js`）、`countrymine`（`countrymineworld.js`）、`heaven`（`heavenworld.js`）、`herothrone`（`herothroneworld.js`）、`island`（`miscpop.js` 的 `c=island&m=pk`）、`sanctum`（`sanctumworld.js`）、`siege`（`countrybattleworld.js`，另读 `battle.battle_ready`）；`pass_general`（`breakthroughworld.js`）读 `is_succ` / `pass_id` 等非战斗字段；`epic&m=force`（`epicpop.js`）读 `member` / `add`，旧版不是战斗 |
 | `c=map&m=mission` / `get_mission_list`，`c=map&m=action` 经验 | 据点名称、等级、经验仍取新版自定的 `MapHandler::getEnemyConfig`，与战斗中的旧版 `Mission` 守军不一致；`get_mission_by_id` 的场景 / 关卡开启校验、攻击 CD、强攻元宝未移植 |
 
 ## 数据结构缺口
 
-旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 36 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
+旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 38 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
 
 ### 已建表的缺失字段
 
@@ -870,7 +865,7 @@
 | `general` ← `own_general` | `disable`（`eid1`~`eid4` 不存储，由 `equipment.generalid` + 旧版 `get_item_site` 派生；其余旧字段已补，获得时从模板复制） |
 | `equipment` ← `own_equip` | `glevel`、`disable`、`dateline`（`gid` 即 `generalid`；其余旧字段已补，同一武将同一装配位置由 `uk_general_site` 约束） |
 | `member_field` ← `member_field` | `levyall`、`levystatus`、`exercisetimes`、`imposetimes`、`baijintimes`、`zhizuntimes`、`qiangstatus`、`qiangdateline`、`shopdateline`、`actnumber`、`actdateline`、`vip_reward`、`devicetoken`、`onmine`、`onworkshop`、`oncountrymine`、`ongeneral`、`trends_times`、`newyeardinner`、`free_inherit`、`rebate_dateline`、`rebate_version`、`general_sale`、`advanced_time`、`close_invitation`、`clickreward`、`inherit_dateline`、`stone1_times`~`stone3_times`、`login_day`、`login_dateline`、`levelgift`、`first_recharge_an`、`heaventimes`、`treasure_free`、`macaddr`、`start_time` |
-| `member_activity` ← `member_activity` | 只有将魂星路字段（`towerlevel`、`towerstage`、`towermission`、`freetower`、`towertimes`、`souldate`）；缺 `islandid`、`islandtimes`、`islanddate`、`sacrifice1`~`sacrifice3`、`exercise_gift`、`exercise_level`、`drinktime`、`freebusiness`、`businesstimes`、`towersite`、`treasuremap`、`flopgold`、`flopleap`、`flopact`、`floptimes`、`flopgoldtimes`、`flopacttimes`、`flopleaptimes`、`freemooncake`、`mooncaketimes`、`mapreward`、`task_number`、`elitetimes`、`generaltasktimes`、`elitebuytimes`、`elitebuydateline`、`elitesurplustimes`、`jadetype`、`jadenum`、`jadeturn`、`smashtime`、`vipwage_dateline`、`sanctumdate`、`heavenstage`、`heavenmission`、`heavenlevel`、`heaventimes`、`freeheaven`、`heavendate`（`Member::dailyCron` 只重置 `freetower`） |
+| `member_activity` ← `member_activity` | 只有将魂星路字段（`towerlevel`、`towerstage`、`towermission`、`freetower`、`towertimes`、`souldate`）与多人副本字段（`elitetimes`、`elitebuytimes`、`elitebuydateline`、`elitesurplustimes`）；缺 `islandid`、`islandtimes`、`islanddate`、`sacrifice1`~`sacrifice3`、`exercise_gift`、`exercise_level`、`drinktime`、`freebusiness`、`businesstimes`、`towersite`、`treasuremap`、`flopgold`、`flopleap`、`flopact`、`floptimes`、`flopgoldtimes`、`flopacttimes`、`flopleaptimes`、`freemooncake`、`mooncaketimes`、`mapreward`、`task_number`、`generaltasktimes`、`jadetype`、`jadenum`、`jadeturn`、`smashtime`、`vipwage_dateline`、`sanctumdate`、`heavenstage`、`heavenmission`、`heavenlevel`、`heaventimes`、`freeheaven`、`heavendate`（`Member::dailyCron` 只重置 `freetower`、`elitetimes`） |
 | `general_soul` ← `own_general_soul` | 字段改名 `site1-8` → `slot1-8`（客户端若读 `site*` 需双写） |
 | `practice` ← `own_practice` | 字段改名 `gid` → `generalid` |
 | `map` | 含义不同：旧版是关卡配置表（`name`/`premise`/`reward*`），新版是玩家进度表 |

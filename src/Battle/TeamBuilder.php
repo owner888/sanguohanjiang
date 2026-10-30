@@ -25,7 +25,7 @@ use RuntimeException;
  * 战斗队伍组装（逐段移植旧版 models/battle_model.php，路径相对旧版 s1/application/）
  *
  * - forMember     ← init_member_team_info（本体 + 装备 + 阵法 + 模板天赋/技能部分）、_addition_refine
- * - forMonsters   ← init_monster_team_info，以及 battle_mission 里按天赋血量系数放大怪物血量
+ * - forMonsters   ← init_monster_team_info，以及 battle_mission 里按天赋血量系数放大怪物血量（团战 battle_rush 不放大）
  * - teamReturnArr ← team_return_arr
  * - unportedUnit  ← 守军尚未按旧版移植的玩法：把新版自定的数值装成与 forMonsters 相同字段的旧版怪物单位
  *
@@ -226,13 +226,17 @@ final class TeamBuilder
 
     /**
      * 怪物队伍（移植 battle_model.php:init_monster_team_info，以及 battle_mission 里的
-     * allblood = intval(blood × 天赋血量系数)；旧版所有 PVE 怪物战斗都走 battle_mission）
+     * allblood = intval(blood × 天赋血量系数)；旧版单场 PVE 怪物战斗都走 battle_mission）
+     *
+     * 旧版团战 battle_rush（BattleRush，多人副本 / 国战 PVE）直接调 init_monster_team_info，不乘天赋血量系数：
+     * 传 $missionBlood = false，allblood = blood = 怪物表血量。
      *
      * @param array<string, mixed> $positionArr 含 position1~position9（怪物 id，0 为空）的关卡行
      * @param int $type self::MONSTER_* 之一，决定查哪张怪物表
+     * @param bool $missionBlood 是否按 battle_mission 乘天赋血量系数
      * @return array{status: int, team: array<int, array<string, mixed>>}
      */
-    public static function forMonsters(array $positionArr, int $type = self::MONSTER_MISSION): array
+    public static function forMonsters(array $positionArr, int $type = self::MONSTER_MISSION, bool $missionBlood = true): array
     {
         $rows = match ($type) {
             self::MONSTER_MISSION => Monster::ROWS,
@@ -269,10 +273,12 @@ final class TeamBuilder
             // battle() 里怪物没有 star 字段时按 0
             $value['star'] = 0;
 
-            // battle_mission：allblood = intval(allblood × 天赋血量系数)，满血
-            // 旧版天赋不存在时系数取到 null（按 0 参与乘法），这里同样按 0
-            $value['allblood'] = (int)((int)$value['allblood'] * (float)(Talent::ROWS[(int)$value['talentid']]['blood'] ?? 0));
-            $value['blood'] = $value['allblood'];
+            if ($missionBlood) {
+                // battle_mission：allblood = intval(allblood × 天赋血量系数)，满血
+                // 旧版天赋不存在时系数取到 null（按 0 参与乘法），这里同样按 0
+                $value['allblood'] = (int)((int)$value['allblood'] * (float)(Talent::ROWS[(int)$value['talentid']]['blood'] ?? 0));
+                $value['blood'] = $value['allblood'];
+            }
 
             $team[$i] = $value;
         }

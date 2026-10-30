@@ -3232,25 +3232,459 @@ final class GameApiTest extends TestCase
         });
     }
 
-    public function testEliteSystem(): void
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function eliteRequest(string $method, array $params = []): array
     {
-        $this->withStrongFormation(function (): void {
-            // 1. 获取多人副本 WebSocket 实时服务地址 (c=elite&m=get_server)
-            $srv = $this->request('elite', 'get_server');
-            $this->assertSame(1, $srv['status']);
-            $this->assertNotEmpty($srv['url']);
+        $res = $this->request('elite', $method, $params);
+        unset($res['message'], $res['msg']);
+        return $res;
+    }
 
-            // 2. 查看精英副本
-            $res = $this->request('elite', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertNotEmpty($res['maps']);
+    /**
+     * 旧版直接 json_encode 非数组返回值的接口（join_team / get_country_info）：返回响应体原文
+     *
+     * @param array<string, mixed> $params
+     */
+    private function eliteRawRequest(string $method, array $params): string
+    {
+        $res = self::$router->handleContext(Context::mock(array_merge(['c' => 'elite', 'm' => $method], $params)));
+        $this->assertInstanceOf(WorkermanResponse::class, $res);
+        return (string)$res->rawBody();
+    }
 
-            // 3. 挑战精英大兴山
-            $battle = $this->request('elite', 'action', ['id' => 1]);
-            $this->assertSame(1, $battle['status']);
-            $this->assertSame(1, $battle['win']);
-            $this->assertGreaterThan(0, $battle['silver']);
-        });
+    /**
+     * 主线通关到某关（新版 zc_sanguo_map：该关所在势力 / 场景一行，mission 为已通关据点）
+     */
+    private function eliteMissionProgress(int $uid, int $missionId): void
+    {
+        $m = \Hanjiang\MasterData\Mission::ROWS[$missionId];
+        DB::table('map')->where('uid', $uid)->delete();
+        DB::table('map')->insert(['uid' => $uid, 'level' => $m['missionlevel'], 'stage' => $m['missionstage'], 'mission' => $m['missionid']]);
+    }
+
+    /**
+     * 多人副本玩家：军团 1 已开启（主线打通第 50 关，即军团 1 的最后一关），已建活动记录
+     *
+     * @return array{uid: int, auth: array<string, mixed>}
+     */
+    private function elitePlayer(bool $overpower = true): array
+    {
+        $p = $this->newGuestPlayer();
+        $this->eliteMissionProgress($p['uid'], 50);
+        if ($overpower) {
+            // 主公与武将同为 20000 级：胜负不依赖随机数，且武将等级不超过主公（add_exp 才会加经验）
+            DB::table('member')->where('uid', $p['uid'])->update(['level' => 20000]);
+            DB::table('general')->where('uid', $p['uid'])->update(['level' => 20000, 'goout' => 1]);
+        } else {
+            $this->emptyFormation($p['uid']);
+        }
+        \Hanjiang\Model\MemberActivity::ensure($p['uid']);
+        return $p;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function eliteActivity(int $uid): array
+    {
+        $row = DB::table('member_activity')->select('elitetimes', 'elitesurplustimes', 'elitebuytimes', 'elitebuydateline')->where('uid', $uid)->first();
+        return array_map('intval', $row);
+    }
+
+    public function testEliteIndexListsLegacyCities(): void
+    {
+        $p = $this->newGuestPlayer();
+        $res = $this->eliteRequest('index', $p['auth']);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(['status', 'list'], array_keys($res));
+        $cities = \Hanjiang\MasterData\EliteCity::ROWS;
+        $this->assertCount(count($cities), $res['list']);
+        $equip = \Hanjiang\MasterData\Equip::ROWS;
+
+        // 军团 1：装备碎片（掉率 80 → getrate 2），首杀送整件装备
+        $c1 = $cities[1];
+        $this->assertSame($c1 + [
+            'getrate' => 2,
+            'itemname' => $equip[$c1['get_value']]['name'] . '碎片',
+            'quality' => $equip[$c1['get_value']]['quality'],
+            'firstitemname' => $equip[$c1['first_value']]['name'],
+            'firstquality' => $equip[$c1['first_value']]['quality'],
+        ], $res['list'][0]);
+
+        // 天赋卷轴：卷轴类型名 + 「天赋卷轴」；掉率 100 按旧版落到 else 分支，getrate 1
+        $scroll = \Hanjiang\MasterData\TalentScroll::ROWS[$cities[18]['get_value']];
+        $names = [1 => '物攻', 2 => '物防', 3 => '策攻', 4 => '策防', 5 => '生命'];
+        $c18 = $res['list'][17];
+        $this->assertSame([18, 1, $names[$scroll['type']] . '天赋卷轴', $scroll['quality']], [$c18['id'], $c18['getrate'], $c18['itemname'], $c18['quality']]);
+        $this->assertSame($names[$scroll['type']] . '天赋卷轴', $c18['firstitemname']);
+        // 天赋卷轴碎片
+        $c26 = $res['list'][25];
+        $scroll26 = \Hanjiang\MasterData\TalentScroll::ROWS[$cities[26]['get_value']];
+        $this->assertSame($names[$scroll26['type']] . '天赋卷轴碎片', $c26['itemname']);
+        // 掉率 <= 50 为 getrate 1
+        $this->assertSame([40, 1], [$res['list'][3]['get_rate'], $res['list'][3]['getrate']]);
+    }
+
+    public function testEliteMemberInfoOpenCitiesFirstKillAndTimes(): void
+    {
+        $p = $this->newGuestPlayer();
+        $uid = $p['uid'];
+        $this->assertNull(DB::table('member_activity')->where('uid', $uid)->first());
+
+        // 没有主线进度：全部军团未开启、全部首杀；首次读活动信息按旧版建档（多人副本 10 次、将魂星路 12 次）
+        $res = $this->eliteRequest('get_member_info', $p['auth']);
+        $this->assertSame(['status', 'countryname', 'supper_group', 'number', 'list'], array_keys($res));
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(0, $res['countryname']);
+        $this->assertSame(\Hanjiang\MasterData\ElitePrice::ROWS[1], $res['supper_group']);
+        $this->assertSame(10, $res['number']);
+        $this->assertCount(83, $res['list']);
+        $this->assertSame(['open' => 0, 'firstkill' => 1], $res['list'][1]);
+        $act = DB::table('member_activity')->where('uid', $uid)->first();
+        $this->assertSame([10, 0, 0, 0, 12, 1], [(int)$act['elitetimes'], (int)$act['elitesurplustimes'], (int)$act['elitebuytimes'], (int)$act['elitebuydateline'], (int)$act['freetower'], (int)$act['towerlevel']]);
+
+        // 主线打到第 49 关：军团 1 还有第 50 关没过，不开启
+        $this->eliteMissionProgress($uid, 49);
+        $this->assertSame(0, $this->eliteRequest('get_member_info', $p['auth'])['list'][1]['open']);
+        // 打通第 50 关：军团 1 开启，军团 2 未开启
+        $this->eliteMissionProgress($uid, 50);
+        $res = $this->eliteRequest('get_member_info', $p['auth']);
+        $this->assertSame([1, 0], [$res['list'][1]['open'], $res['list'][2]['open']]);
+
+        // 已首杀的军团 firstkill 0；次数 = 免费 + 购买剩余
+        DB::table('elite_mission_log')->insert(['missionid' => 1, 'uid' => $uid, 'dateline' => time(), 'first_reward' => 1]);
+        DB::table('member_activity')->where('uid', $uid)->update(['elitetimes' => 3, 'elitesurplustimes' => 2]);
+        $res = $this->eliteRequest('get_member_info', $p['auth']);
+        $this->assertSame(['open' => 1, 'firstkill' => 0], $res['list'][1]);
+        $this->assertSame(['open' => 0, 'firstkill' => 1], $res['list'][2]);
+        $this->assertSame(5, $res['number']);
+
+        // 加入国家返回国家名称
+        $name = '精' . substr((string)hrtime(true), -6);
+        $countryId = (int)DB::table('country')->insertGetId(['name' => $name, 'member' => 1, 'uid' => $uid, 'nickname' => 'k']);
+        DB::table('member')->where('uid', $uid)->update(['country' => $countryId]);
+        $this->assertSame($name, $this->eliteRequest('get_member_info', $p['auth'])['countryname']);
+    }
+
+    public function testEliteJoinTeamAndCountryInfoRawOutput(): void
+    {
+        $p = $this->newGuestPlayer();
+        // 没有国家：get_country_info 输出空数组；join_team 只有国家参数缺失时（旧版 null == false）为 1
+        $this->assertSame('[]', $this->eliteRawRequest('get_country_info', $p['auth']));
+        $this->assertSame('0', $this->eliteRawRequest('join_team', $p['auth'] + ['country' => 3]));
+        $this->assertSame('1', $this->eliteRawRequest('join_team', $p['auth']));
+
+        $countryId = (int)DB::table('country')->insertGetId(['name' => '团' . substr((string)hrtime(true), -6), 'member' => 1, 'uid' => $p['uid'], 'nickname' => 'k']);
+        DB::table('member')->where('uid', $p['uid'])->update(['country' => $countryId]);
+        $this->assertSame('1', $this->eliteRawRequest('join_team', $p['auth'] + ['country' => (string)$countryId]));
+        $this->assertSame('0', $this->eliteRawRequest('join_team', $p['auth'] + ['country' => $countryId + 1]));
+        $info = json_decode($this->eliteRawRequest('get_country_info', $p['auth']), true);
+        $this->assertSame($countryId, (int)$info['id']);
+        $this->assertArrayNotHasKey('status', $info);
+    }
+
+    public function testEliteGetServerOpenHours(): void
+    {
+        $at = static fn (string $hm): int => (int)strtotime('2026-10-30 ' . $hm . ':00');
+        foreach (['11:59' => false, '12:00' => true, '14:00' => true, '14:01' => false, '18:59' => false, '19:00' => true, '21:00' => true, '21:01' => false] as $hm => $open) {
+            $this->assertSame($open, \Hanjiang\Handler\Activity\EliteHandler::isOpen($at($hm)), $hm);
+        }
+
+        $p = $this->newGuestPlayer();
+        $now = (int)date('Hi');
+        $res = $this->eliteRequest('get_server', $p['auth']);
+        if (($now >= 1200 && $now <= 1400) || ($now >= 1900 && $now <= 2100)) {
+            $config = require dirname(__DIR__, 2) . '/config/app.php';
+            $this->assertSame(['status' => 1, 'url' => $config['socket_server_url']], $res);
+        } else {
+            $this->assertSame(['status' => -1], $res);
+        }
+    }
+
+    public function testEliteBuyNumber(): void
+    {
+        $p = $this->newGuestPlayer();
+        $uid = $p['uid'];
+        $price = static fn (int $n): int => (int)\Hanjiang\MasterData\Price::ROWS[min(50, $n)]['elite'];
+
+        // 只查价格：首次建档
+        $this->assertSame(['status' => 1, 'price' => $price(1), 'times' => 10], $this->eliteRequest('buy_number', $p['auth'] + ['t' => 0]));
+
+        DB::table('member')->where('uid', $uid)->update(['gold' => 100]);
+        $res = $this->eliteRequest('buy_number', $p['auth'] + ['t' => 1]);
+        $this->assertSame(['status' => 1, 'price' => $price(2), 'times' => 11, 'all_gold' => 100 - $price(1)], $res);
+        $act = $this->eliteActivity($uid);
+        $this->assertSame([10, 1, 1], [$act['elitetimes'], $act['elitesurplustimes'], $act['elitebuytimes']]);
+        $this->assertGreaterThanOrEqual(strtotime('today'), $act['elitebuydateline']);
+        $this->assertSame($price(2), $this->eliteRequest('buy_number', $p['auth'] + ['t' => 0])['price']);
+
+        // 跨天：今日购买次数从 0 算起（不归零字段，按最后购买时间判断）
+        DB::table('member_activity')->where('uid', $uid)->update(['elitebuytimes' => 7, 'elitebuydateline' => strtotime('yesterday')]);
+        $this->assertSame($price(1), $this->eliteRequest('buy_number', $p['auth'] + ['t' => 0])['price']);
+        // 第 50 次起固定按第 50 次
+        DB::table('member_activity')->where('uid', $uid)->update(['elitebuytimes' => 60, 'elitebuydateline' => time()]);
+        $this->assertSame($price(50), $this->eliteRequest('buy_number', $p['auth'] + ['t' => 0])['price']);
+
+        // 元宝不足：-1，带价格与次数，不改次数
+        DB::table('member')->where('uid', $uid)->update(['gold' => $price(50) - 1]);
+        $this->assertSame(['status' => -1, 'price' => $price(50), 'times' => 11], $this->eliteRequest('buy_number', $p['auth'] + ['t' => 1]));
+        $this->assertSame([1, 60], [$this->eliteActivity($uid)['elitesurplustimes'], $this->eliteActivity($uid)['elitebuytimes']]);
+        $this->assertSame($price(50) - 1, (int)DB::table('member')->where('uid', $uid)->value('gold'));
+    }
+
+    public function testEliteSendInvite(): void
+    {
+        $p = $this->newGuestPlayer();
+        // 旧版参数缺失返回 1
+        $this->assertSame(['status' => 1], $this->eliteRequest('sendinvite', $p['auth'] + ['fid' => 1]));
+        $this->assertSame(['status' => -2], $this->eliteRequest('sendinvite', $p['auth'] + ['fid' => 99, 'teamid' => 5]));
+        // 军团未开启
+        $this->assertSame(['status' => -2], $this->eliteRequest('sendinvite', $p['auth'] + ['fid' => 1, 'teamid' => 5]));
+        // 聊天室未移植：广播发不出去，返回 0
+        $this->eliteMissionProgress($p['uid'], 50);
+        $this->assertSame(['status' => 0], $this->eliteRequest('sendinvite', $p['auth'] + ['fid' => 1, 'teamid' => 5, 'countryid' => 0]));
+    }
+
+    public function testEliteActionGuards(): void
+    {
+        $a = $this->elitePlayer();
+        $b = $this->elitePlayer();
+        $members = "{$a['uid']},{$b['uid']}";
+        $base = $a['auth'] + ['fid' => 1, 'teamid' => 3, 'leader' => $a['uid'], 'members' => $members];
+
+        $this->assertSame(['status' => -1, 'info' => []], $this->eliteRequest('action', ['members' => ''] + $base));
+        $this->assertSame(['status' => -1, 'info' => []], $this->eliteRequest('action', ['leader' => 0] + $base));
+        // 自己不能和自己组队
+        $this->assertSame(['status' => 0, 'info' => []], $this->eliteRequest('action', ['members' => "{$a['uid']},{$a['uid']}"] + $base));
+
+        // 次数不足（含没有活动记录的玩家）返回该玩家 uid
+        DB::table('member_activity')->where('uid', $b['uid'])->update(['elitetimes' => 0, 'elitesurplustimes' => 0]);
+        $this->assertSame(['status' => -2, 'info' => [], 'uid' => (string)$b['uid']], $this->eliteRequest('action', $base));
+        $c = $this->newGuestPlayer();
+        $this->assertSame(['status' => -2, 'info' => [], 'uid' => (string)$c['uid']], $this->eliteRequest('action', ['members' => "{$a['uid']},{$c['uid']}"] + $base));
+        DB::table('member_activity')->where('uid', $b['uid'])->update(['elitesurplustimes' => 1]);
+
+        // 任一队员没开启该军团
+        $this->assertSame(['status' => -4, 'info' => []], $this->eliteRequest('action', ['fid' => 2] + $base));
+        $this->eliteMissionProgress($b['uid'], 49);
+        $this->assertSame(['status' => -4, 'info' => []], $this->eliteRequest('action', $base));
+        $this->eliteMissionProgress($b['uid'], 50);
+
+        // 至尊组队：队长 VIP 8 以上、元宝够
+        DB::table('member')->where('uid', $a['uid'])->update(['vip' => 7, 'gold' => 1000]);
+        $this->assertSame(['status' => -7, 'info' => []], $this->eliteRequest('action', ['topteam' => 1] + $base));
+        DB::table('member')->where('uid', $a['uid'])->update(['vip' => 8, 'gold' => \Hanjiang\MasterData\ElitePrice::ROWS[1]['gold'] - 1]);
+        $this->assertSame(['status' => -6, 'info' => []], $this->eliteRequest('action', ['topteam' => 1] + $base));
+
+        // 以上都不扣次数、不记战斗记录
+        $this->assertSame([10, 0], [$this->eliteActivity($a['uid'])['elitetimes'], $this->eliteActivity($b['uid'])['elitetimes']]);
+        $this->assertSame(0, DB::table('elite_log')->where('leader', $a['uid'])->count());
+
+        // 同一队长 10 秒内不能再次开战
+        $this->assertSame(1, $this->eliteRequest('action', $base)['status']);
+        $this->assertSame([9, 0, 0], [$this->eliteActivity($a['uid'])['elitetimes'], $this->eliteActivity($b['uid'])['elitetimes'], $this->eliteActivity($b['uid'])['elitesurplustimes']]);
+        DB::table('member_activity')->where('uid', $b['uid'])->update(['elitetimes' => 1]);
+        $this->assertSame(['status' => -8, 'info' => []], $this->eliteRequest('action', $base));
+        DB::table('elite_log')->where('leader', $a['uid'])->update(['dateline' => time() - 11]);
+        $this->assertSame(1, $this->eliteRequest('action', $base)['status']);
+    }
+
+    public function testEliteActionLoseStructure(): void
+    {
+        // 阵法里没有武将：旧版 init_member_team_info 返回 -2、空队伍上场，每场直接大败（不消耗随机数），结果确定
+        $a = $this->elitePlayer(false);
+        $b = $this->elitePlayer(false);
+        $c = $this->elitePlayer(false);
+        DB::table('member_activity')->where('uid', $c['uid'])->update(['elitetimes' => 0, 'elitesurplustimes' => 2]);
+        $members = "{$a['uid']},{$b['uid']},{$c['uid']}";
+        $res = $this->eliteRequest('action', $a['auth'] + ['fid' => 1, 'teamid' => 9, 'leader' => $a['uid'], 'members' => $members]);
+
+        $this->assertSame(['status', 'info', 'battle'], array_keys($res));
+        $this->assertSame(1, $res['status']);
+        // 战败：每人只有剩余次数（先扣免费次数，没有免费次数扣购买剩余）
+        $this->assertSame([(string)$a['uid'] => ['number' => 9], (string)$b['uid'] => ['number' => 9], (string)$c['uid'] => ['number' => 1], 'win' => 2, 'teamid' => 9], $res['info']);
+        $this->assertSame([9, 0], [$this->eliteActivity($a['uid'])['elitetimes'], $this->eliteActivity($a['uid'])['elitesurplustimes']]);
+        $this->assertSame([0, 1], [$this->eliteActivity($c['uid'])['elitetimes'], $this->eliteActivity($c['uid'])['elitesurplustimes']]);
+
+        $battle = $res['battle'];
+        $this->assertSame(['win', 'battle_ready', 'battle_log', 'kill_rank', 'attack_name', 'defense_name'], array_keys($battle));
+        $this->assertSame(2, $battle['win']);
+        // 守军：军团 1 的关卡按 id 顺序出场（45、46、47 首发，48~50 后备）
+        $missions = array_values(array_filter(\Hanjiang\MasterData\EliteMission::ROWS, static fn (array $m): bool => $m['city'] === 1));
+        $this->assertSame([45, 46, 47, 48, 49, 50], array_column($missions, 'id'));
+        $this->assertSame(array_combine(array_map('strval', array_column($missions, 'id')), array_column($missions, 'name')), $battle['defense_name']);
+        $nick = static fn (int $uid): string => (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $this->assertSame([(string)$a['uid'] => $nick($a['uid']), (string)$b['uid'] => $nick($b['uid']), (string)$c['uid'] => $nick($c['uid'])], $battle['attack_name']);
+
+        $monsters = \Hanjiang\MasterData\EliteMonster::ROWS;
+        $images = static function (array $mission) use ($monsters): array {
+            $matrix = [];
+            for ($i = 1; $i <= 9; $i++) {
+                if ($mission['position' . $i] > 0) {
+                    $matrix[(string)$i] = $monsters[$mission['position' . $i]]['image'];
+                }
+            }
+            return $matrix;
+        };
+        // 团战怪物血量不乘天赋血量系数（旧版 battle_rush 不经 battle_mission）
+        $blood = static function (array $mission) use ($monsters): int {
+            $sum = 0;
+            for ($i = 1; $i <= 9; $i++) {
+                if ($mission['position' . $i] > 0) {
+                    $sum += $monsters[$mission['position' . $i]]['blood'];
+                }
+            }
+            return $sum;
+        };
+        $uids = [1 => $a['uid'], 2 => $b['uid'], 3 => $c['uid']];
+        $ready = [];
+        foreach ($uids as $line => $uid) {
+            $ready[(string)$line] = [
+                'left' => ['matrix' => [], 'allblood' => 0, 'uid' => (string)$uid],
+                'right' => ['matrix' => $images($missions[$line - 1]), 'allblood' => 0, 'uid' => $missions[$line - 1]['id']],
+            ];
+        }
+        $this->assertSame($ready, $battle['battle_ready']);
+
+        // 一轮：三路空队伍各自大败；守方连胜 1 场，后备守军不上场
+        $this->assertCount(1, $battle['battle_log']);
+        $round = [];
+        foreach ($uids as $line => $uid) {
+            $m = $missions[$line - 1];
+            $round[(string)$line] = [
+                'left' => ['matrix' => [], 'uid' => (string)$uid, 'blood' => 0, 'allblood' => 0],
+                'right' => ['matrix' => $images($m), 'uid' => $m['id'], 'blood' => $blood($m), 'allblood' => $blood($m)],
+                'assess' => -3,
+                'process' => ['1' => ['dead_left' => [], 'dead_right' => [], 'hit_left' => 0, 'hit_right' => 0]],
+                'left_win' => 0,
+                'right_win' => 1,
+            ];
+        }
+        $this->assertSame($round, $battle['battle_log'][0]);
+        $this->assertSame(['left' => [], 'right' => ['45' => 1, '46' => 1, '47' => 1]], $battle['kill_rank']);
+
+        // 战斗记录：队员原样、奖励为空、times 按旧版 int 列为 0
+        $log = DB::table('elite_log')->where('leader', $a['uid'])->first();
+        $this->assertSame([1, $members, 0, '[]', 0], [(int)$log['fid'], $log['member'], (int)$log['topteam'], $log['reward'], (int)$log['times']]);
+        $this->assertSame(0, DB::table('elite_mission_log')->where('uid', $a['uid'])->count());
+    }
+
+    public function testEliteActionWinFirstKillAndRepeatRewards(): void
+    {
+        $a = $this->elitePlayer();
+        $b = $this->elitePlayer();
+        $c = $this->elitePlayer();
+        $city = \Hanjiang\MasterData\EliteCity::ROWS[1];
+        $item = \Hanjiang\MasterData\Equip::ROWS[$city['first_value']];
+        $members = "{$a['uid']},{$b['uid']},{$c['uid']}";
+        $params = $a['auth'] + ['fid' => 1, 'teamid' => 4, 'leader' => $a['uid'], 'members' => $members];
+        $exp = static fn (int $uid): int => (int)DB::table('general')->where('uid', $uid)->sum('exp');
+        $expBefore = [$a['uid'] => $exp($a['uid']), $b['uid'] => $exp($b['uid']), $c['uid'] => $exp($c['uid'])];
+
+        // 首杀：首杀经验 + 首杀奖励（军团 1 为整件装备）
+        $res = $this->eliteRequest('action', $params);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1, $res['battle']['win']);
+        $this->assertSame(['win' => 1, 'teamid' => 4], array_slice($res['info'], 3, null, true));
+        // 团战：三路首发各胜 1 场，后备守军（48~50）补位后守方先手，再各胜 1 场；左方连胜榜 2 场
+        $battle = $res['battle'];
+        $this->assertCount(2, $battle['battle_log']);
+        $this->assertSame([45, 46, 47], array_map(static fn (array $r): int => $r['right']['uid'], array_values($battle['battle_log'][0])));
+        $this->assertSame([48, 49, 50], array_map(static fn (array $r): int => $r['right']['uid'], array_values($battle['battle_log'][1])));
+        foreach ($battle['battle_log'] as $n => $round) {
+            foreach ($round as $line => $report) {
+                // 守方先手的一场（第 2 轮）旧版 rush_report 先写 right 再写 left
+                $this->assertSame($n === 0 ? ['left', 'right', 'assess', 'process', 'left_win', 'right_win'] : ['right', 'left', 'assess', 'process', 'left_win', 'right_win'], array_keys($report));
+                $this->assertGreaterThanOrEqual(1, $report['assess']);
+                $this->assertSame([$n + 1, 0], [$report['left_win'], $report['right_win']]);
+                $this->assertSame((string)[1 => $a['uid'], 2 => $b['uid'], 3 => $c['uid']][$line], $report['left']['uid']);
+                $this->assertNotEmpty($report['left']['matrix']);
+                $this->assertLessThanOrEqual(3, count($report['process']), '超过 3 回合合并为 3 个回合');
+            }
+        }
+        $this->assertSame([(string)$a['uid'] => 2, (string)$b['uid'] => 2, (string)$c['uid'] => 2], $battle['kill_rank']['left']);
+        $this->assertSame([], $battle['kill_rank']['right']);
+        foreach ([$a, $b, $c] as $p) {
+            $uid = $p['uid'];
+            $this->assertSame([
+                'exp' => $city['exp'],
+                'first_exp' => $city['first_exp'],
+                'itemid' => 0,
+                'firstkill' => 1,
+                'firstitemtype' => 1,
+                'firstitemid' => $item['id'],
+                'firstquality' => $item['quality'],
+                'firstitemname' => $item['name'],
+                'number' => 9,
+            ], $res['info'][(string)$uid]);
+            $this->assertSame(1, DB::table('equipment')->where('uid', $uid)->where('equipid', $item['id'])->count());
+            $log = DB::table('elite_mission_log')->where('uid', $uid)->first();
+            $this->assertSame([1, 1], [(int)$log['missionid'], (int)$log['first_reward']]);
+            // 每个上阵武将加首杀经验
+            $generals = DB::table('general')->where('uid', $uid)->count();
+            $this->assertSame($expBefore[$uid] + $generals * $city['first_exp'], $exp($uid));
+            $this->assertSame(9, $this->eliteActivity($uid)['elitetimes']);
+        }
+        $log = DB::table('elite_log')->where('leader', $a['uid'])->first();
+        // reward 为奖励 json（旧版 varchar(255) 超长截断）
+        $reward = json_encode([$a['uid'] => array_diff_key($res['info'][(string)$a['uid']], ['number' => 1]), $b['uid'] => array_diff_key($res['info'][(string)$b['uid']], ['number' => 1]), $c['uid'] => array_diff_key($res['info'][(string)$c['uid']], ['number' => 1])]);
+        $this->assertGreaterThan(255, strlen($reward));
+        $this->assertSame(substr($reward, 0, 255), $log['reward']);
+
+        // 再打：普通经验 + 每人按掉率掷点（mt_rand(1, 100) <= get_rate），军团 1 掉装备碎片（依赖未移植，只回报不发放）
+        DB::table('elite_log')->where('leader', $a['uid'])->update(['dateline' => time() - 11]);
+        mt_srand(20261031);
+        $rolls = [mt_rand(1, 100), mt_rand(1, 100), mt_rand(1, 100)];
+        mt_srand(20261031);
+        $expBefore = [$a['uid'] => $exp($a['uid']), $b['uid'] => $exp($b['uid']), $c['uid'] => $exp($c['uid'])];
+        $res = $this->eliteRequest('action', $params);
+        $this->assertSame(1, $res['battle']['win']);
+        foreach ([$a, $b, $c] as $i => $p) {
+            $uid = $p['uid'];
+            $expected = ['exp' => $city['exp'], 'first_exp' => $city['first_exp'], 'itemid' => 0];
+            if ($rolls[$i] <= $city['get_rate']) {
+                $chip = \Hanjiang\MasterData\Equip::ROWS[$city['get_value']];
+                $expected = ['exp' => $city['exp'], 'first_exp' => $city['first_exp'], 'itemid' => $chip['id'], 'itemtype' => 1, 'quality' => $chip['quality'], 'itemname' => $chip['name'] . '碎片'];
+            }
+            $this->assertSame($expected + ['number' => 8], $res['info'][(string)$uid], "roll {$rolls[$i]}");
+            $this->assertSame(1, DB::table('equipment')->where('uid', $uid)->where('equipid', $item['id'])->count(), '碎片不发放');
+            $generals = DB::table('general')->where('uid', $uid)->count();
+            $this->assertSame($expBefore[$uid] + $generals * $city['exp'], $exp($uid));
+        }
+        $this->assertSame(1, DB::table('elite_mission_log')->where('uid', $a['uid'])->count());
+
+        // 至尊组队：队长 300%、队员 200% 经验（PHP 5 json 14 位有效数字），扣队长元宝
+        $top = \Hanjiang\MasterData\ElitePrice::ROWS[1];
+        DB::table('member')->where('uid', $a['uid'])->update(['vip' => 8, 'gold' => 100]);
+        DB::table('elite_log')->where('leader', $a['uid'])->update(['dateline' => time() - 11]);
+        $res = $this->eliteRequest('action', ['topteam' => 1] + $params);
+        $this->assertSame(1, $res['battle']['win']);
+        $this->assertSame([$city['exp'] * 3, $city['first_exp'] * 3], [$res['info'][(string)$a['uid']]['exp'], $res['info'][(string)$a['uid']]['first_exp']]);
+        $this->assertSame([$city['exp'] * 2, $city['first_exp'] * 2], [$res['info'][(string)$b['uid']]['exp'], $res['info'][(string)$b['uid']]['first_exp']]);
+        $this->assertSame(100 - $top['gold'], (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
+        $this->assertSame(1, (int)DB::table('elite_log')->where('leader', $a['uid'])->where('topteam', 1)->count());
+    }
+
+    public function testEliteDailyCronResetsTimes(): void
+    {
+        $p = $this->elitePlayer();
+        $uid = $p['uid'];
+        DB::table('member_activity')->where('uid', $uid)->update(['elitetimes' => 0, 'elitesurplustimes' => 3, 'freetower' => 0]);
+        DB::table('member_field')->where('uid', $uid)->update(['dateline' => strtotime('yesterday')]);
+        Redis::del("daily_cron:{$uid}");
+
+        // 旧版 daily_cron：elitetimes 重置为 10，购买的剩余次数保留
+        $this->assertSame(13, $this->eliteRequest('get_member_info', $p['auth'])['number']);
+        $this->assertSame([10, 3], [$this->eliteActivity($uid)['elitetimes'], $this->eliteActivity($uid)['elitesurplustimes']]);
+        $this->assertSame(10, (int)DB::table('member_activity')->where('uid', $uid)->value('freetower'));
+
+        // 新版自定的接口与 Redis 次数已删除
+        foreach (['getTowerProgress', 'ELITE_MAPS'] as $name) {
+            $this->assertFalse(defined(\Hanjiang\Handler\Activity\EliteHandler::class . '::' . $name) || method_exists(\Hanjiang\Handler\Activity\EliteHandler::class, $name), $name);
+        }
+        $this->assertNull(Redis::get('elite_times:' . $uid));
     }
 
     public function testMusterSystem(): void

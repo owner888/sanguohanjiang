@@ -45,6 +45,7 @@
 ├── src/
 │   ├── Battle/              # 九宫格战斗引擎（移植旧版 battle_model，随机数可注入）
 │   │   ├── BattleEngine.php # 移植旧版 battle() / process / process_effect / process_hurt，输出旧版战报结构
+│   │   ├── BattleRush.php   # 移植旧版三路团战 battle_rush（只含 PVE：国战怪物 / 多人副本）
 │   │   ├── Position.php     # 九宫格战位 (1-9号位) 枚举
 │   │   ├── LegacyStats.php  # 旧版武将/装备数值公式（纯函数，逐条注明旧版出处）
 │   │   └── TeamBuilder.php  # 旧版组队（玩家 / 怪物队伍、team_return_arr）
@@ -66,7 +67,8 @@
 │       ├── Router.php       # 流水线驱动器及静态文件服务器
 │       └── Response.php     # 统一协议响应助手
 ├── tools/
-│   └── gen_master_data.php  # 从旧版 mysqldump 重新生成 src/MasterData
+│   ├── gen_master_data.php  # 从旧版 mysqldump 重新生成 src/MasterData
+│   └── scan_legacy_gap.php  # 刷新 docs/LEGACY_GAP.md 中脚本生成的部分
 ├── server.php               # Workerman 服务启动脚本
 ├── composer.json            # Composer 依赖与 PSR-4 自动加载
 ├── README.md                # 英文说明文档
@@ -101,7 +103,7 @@
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
-   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。`20261031_matrix_legacy.sql` 把每个玩家一行的 `matrix` 表转成旧版每个阵法一行，按原阵法行写入 `member_field.matrixid`，按原 `pos` / 阵法站位重建 `general.goout`，然后删除 `general.pos` / `general.matrix_id`。`20261031_arena_legacy.sql` 假定演武榜只有测试数据：重建演武榜相关表（不保留旧排名）、新增积分表，并把所有玩家 `member_field.rank` 归 0，玩家下次打开演武榜时按旧版重新入榜。`20261031_tower_legacy.sql` 假定将魂星路（tower）进度只有测试数据（原先只存 Redis `tower_progress:{uid}`）：新建旧版星路表（`member_activity`、`soul_open_map`、`soul_log`、`soul_report`）并给 `member_field` 加 `soultimes`；旧进度不转换，所有玩家从第 1 关重新开始。`20261031_copies_legacy.sql` 假定平乱副本（copies）只有测试数据（原先只有 Redis 里的今日次数 `copies_times:{uid}`）：（重新）创建旧版副本表（`copies_beat`、`copies_beat_log`、`copies_report`）与锻造材料表（`own_materials`、`own_materials_log`）；不转换任何数据，玩家首次打开某个副本时按旧版建档。
+   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。`20261031_matrix_legacy.sql` 把每个玩家一行的 `matrix` 表转成旧版每个阵法一行，按原阵法行写入 `member_field.matrixid`，按原 `pos` / 阵法站位重建 `general.goout`，然后删除 `general.pos` / `general.matrix_id`。`20261031_arena_legacy.sql` 假定演武榜只有测试数据：重建演武榜相关表（不保留旧排名）、新增积分表，并把所有玩家 `member_field.rank` 归 0，玩家下次打开演武榜时按旧版重新入榜。`20261031_tower_legacy.sql` 假定将魂星路（tower）进度只有测试数据（原先只存 Redis `tower_progress:{uid}`）：新建旧版星路表（`member_activity`、`soul_open_map`、`soul_log`、`soul_report`）并给 `member_field` 加 `soultimes`；旧进度不转换，所有玩家从第 1 关重新开始。`20261031_copies_legacy.sql` 假定平乱副本（copies）只有测试数据（原先只有 Redis 里的今日次数 `copies_times:{uid}`）：（重新）创建旧版副本表（`copies_beat`、`copies_beat_log`、`copies_report`）与锻造材料表（`own_materials`、`own_materials_log`）；不转换任何数据，玩家首次打开某个副本时按旧版建档。`20261031_elite_legacy.sql` 假定多人副本（elite）只有测试数据（原先只有 Redis 里的今日次数 `elite_times:{uid}`）：（重新）创建 `elite_log` / `elite_mission_log`，并给 `member_activity` 加 `elite*` 字段；不转换任何数据，已有活动记录的玩家多人副本次数为 0，到下次每日重置才恢复（文件末尾的可选 `UPDATE` 可立即给 10 次）。
 
 4. 启动服务：
    ```bash
@@ -199,7 +201,7 @@
 - `c=sacredtree&m=index|watering`：聚宝通天摇钱神树、灵泉灌溉浇水成长与金叶玉果元宝银饷掉落收割
 - `c=flop&m=index|turnover`：九宫翻牌夺宝、金边卡牌翻转揭秘与至尊元宝大奖
 - `c=challenge&m=index|action`：英雄试炼擂台巅峰单挑、挑战守擂名将（马超/赵云/关羽）夺取擂主荣耀
-- `c=elite&m=index|action|get_server`：多人精英副本战役（精英大兴山/宛城/虎牢关）、原生 WebSocket 组队通信与战利品结算
+- `c=elite&m=index|get_member_info|join_team|get_country_info|get_server|action|buy_number|sendinvite`：多人副本 / 团队副本（按旧版移植）：`EliteCity` 的 83 个军团（主线打通该军团最后一关后开启），守军取 `EliteMission` → `EliteMonster`，按旧版三路团战（`BattleRush`，即旧版 `battle_rush`）结算，首杀 / 再打的经验与道具奖励，VIP 8 元宝「至尊组队」加成，每日 10 次挑战与元宝购买次数（`Price.elite`），12:00–14:00、19:00–21:00 开放。旧版 `index` / `get_member_info` / `join_team` / `get_country_info` / `action` 由独立的实时组队服务器调用，该服务器不在旧版代码包里；现有 WebSocket 组队处理还不符合它的协议（见 `docs/LEGACY_GAP.md`）
 - `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`：点将台；`index` / `get_general_info` / `go_battle` / `go_rest` 按旧版 `muster.php` 移植（出征名单 `general.goout`，最多 8 人；休息时从所有阵法撤下、`confrim` 确认后终止训练、卸下全部装备与坐骑、至少保留一名出征将领）；`sale_general` 仍是新版自定的遣散
 - `c=business&m=index|go_business|buy|refresh`：四海通商行商经商（洛阳/成都/建业/襄阳）、商市行情采购与暴利返航折现
 - `c=gambling&m=index|buy|cut|sell`：金银宝盆博彩、原石抛光雕琢与聚宝盆估价翻倍典当
@@ -275,6 +277,7 @@
 - [x] 前端网络层指数退避断线重连（Exponential Backoff with Jitter）与服务端超时僵尸连接自动回收扫描（`sweep`）
 - [x] 将魂星路 (`tower`) 按旧版移植：旧版关卡与守军、战报、首杀、扫荡、购买次数与每日原魂奖励
 - [x] 平乱副本 (`copies`) 按旧版移植：旧版怪物、战报、首杀与掉落奖励、锻造材料存储（`own_materials`）、扫荡与购买次数
+- [x] 多人副本 (`elite`) PHP 部分按旧版移植：军团、旧版团战（`battle_rush`）对 `EliteMonster`、首杀与掉落奖励、至尊组队、购买次数与每日重置（实时组队协议待补）
 - [x] 过关斩将斩杀六大名将 (`pass_general`)、主线任务动态里程碑 (`mainquest`)
 - [x] 原版经典深度养成与宏观格局重现：玩家自建国家（军团）系统 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
 - [x] 全面打通前端全量高频日常交互系统：每日签到福利 (`dailysign`)、VIP 特权俸禄与晋级礼包 (`vip`)、系统信箱与飞鸽传书 (`message`)、好友社交系统 (`friend`)、银矿占领挂机采矿 (`mine`)
@@ -285,7 +288,7 @@
 - [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)
 - [x] 战神殿与朝堂宏图系统打通：四象圣域神尊决战 (`sanctum`)、跨服群雄论剑 (`compete`)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)
 - [x] 休闲社交与交互狂欢系统全面贯通：群英夜宴大摆豪门宴席 (`banquet`)、青梅煮酒论英雄 (`drink`)、逍遥神骰行大运 (`dice`)、聚宝摇钱神树浇水摇金 (`sacredtree`)
-- [x] 巅峰试炼与点将全线闭环：九宫金边翻牌夺宝 (`flop`)、英雄试炼擂台决战 (`challenge`)、精英高难副本战役 (`elite`)、点将台退役遣散 (`muster`)
+- [x] 巅峰试炼与点将全线闭环：九宫金边翻牌夺宝 (`flop`)、英雄试炼擂台决战 (`challenge`)、点将台退役遣散 (`muster`)
 - [x] 商业经贸与天赋神力体系贯通：四海通商行商经商 (`business`)、金银宝盆博彩 (`gambling`)、每日军务悬赏令 (`task`)、武将天赋神力树 (`talent`)
 - [x] 终极养成进阶体系全线贯通：神将品质飞升 (`advanced`)、装备精炼词条 (`refine`)、武将七星突破 (`star`)、国家战争学院科技 (`war_college`)
 - [x] 英雄图谱与战役平乱全线就绪：幸运大转盘 (`lottery`)、武将远征试炼 (`generaltask`)、名将谱羁绊点亮 (`general_book`)

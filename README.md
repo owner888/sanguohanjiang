@@ -45,6 +45,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 ├── src/
 │   ├── Battle/              # 9-grid combat engine (legacy battle_model port, injectable RNG)
 │   │   ├── BattleEngine.php # Legacy battle() / process / process_effect / process_hurt port; outputs the legacy battle report
+│   │   ├── BattleRush.php   # Legacy 3-lane team battle battle_rush (PVE only: country war monsters / elite campaigns)
 │   │   ├── Position.php     # 9-grid tactical positions (1-9) enum
 │   │   ├── LegacyStats.php  # Legacy general/equipment formulas (pure functions, each cites its legacy source)
 │   │   └── TeamBuilder.php  # Legacy team building (player / monster teams, team_return_arr)
@@ -66,7 +67,8 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │       ├── Router.php       # Pipeline runner & static asset server
 │       └── Response.php     # Protocol response helper
 ├── tools/
-│   └── gen_master_data.php  # Regenerates src/MasterData from the legacy mysqldump
+│   ├── gen_master_data.php  # Regenerates src/MasterData from the legacy mysqldump
+│   └── scan_legacy_gap.php  # Refreshes the generated part of docs/LEGACY_GAP.md
 ├── server.php               # Workerman service entrypoint
 ├── composer.json            # Dependencies & PSR-4 autoloading
 ├── README.md                # English documentation
@@ -101,7 +103,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
-   Upgrading an existing database instead: apply the files in `database/migrations/` that are newer than your schema, in filename order (each file header says what it does). `20261031_general_equip_legacy_cols.sql` assumes general/equipment rows are test data: it truncates both tables and re-issues every player the legacy starting general. `20261031_matrix_legacy.sql` converts the one-row-per-player `matrix` table to legacy per-formation rows, fills `member_field.matrixid` from the old row, rebuilds `general.goout` from the old `pos` / formation slots, then drops `general.pos` / `general.matrix_id`. `20261031_arena_legacy.sql` assumes arena data is test-only: it rebuilds the arena tables (old ranks are not kept), adds the points table, and resets every player's `member_field.rank` to 0; players re-enter the ladder the legacy way the next time they open the arena. `20261031_tower_legacy.sql` assumes Soul Star Road (tower) progress is test-only (it lived only in Redis `tower_progress:{uid}`): it creates the legacy tower tables (`member_activity`, `soul_open_map`, `soul_log`, `soul_report`) and adds `member_field.soultimes`; old progress is not converted and every player starts from mission 1. `20261031_copies_legacy.sql` assumes pacification copies (copies) state is test-only (only a daily attempt counter in Redis `copies_times:{uid}`): it (re)creates the legacy copies tables (`copies_beat`, `copies_beat_log`, `copies_report`) and the forge material tables (`own_materials`, `own_materials_log`); nothing is converted and each player gets fresh legacy rows the first time they open a copy.
+   Upgrading an existing database instead: apply the files in `database/migrations/` that are newer than your schema, in filename order (each file header says what it does). `20261031_general_equip_legacy_cols.sql` assumes general/equipment rows are test data: it truncates both tables and re-issues every player the legacy starting general. `20261031_matrix_legacy.sql` converts the one-row-per-player `matrix` table to legacy per-formation rows, fills `member_field.matrixid` from the old row, rebuilds `general.goout` from the old `pos` / formation slots, then drops `general.pos` / `general.matrix_id`. `20261031_arena_legacy.sql` assumes arena data is test-only: it rebuilds the arena tables (old ranks are not kept), adds the points table, and resets every player's `member_field.rank` to 0; players re-enter the ladder the legacy way the next time they open the arena. `20261031_tower_legacy.sql` assumes Soul Star Road (tower) progress is test-only (it lived only in Redis `tower_progress:{uid}`): it creates the legacy tower tables (`member_activity`, `soul_open_map`, `soul_log`, `soul_report`) and adds `member_field.soultimes`; old progress is not converted and every player starts from mission 1. `20261031_copies_legacy.sql` assumes pacification copies (copies) state is test-only (only a daily attempt counter in Redis `copies_times:{uid}`): it (re)creates the legacy copies tables (`copies_beat`, `copies_beat_log`, `copies_report`) and the forge material tables (`own_materials`, `own_materials_log`); nothing is converted and each player gets fresh legacy rows the first time they open a copy. `20261031_elite_legacy.sql` assumes elite campaign state is test-only (only a daily attempt counter in Redis `elite_times:{uid}`): it (re)creates `elite_log` / `elite_mission_log` and adds the `elite*` columns to `member_activity`; nothing is converted, existing activity rows start with 0 elite attempts until the next daily reset (an optional `UPDATE` at the end of the file grants 10 right away).
 
 4. Start server:
    ```bash
@@ -199,7 +201,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=sacredtree&m=index|watering`: Money-growing sacred tree cultivation, canopy watering, and gold/silver harvests
 - `c=flop&m=index|turnover`: Nine-grid card flips, card turnovers, and golden jackpot awards
 - `c=challenge&m=index|action`: Hero trial arenas, master duels (Ma Chao, Zhao Yun, Guan Yu), and arena honors
-- `c=elite&m=index|action|get_server`: Multi-hero elite campaigns, native WebSocket real-time teaming, and battle spoils
+- `c=elite&m=index|get_member_info|join_team|get_country_info|get_server|action|buy_number|sendinvite`: Elite team campaigns (legacy port): 83 legions from `EliteCity` (open once the player has cleared the legion's last main-campaign mission), defenders from `EliteMission` → `EliteMonster` fought as a legacy 3-lane team battle (`BattleRush`, legacy `battle_rush`), first-kill / repeat experience and item rewards, VIP 8 "supreme team" bonus for gold, 10 daily attempts plus gold-bought extras (`Price.elite`), open 12:00–14:00 and 19:00–21:00. In the legacy game `index` / `get_member_info` / `join_team` / `get_country_info` / `action` are called by a separate real-time team server that is not in the legacy package; the current WebSocket team handlers do not speak its protocol yet (see `docs/LEGACY_GAP.md`)
 - `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`: Muster platform; `index` / `get_general_info` / `go_battle` / `go_rest` ported from the legacy `muster.php` (dispatch roster `general.goout`, at most 8 heroes; resting removes the hero from every formation, stops training on `confrim`, unequips all items and mounts, keeps at least one hero dispatched); `sale_general` is still the new-version severance
 - `c=business&m=index|go_business|buy|refresh`: Four Seas commerce, merchant fleet caravans (Luoyang, Chengdu, Jianye), and trade profits
 - `c=gambling&m=index|buy|cut|sell`: Treasure bowl gambling, rough stone cuts, and pawnshop silver liquidations
@@ -275,6 +277,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Client network layer with exponential backoff auto-reconnect, jitter, and zombie connection sweeping (`sweep`)
 - [x] Soul Star Road (`tower`) ported from legacy: legacy missions and defenders, battle reports, first kills, sweeps, attempt purchases and the daily soul reward
 - [x] Pacification copies (`copies`) ported from legacy: legacy monsters, battle reports, first-kill and drop rewards, forge material storage (`own_materials`), sweeps and attempt purchases
+- [x] Elite team campaigns (`elite`) PHP side ported from legacy: legions, legacy team battle (`battle_rush`) against `EliteMonster`, first-kill and drop rewards, supreme teams, attempt purchases and the daily reset (the real-time team protocol is still pending)
 - [x] Six-Stage Pass General campaign (`pass_general`) and dynamic storyline quests (`mainquest`)
 - [x] Player-founded nation (guild) system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
@@ -285,7 +288,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] High-tier diversion mechanics: Bole stud farm (`studfarm`), rough jade gambling (`jadegamble`), tomb raiding maps (`treasuremap`), and weaponry workshop (`workshop`)
 - [x] Four Divine Beast Sanctums (`sanctum`), cross-server martial tournaments (`compete`), national altar sacrifices (`countrysacrifice`), and imperial court expostulations (`expostulation`)
 - [x] Leisure & social festivity systems: Heroic banquets (`banquet`), plum wine deliberations (`drink`), celestial dice shaking (`dice`), and money sacred tree (`sacredtree`)
-- [x] High-tier martial arenas & recruitment outlets: Card turnover prizes (`flop`), hero challenge arenas (`challenge`), elite campaigns (`elite`), and muster severance management (`muster`)
+- [x] High-tier martial arenas & recruitment outlets: Card turnover prizes (`flop`), hero challenge arenas (`challenge`), and muster severance management (`muster`)
 - [x] Merchant economy & talent mastery: Four Seas commerce (`business`), treasure bowl gambling (`gambling`), daily military bounties (`task`), and talent tree awakenings (`talent`)
 - [x] Pinnacle tier ascensions: Quality ascension (`advanced`), gear affix refinement (`refine`), seven-star breakthrough (`star`), and War College technologies (`war_college`)
 - [x] Chronicles & campaign expeditions: Fortune lottery (`lottery`), warlord expeditions (`generaltask`), and heroes chronicle bonds (`general_book`)

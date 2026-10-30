@@ -101,10 +101,10 @@ class Member extends Model
         // 依赖未移植：member_field 每日计数归零（leaptimes / baijintimes / zhizuntimes /
         // stone1~3_times / treasure_free，新版 member_field 尚无这些字段）
 
-        // update_activity_info：将魂星路免费次数重置为 10（没有记录时不插入，同旧版）
-        DB::table('member_activity')->where('uid', $uid)->whereNull('deleted_at')->update(['freetower' => 10]);
+        // update_activity_info：将魂星路免费次数重置为 10、多人副本次数重置为 10（没有记录时不插入，同旧版）
+        MemberActivity::update($uid, ['freetower' => 10, 'elitetimes' => 10]);
         // 依赖未移植：update_activity_info 的其余字段（islandtimes / sacrifice1~3 / freebusiness /
-        // freemooncake / task_number / flop* / elitetimes / generaltasktimes / freeheaven，新版 member_activity 尚无这些字段）
+        // freemooncake / task_number / flop* / generaltasktimes / freeheaven，新版 member_activity 尚无这些字段）
         // 依赖未移植：lottery_model->update_day、logined_model->update_day 连续登录计数
         // 依赖未移植：member.dateline / version / appversion、insert_member_log 每日日志
 

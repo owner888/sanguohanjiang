@@ -15,6 +15,7 @@ use Hanjiang\MasterData\SoulReward;
 use Hanjiang\MasterData\SoulScene;
 use Hanjiang\MasterData\SoulType;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberActivity;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -55,16 +56,6 @@ final class TowerHandler
 
     /** 旧版 zc_sanguo_member_activity 中本玩法读写的字段 */
     private const array ACTIVITY_COLUMNS = ['uid', 'towerlevel', 'towerstage', 'towermission', 'freetower', 'towertimes', 'souldate'];
-
-    /** member_model->get_activity_info 首次插入的值（本玩法字段） */
-    private const array ACTIVITY_DEFAULT = [
-        'towerlevel' => 1,
-        'towerstage' => 0,
-        'towermission' => 0,
-        'freetower' => 12,
-        'towertimes' => 0,
-        'souldate' => 0,
-    ];
 
     /** 旧版 zc_sanguo_soul_log 的字段 */
     private const array LOG_COLUMNS = ['id', 'uid', 'nickname', 'missionlevel', 'missionstage', 'missionid', 'dateline', 'level', 'disable', 'tree', 'first_reward'];
@@ -1520,11 +1511,7 @@ final class TowerHandler
     {
         $row = self::activityRow($uid);
         if ($row === null) {
-            DB::execute(
-                'INSERT IGNORE INTO `zc_sanguo_member_activity` (`uid`, `towerlevel`, `towerstage`, `towermission`, `freetower`, `towertimes`, `souldate`)
-                 VALUES (:uid, :towerlevel, :towerstage, :towermission, :freetower, :towertimes, :souldate)',
-                ['uid' => $uid] + self::ACTIVITY_DEFAULT
-            );
+            MemberActivity::ensure($uid);
             $row = self::activityRow($uid);
         }
         return $row;

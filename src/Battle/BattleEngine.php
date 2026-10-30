@@ -23,6 +23,9 @@ use Random\Randomizer;
  * - buffReturn / buffQuality ← buff_return() / buff_quality()
  *
  * 一个实例只推演一场（旧版模型实例同样在一次请求里只打一场），不跨请求共享。
+ * 例外：团战 BattleRush（battle_rush）在一次请求里用同一个旧版模型实例连打多场，各场之间保留旧版不重置的实例状态
+ * （_left_all_blood / _right_all_blood 累加、天神守护 / 降低识破 / 伤害加成等），并在每场前按旧版 resume_matrix 改阵法，
+ * 所以 BattleRush 复用同一个实例并调用 setMatrix。
  *
  * 随机数：旧版用 mt_rand / rand / array_rand（PHP 7.1+ 三者同为 MT19937）。这里统一走注入的 Randomizer：
  * 默认 new Randomizer(new Mt19937())（随机种子），getInt / pickArrayKeys 与 mt_rand / array_rand 在同种子下逐个相同；
@@ -105,6 +108,16 @@ final class BattleEngine
             'right' => ['type' => $rightMatrixType, 'coe' => $rightMatrixCoe],
         ];
         $this->rng = $rng ?? new Randomizer(new Mt19937());
+    }
+
+    /**
+     * 改某一侧的阵法（旧版直接改 _left_matrix_type / _left_matrix_coe 等实例属性：init_member_team_info、resume_matrix）
+     *
+     * @param 'left'|'right' $side
+     */
+    public function setMatrix(string $side, int $type, float $coe): void
+    {
+        $this->matrix[$side] = ['type' => $type, 'coe' => $coe];
     }
 
     /**

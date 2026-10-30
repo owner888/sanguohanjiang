@@ -2557,9 +2557,11 @@ final class CountryHandler
     }
 
     /**
+     * 国家信息（country_model->get_country_info 按 id），查不到返回 null
+     *
      * @return array<string, mixed>|null
      */
-    private static function countryInfo(int $id): ?array
+    public static function countryInfo(int $id): ?array
     {
         $row = DB::table('country')->where('id', $id)->whereNull('deleted_at')->first();
         return $row === null ? null : self::strip($row);
@@ -3049,11 +3051,11 @@ final class CountryHandler
     }
 
     /**
-     * 武将加经验（general_model->add_exp）
+     * 武将加经验（general_model->add_exp；$heroLevel 为将领所属玩家的主公等级）
      *
      * @return array{status: int, info: array<string, int>}
      */
-    private static function addGeneralExp(int $uid, int $heroLevel, int $gid, int $addexp): array
+    public static function addGeneralExp(int $uid, int $heroLevel, int $gid, int $addexp): array
     {
         /**
          * -2 获取将领信息失败

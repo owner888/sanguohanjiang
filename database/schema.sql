@@ -596,7 +596,7 @@ CREATE TABLE `zc_sanguo_first_recharge_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='首充返利领取奖励日志表';
 
 -- -------------------------------------------------------------
--- 将魂星路 (对齐原版 zc_sanguo_member_activity 的星路字段 / soul_open_map / soul_log / soul_report)
+-- 将魂星路 (对齐原版 zc_sanguo_member_activity 的星路 / 多人副本字段 / soul_open_map / soul_log / soul_report)
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `zc_sanguo_member_activity`;
 CREATE TABLE `zc_sanguo_member_activity` (
@@ -607,6 +607,10 @@ CREATE TABLE `zc_sanguo_member_activity` (
     `freetower` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '免费爬塔次数',
     `towertimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '购买的爬塔次数',
     `souldate` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '星路奖励领取时间',
+    `elitetimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '多人副本挑战次数',
+    `elitebuytimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '多人副本今日购买次数',
+    `elitebuydateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '多人副本最后购买次数时间',
+    `elitesurplustimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '多人副本购买剩余次数',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL
@@ -659,6 +663,38 @@ CREATE TABLE `zc_sanguo_soul_report` (
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='将魂星路战报表';
+
+-- -------------------------------------------------------------
+-- 多人副本 (对齐原版 zc_sanguo_member_activity 的 elite* 字段 / elite_log / elite_mission_log)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_elite_log`;
+CREATE TABLE `zc_sanguo_elite_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id',
+    `leader` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '队长uid',
+    `member` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '队伍成员',
+    `fid` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '副本id',
+    `topteam` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否至尊组队，1是，0否',
+    `reward` VARCHAR(255) NOT NULL DEFAULT '' COMMENT '用户获得奖励',
+    `times` INT NOT NULL DEFAULT 0 COMMENT '当前剩余次数',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '战斗时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_leader_dateline` (`leader`, `dateline`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='多人副本战斗记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_elite_mission_log`;
+CREATE TABLE `zc_sanguo_elite_mission_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `missionid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '军团id',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户uid',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通过时间',
+    `first_reward` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '首杀标识',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid_mission` (`uid`, `missionid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='副本关卡通过记录表';
 
 -- -------------------------------------------------------------
 -- 新副本 / 锻造材料 (对齐原版 zc_sanguo_copies_beat / copies_beat_log / copies_report / own_materials / own_materials_log)
