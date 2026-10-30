@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\Campaign;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\ArenaHandler;
+use Hanjiang\Handler\Pvp\CompeteHandler;
 use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\Map as MapTemplate;
 use Hanjiang\MasterData\Mission as MissionTemplate;
@@ -544,9 +545,10 @@ final class MapHandler
                     'missionid' => $nextMissionId,
                 ]);
 
-                // 旧版 member_model 升级：升到 26 级时进入演武榜（arena_model->get_info_by_id）
+                // 旧版 member_model 升级：升到 26 级时进入演武榜（arena_model->get_info_by_id）与群雄逐鹿（compete_model->get_info_by_id）
                 if ($curLevel > (int)$member['level'] && $curLevel === ArenaHandler::OPEN_LEVEL) {
                     ArenaHandler::getInfoById(['level' => $curLevel] + $member, time());
+                    CompeteHandler::getInfoById(['level' => $curLevel] + $member, time());
                 }
 
                 // 记录关卡进度到 zc_sanguo_map 表

@@ -16,8 +16,8 @@ use RuntimeException;
  * - saveMatrix / resumeMatrix ← save_matrix() / resume_matrix()
  * - rushTeamReturn     ← rush_team_return()；rushReport ← rush_report()
  *
- * 只移植 PVE 两种（$type 1 国战 PVE 怪物 country_monster、$type 2 多人副本怪物 elite_monster，右侧为怪物）；
- * 依赖未移植：$type 0（PVP，右侧为玩家、双方阵法）/ $type 3（EVP，左侧为怪物），调用时抛异常。
+ * $type：0 PVP（双方都是玩家，国战玩家对玩家）；1 国战 PVE（右侧为 country_monster 怪物）；2 多人副本（右侧为
+ * elite_monster 怪物）；3 EVP（国战怪物攻城：左侧为 country_monster 怪物、右侧为玩家）。
  *
  * 旧版整场团战共用一个 battle_model 实例：阵法（_left_matrix_* / _right_matrix_*）是实例属性，
  * init_member_team_info 写左侧、resume_matrix 按场改写，没被改写的一侧沿用上一场的值；单场 battle() 也不重置
@@ -47,29 +47,42 @@ final class BattleRush
     /**
      * 团战（移植 battle_rush）
      *
-     * @param list<int|string> $atkUidArr 攻击方玩家 uid（按出场顺序）
-     * @param list<array<string, mixed>> $defUidArr PVE：防守方关卡行（id + position1~9）
-     * @param int $type 1 国战 PVE；2 多人副本
+     * @param list<int|string>|array<array<string, mixed>> $atkUidArr 攻击方玩家 uid（按出场顺序）；EVP（3）为怪物关卡行（id + position1~9）
+     * @param list<int|string>|array<array<string, mixed>> $defUidArr 防守方玩家 uid；PVE（1 / 2）为怪物关卡行（id + position1~9）
+     * @param int $type 0 PVP；1 国战 PVE；2 多人副本；3 EVP
      * @return array{win: int, battle_ready: array<int, array<string, mixed>>, battle_log: list<array<int, array<string, mixed>>>, general_arr: array<int|string, list<int>>, kill_rank: array{left: array<int|string, int>, right: array<int|string, int>}}
      */
     public function run(array $atkUidArr, array $defUidArr, int $type): array
     {
-        if ($type !== 1 && $type !== 2) {
-            throw new RuntimeException("依赖未移植：battle_rush type {$type}（只移植了 PVE 1 / 2）");
+        if (!in_array($type, [0, 1, 2, 3], true)) {
+            throw new RuntimeException("battle_rush type {$type}");
         }
 
-        // 处理PVE输入值
+        // 处理PVE输入值（旧版 $this->_pve：type 不为 0 时 PVE 阵法加成上限 0.5）
+        $pve = $type !== 0;
         if ($type === 2) {
             $this->maxWinLimit = 10;
         }
-        // 防御方阵法数组：遍历输入参数，整理数据结构，将防御方怪物id填充到 $defUidArr
-        $defMatrixArr = $tempDefUidArr = [];
-        foreach ($defUidArr as $value) {
-            $defMatrixArr[$value['id']] = $value;
-            $tempDefUidArr[] = $value['id'];
+        $defMatrixArr = $atkMatrixArr = [];
+        if ($type === 1 || $type === 2) {
+            // PVE：防御方阵法数组，将防御方怪物id填充到 $defUidArr
+            $tempDefUidArr = [];
+            foreach ($defUidArr as $value) {
+                $defMatrixArr[$value['id']] = $value;
+                $tempDefUidArr[] = $value['id'];
+            }
+            $defUidArr = $tempDefUidArr;
+            unset($tempDefUidArr);
+        } elseif ($type === 3) {
+            // EVP：攻击方怪物阵法数组，将攻击方怪物id填充到 $atkUidArr
+            $tempAtkUidArr = [];
+            foreach ($atkUidArr as $value) {
+                $atkMatrixArr[$value['id']] = $value;
+                $tempAtkUidArr[] = $value['id'];
+            }
+            $atkUidArr = $tempAtkUidArr;
+            unset($tempAtkUidArr);
         }
-        $defUidArr = $tempDefUidArr;
-        unset($tempDefUidArr);
 
         // ********************************* 初始化战场数据 **********************************
         $battlefield = $battleReady = $returnGeneralArr = [];
@@ -79,7 +92,12 @@ final class BattleRush
             // 攻击队员上场
             $attackUid = array_shift($atkUidArr);
             if ($attackUid != null) {
-                $this->initRushMemberInfo($battlefield[$i], 'left', $attackUid);
+                if ($type === 3) {
+                    // 怪物攻城：左侧为怪物（country_monster）
+                    $this->initRushMonsterInfo($battlefield[$i], 'left', $attackUid, $atkMatrixArr[$attackUid], 1);
+                } else {
+                    $this->initRushMemberInfo($battlefield[$i], 'left', $attackUid, false, $pve);
+                }
 
                 if ($type === 2) {
                     // 多人副本返回参与战斗的将领id
@@ -95,7 +113,12 @@ final class BattleRush
             // 防御队员上场
             $defenseUid = array_shift($defUidArr);
             if ($defenseUid != null) {
-                $this->initRushMonsterInfo($battlefield[$i], 'right', $defenseUid, $defMatrixArr[$defenseUid], $type);
+                if ($type === 1 || $type === 2) {
+                    $this->initRushMonsterInfo($battlefield[$i], 'right', $defenseUid, $defMatrixArr[$defenseUid], $type);
+                } else {
+                    // PVP or EVP：右侧玩家后手（阵法记在右侧）
+                    $this->initRushMemberInfo($battlefield[$i], 'right', $defenseUid, true, $pve);
+                }
 
                 $battleReady[$i]['right'] = self::rushTeamReturn($battlefield[$i]['right']['team']);
                 $battleReady[$i]['right']['uid'] = $defenseUid;
@@ -130,16 +153,30 @@ final class BattleRush
                 }
 
                 if ($pkResult[$key] == 1) {
-                    // 攻方胜利，守方先手。PVE：右方怪物没有阵法参数，左方玩家的阵法恢复到右侧
-                    $this->resumeMatrix('right', $battlefield[$key]['left']);
+                    // 攻方胜利，守方先手：恢复阵型信息
+                    if ($type === 0 || $type === 3) {
+                        // 只有PVP时右方有阵法参数
+                        $this->resumeMatrix('left', $battlefield[$key]['right']);
+                    }
+                    if ($type !== 3) {
+                        // 不是怪物攻城EVP时左方有阵法
+                        $this->resumeMatrix('right', $battlefield[$key]['left']);
+                    }
                     $result = $this->battle($value['right']['team'], $value['left']['team']);
                     $this->rushResultToBattle($battlefield[$key], $result, true);
                     $theReport = self::rushReport($result, true);
                     // 右方先手时，战斗结果反转（按左方先手返回）
                     $theReport['assess'] = 0 - (int)$theReport['assess'];
                 } else {
-                    // 平局 或 守方胜利 攻方先手
-                    $this->resumeMatrix('left', $battlefield[$key]['left']);
+                    // 平局 或 守方胜利 攻方先手：恢复阵型信息
+                    if ($type !== 3) {
+                        // 不是怪物攻城EVP时左方有阵法
+                        $this->resumeMatrix('left', $battlefield[$key]['left']);
+                    }
+                    if ($type === 0 || $type === 3) {
+                        // 只有PVP时右方有阵法参数
+                        $this->resumeMatrix('right', $battlefield[$key]['right']);
+                    }
                     $result = $this->battle($value['left']['team'], $value['right']['team']);
                     $this->rushResultToBattle($battlefield[$key], $result);
                     $theReport = self::rushReport($result);
@@ -210,7 +247,12 @@ final class BattleRush
                 if (empty($value['left']) && !empty($atkUidArr)) {
                     $attackUid = array_shift($atkUidArr);
                     if ($attackUid != null) {
-                        $this->initRushMemberInfo($battlefield[$key], 'left', $attackUid);
+                        // 守方胜利 攻击方补充上场人员（先手）
+                        if ($type === 3) {
+                            $this->initRushMonsterInfo($battlefield[$key], 'left', $attackUid, $atkMatrixArr[$attackUid], 1);
+                        } else {
+                            $this->initRushMemberInfo($battlefield[$key], 'left', $attackUid, false, $pve);
+                        }
                     }
                 } elseif ($pkReady[$key] == 0) {
                     $pkReady[$key] = 2;
@@ -219,7 +261,12 @@ final class BattleRush
                 if (empty($value['right']) && !empty($defUidArr)) {
                     $defenseUid = array_shift($defUidArr);
                     if ($defenseUid != null) {
-                        $this->initRushMonsterInfo($battlefield[$key], 'right', $defenseUid, $defMatrixArr[$defenseUid], $type);
+                        if ($type === 1 || $type === 2) {
+                            $this->initRushMonsterInfo($battlefield[$key], 'right', $defenseUid, $defMatrixArr[$defenseUid], $type);
+                        } else {
+                            // PVP：默认上场人员先手（旧版 init_member_team_info($uid, 0) 把阵法写到左侧），战斗平局时后手
+                            $this->initRushMemberInfo($battlefield[$key], 'right', $defenseUid, $pkResult[$key] == 3, $pve);
+                        }
                     }
                 } elseif ($pkReady[$key] == 0) {
                     $pkReady[$key] = 1;
@@ -251,8 +298,15 @@ final class BattleRush
                 $pkReady[$leftWin] = 3;
                 $pkReady[$rightWin] = 0;
 
-                // 攻方先手：恢复左方阵型
-                $this->resumeMatrix('left', $battlefield[$rightWin]['left']);
+                // 攻方先手：恢复阵型信息
+                if ($type !== 3) {
+                    // 不是怪物攻城EVP时左方有阵法
+                    $this->resumeMatrix('left', $battlefield[$rightWin]['left']);
+                }
+                if ($type === 0 || $type === 3) {
+                    // 只有PVP时右方有阵法参数
+                    $this->resumeMatrix('right', $battlefield[$rightWin]['right']);
+                }
                 $result = $this->battle($battlefield[$rightWin]['left']['team'], $battlefield[$rightWin]['right']['team']);
                 $this->rushResultToBattle($battlefield[$rightWin], $result);
                 $theReport = self::rushReport($result);
@@ -374,19 +428,21 @@ final class BattleRush
     }
 
     /**
-     * 初始化团战玩家信息（移植 init_rush_member_info → init_member_team_info($uid, 0)）
+     * 初始化团战玩家信息（移植 init_rush_member_info → init_member_team_info($uid, $defense)）
      *
-     * init_member_team_info 在没有阵法（-1）时提前返回、不改阵法属性；其余情况把阵法写到左侧（$defense 0）。
+     * init_member_team_info 在没有阵法（-1）时提前返回、不改阵法属性；其余情况把阵法写到左侧（$defense 0）或
+     * 右侧（$defense 1），PVE（type 不为 0）阵法加成上限 0.5。save_matrix 按上场位置 $side 取阵法：右侧补人先手时
+     * 阵法写在左侧、保存的却是右侧的旧值（旧版同）。
      *
      * @param array<string, mixed> $data
      */
-    private function initRushMemberInfo(array &$data, string $side, mixed $uid): void
+    private function initRushMemberInfo(array &$data, string $side, mixed $uid, bool $defense, bool $pve): void
     {
         // 旧版 init_member_team_info：uid 为 0 时取当前玩家
         $memberUid = (int)$uid === 0 ? $this->selfUid : (int)$uid;
-        $result = TeamBuilder::forMember($memberUid, defense: false, pve: true, self: $memberUid === $this->selfUid);
+        $result = TeamBuilder::forMember($memberUid, defense: $defense, pve: $pve, self: $memberUid === $this->selfUid);
         if ($result['status'] !== -1) {
-            $this->matrix['left'] = ['type' => (int)$result['matrix_type'], 'coe' => (float)$result['matrix_coe']];
+            $this->matrix[$defense ? 'right' : 'left'] = ['type' => (int)$result['matrix_type'], 'coe' => (float)$result['matrix_coe']];
         }
         // 连胜纪录清零
         $data[$side]['win'] = 0;

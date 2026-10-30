@@ -7,6 +7,7 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Handler\Pvp\SiegeHandler;
 use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\Price;
 use Hanjiang\MasterData\Soul;
@@ -36,7 +37,6 @@ use OmniPHP\Http\Context;
  * 依赖未移植：
  * - 将魂背包 member.soulpack / souluse（旧版 _isfull：背包满时掉落将魂的关卡返回 2），新版按未满处理；
  * - 将魂掉落 soul_model->add_hero_soul（own_soul），掉落判定照旧版掷点，但不发放，hero_soul 为空；
- * - 都城占领加成 siege_model->get_city_effect（type 4 每日奖励加成），effect 恒为 0；
  * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、四方来朝元宝计数；
  *   add_soul 的原魂流水 _soul_log；stat_model 消费统计（tower_buy / tower_jiabei）。
  */
@@ -1067,9 +1067,14 @@ final class TowerHandler
             return $return;
         }
 
-        // 取都城占领加成
-        // 依赖未移植：siege_model->get_city_effect（占领效果 type 4 时 reward 按 value% 加成、effect = value + 100）
-        $return['effect'] = 0;
+        // 取都城占领加成（占领效果 type 4：reward 按 value% 加成）
+        $effect = SiegeHandler::getCityEffect($member, $now);
+        if ($effect['status'] === 1 && $effect['type'] === 4) {
+            $mission['reward'] = (int)($mission['reward'] + $mission['reward'] * ($effect['value'] / 100));
+            $return['effect'] = $effect['value'] + 100;
+        } else {
+            $return['effect'] = 0;
+        }
 
         $scene = self::getSceneById($map['stage'] + 1);
         if ($scene === null) {
@@ -1172,9 +1177,14 @@ final class TowerHandler
             return $return;
         }
 
-        // 取都城占领加成
-        // 依赖未移植：siege_model->get_city_effect（占领效果 type 4 时 reward 按 value% 加成、effect = value + 100）
-        $return['effect'] = 0;
+        // 取都城占领加成（占领效果 type 4：reward 按 value% 加成）
+        $effect = SiegeHandler::getCityEffect($member, $now);
+        if ($effect['status'] === 1 && $effect['type'] === 4) {
+            $mission['reward'] = (int)($mission['reward'] + $mission['reward'] * ($effect['value'] / 100));
+            $return['effect'] = $effect['value'] + 100;
+        } else {
+            $return['effect'] = 0;
+        }
 
         if ($gold > 0 && $reward !== null) {
             if ($gold > (int)$member['gold']) {

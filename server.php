@@ -6,7 +6,10 @@ require_once __DIR__ . '/vendor/autoload.php';
 
 date_default_timezone_set('Asia/Shanghai');
 
+use Hanjiang\Cron\CompeteCron;
 use Hanjiang\Cron\CountryCron;
+use Hanjiang\Cron\PassGeneralCron;
+use Hanjiang\Cron\SiegeCron;
 use Hanjiang\Cron\WorldBossCron;
 use Hanjiang\Handler\HandlerRegistry;
 use Hanjiang\Http\Router;
@@ -67,6 +70,21 @@ $httpWorker->onWorkerStart = static function (Worker $worker) use ($dbConfig): v
         // 世界 BOSS：自动发放未领取的奖励并清空世界 BOSS 键（cron_acttask::worldboss）
         $daily(WorldBossCron::RUN_AT, static function (): void {
             WorldBossCron::settle(time());
+        });
+        // 过关斩将：每日自动领取宝箱并重置进度、活动结束后自动兑换兑奖券与领取成就（cron_acttask::pass_general）
+        $daily(PassGeneralCron::RUN_AT, static function (): void {
+            PassGeneralCron::run(time());
+        });
+        // 国战：每分钟检查是否到了某城的开战时间，算出整场战斗（cron.php:siege_battle）；每周六 00:00 清除参战状态
+        Timer::add(SiegeCron::BATTLE_INTERVAL, static function (): void {
+            SiegeCron::battle(time());
+        });
+        $daily(SiegeCron::CLEAR_AT, static function (): void {
+            SiegeCron::clearWarstatus(time());
+        });
+        // 群雄逐鹿：活动结束后 10 小时内自动补领排名奖励（cron.php:get_compete_reward）
+        Timer::add(CompeteCron::INTERVAL, static function (): void {
+            CompeteCron::run(time());
         });
     }
 };

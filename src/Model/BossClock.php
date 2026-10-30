@@ -7,7 +7,7 @@ namespace Hanjiang\Model;
 use LogicException;
 
 /**
- * 世界 BOSS / 国家 BOSS 用的当前时间（旧版控制器 / 模型里的 $this->timestamp）
+ * 世界 BOSS / 国家 BOSS / 过关斩将 / 群雄逐鹿 / 国家矿脉 / 国战用的当前时间（旧版控制器 / 模型里的 $this->timestamp）
  *
  * 生产环境恒为 time()。只有 PHPUnit 进程（vendor/bin/phpunit 定义了 PHPUNIT_COMPOSER_INSTALL）可以固定时间，
  * 用于测试开放时段；其他进程调用 freeze() 直接抛异常，HTTP 请求也没有任何入口能改它。

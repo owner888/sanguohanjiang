@@ -85,6 +85,8 @@ CREATE TABLE `zc_sanguo_member_field` (
     `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '每日第一次游戏时间（每日计划任务判断依据）',
     `first_recharge` TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '首充返利标识（1 显示首充图标，2 已首充待领奖，0 不显示）',
     `soultimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '星路购买次数（将魂星路今日购买次数，每日计划任务归零）',
+    `heaventimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通天塔次数（扫荡次数不足时累加补买的次数，旧版每日计划任务不归零）',
+    `oncountrymine` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家矿占领到期时间（到期后主城提示可收获，收获 / 放弃 / 被抢时清 0）',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL
@@ -312,7 +314,7 @@ CREATE TABLE `zc_sanguo_member_integral` (
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL,
     UNIQUE KEY `uk_uid` (`uid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家积分记录表（目前只有演武榜、世界 BOSS 奖励读写 act_arena_int）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家积分记录表（演武榜、世界 BOSS 奖励读写 act_arena_int；过关斩将读写兑奖券 act_kemari_int）';
 
 DROP TABLE IF EXISTS `zc_sanguo_integral_log`;
 CREATE TABLE `zc_sanguo_integral_log` (
@@ -348,35 +350,6 @@ CREATE TABLE `zc_sanguo_map` (
     UNIQUE KEY `uk_uid_level_stage` (`uid`, `level`, `stage`),
     INDEX `idx_uid` (`uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='征战副本关卡表';
-
--- -------------------------------------------------------------
--- 11. 封邑与攻城略地表
--- -------------------------------------------------------------
-DROP TABLE IF EXISTS `zc_sanguo_siege`;
-CREATE TABLE `zc_sanguo_siege` (
-    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    `city_id` INT UNSIGNED NOT NULL UNIQUE COMMENT '城池ID: 1洛阳 2许昌 3建邺 4成都 5长安 6襄阳',
-    `name` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '城池名称',
-    `occupier_name` VARCHAR(64) NOT NULL DEFAULT '黄巾叛军' COMMENT '当前占领太守名称',
-    `occupier_uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '占领玩家UID，0为NPC',
-    `daily_silver` INT NOT NULL DEFAULT 5000 COMMENT '每日岁贡银两',
-    `daily_gold` INT NOT NULL DEFAULT 20 COMMENT '每日岁贡元宝',
-    `defense_level` INT NOT NULL DEFAULT 1 COMMENT '城防等级',
-    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-    `deleted_at` DATETIME DEFAULT NULL
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='城池争夺与封邑表';
-
--- 预置三国核心名城初始数据
-INSERT INTO `zc_sanguo_siege` (`city_id`, `name`, `occupier_name`, `occupier_uid`, `daily_silver`, `daily_gold`, `defense_level`)
-VALUES
-    (1, '洛阳', '黄巾叛军', 0, 10000, 50, 5),
-    (2, '许昌', '黄巾叛军', 0, 8000, 40, 4),
-    (3, '建邺', '黄巾叛军', 0, 8000, 40, 4),
-    (4, '成都', '黄巾叛军', 0, 8000, 40, 4),
-    (5, '长安', '黄巾叛军', 0, 9000, 45, 5),
-    (6, '中原·濮阳', '黄巾叛军', 0, 6000, 30, 3)
-ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
 -- -------------------------------------------------------------
 -- 15. 关卡据点通关奖励配置表与领取记录表
@@ -596,7 +569,7 @@ CREATE TABLE `zc_sanguo_first_recharge_log` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='首充返利领取奖励日志表';
 
 -- -------------------------------------------------------------
--- 将魂星路 (对齐原版 zc_sanguo_member_activity 的星路 / 多人副本字段 / soul_open_map / soul_log / soul_report)
+-- 将魂星路 (对齐原版 zc_sanguo_member_activity 的星路 / 多人副本 / 金银岛 / 四象圣域 / 通天塔字段 / soul_open_map / soul_log / soul_report)
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `zc_sanguo_member_activity`;
 CREATE TABLE `zc_sanguo_member_activity` (
@@ -611,6 +584,16 @@ CREATE TABLE `zc_sanguo_member_activity` (
     `elitebuytimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '多人副本今日购买次数',
     `elitebuydateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '多人副本最后购买次数时间',
     `elitesurplustimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '多人副本购买剩余次数',
+    `islandid` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '金银岛关卡id',
+    `islandtimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '今日金银岛挑战次数',
+    `islanddate` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '金银岛进度更新时间',
+    `sanctumdate` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '四象圣域每日奖励领取时间',
+    `heavenstage` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通天塔（旧版未使用）',
+    `heavenmission` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通天塔（index 置 0）',
+    `heavenlevel` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通天塔（旧版未使用）',
+    `heaventimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通天塔购买的剩余次数',
+    `freeheaven` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通天塔免费次数',
+    `heavendate` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通天塔每日奖励领取时间',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL
@@ -798,5 +781,425 @@ CREATE TABLE `zc_sanguo_country_boss_log` (
     `deleted_at` DATETIME DEFAULT NULL,
     UNIQUE KEY `uk_country_ymd` (`country`, `ymd`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家boss击杀次数记录表';
+
+-- -------------------------------------------------------------
+-- 天下史诗 (对齐原版 zc_sanguo_epic_log；史诗 / 残卷配置在 MasterData Epic / EpicChip)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_epic_log`;
+CREATE TABLE `zc_sanguo_epic_log` (
+    `uid` INT UNSIGNED NOT NULL PRIMARY KEY COMMENT '用户uid',
+    `refreshtimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '刷新剩余次数',
+    `buy_refreshtimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '购买的刷新次数',
+    `locktimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '锁定的剩余次数',
+    `buy_locktimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '购买的锁定次数',
+    `epicid` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '史诗id',
+    `site1` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置1残卷ID',
+    `site2` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置2残卷ID',
+    `site3` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置3残卷ID',
+    `site4` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置4残卷ID',
+    `site5` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置5残卷ID',
+    `lock_site` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '锁定位置',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '更新时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='天下史诗用户数据表';
+
+-- -------------------------------------------------------------
+-- 过关斩将 (对齐原版 zc_sanguo_passgeneral / passgeneral_log / passgeneral_box_log / passgeneral_achievement_log /
+-- passgeneral_exchange_log；兑奖券为 member_integral.act_kemari_int；守将 / 奖励 / 宝箱 / 成就配置在 MasterData Passgeneral*)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_passgeneral`;
+CREATE TABLE `zc_sanguo_passgeneral` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户ID',
+    `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+    `num` INT NOT NULL DEFAULT 0 COMMENT '突破层数',
+    `free_times1` INT NOT NULL DEFAULT 0 COMMENT '过人免费次数',
+    `free_times2` INT NOT NULL DEFAULT 0 COMMENT '强制过人免费次数',
+    `normal_time1` INT NOT NULL DEFAULT 0 COMMENT '过人下一次可操作时间',
+    `normal_time2` INT NOT NULL DEFAULT 0 COMMENT '强制过人可操作时间',
+    `pass_id` INT NOT NULL DEFAULT 0 COMMENT '将要挑战的过人id',
+    `is_pass` INT NOT NULL DEFAULT 0 COMMENT '已经挑战的过人id',
+    `succ_num` INT NOT NULL DEFAULT 0 COMMENT '通关次数',
+    `is_get` INT NOT NULL DEFAULT 0 COMMENT '是否领取层数奖励（1 未达成 2 可领取 3 已领取）',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '操作时间',
+    `refresh_time` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '免费次数刷新时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_uid_version` (`uid`, `version`),
+    INDEX `idx_version` (`version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='过关斩将信息表';
+
+DROP TABLE IF EXISTS `zc_sanguo_passgeneral_log`;
+CREATE TABLE `zc_sanguo_passgeneral_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户ID',
+    `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+    `num` INT NOT NULL DEFAULT 0 COMMENT '突破层数',
+    `num_id` INT NOT NULL DEFAULT 0 COMMENT '过人id',
+    `g_id` INT NOT NULL DEFAULT 0 COMMENT '将领id',
+    `succ_num` INT NOT NULL DEFAULT 0 COMMENT '通关次数',
+    `is_get` INT NOT NULL DEFAULT 0 COMMENT '是否领取层数奖励',
+    `is_succ` INT NOT NULL DEFAULT 0 COMMENT '是否过人奖励',
+    `type` INT NOT NULL DEFAULT 0 COMMENT '奖励类型',
+    `value` INT NOT NULL DEFAULT 0 COMMENT '奖励值',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '操作时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid_version` (`uid`, `version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='过关斩将过人日志表';
+
+DROP TABLE IF EXISTS `zc_sanguo_passgeneral_box_log`;
+CREATE TABLE `zc_sanguo_passgeneral_box_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT 'ID',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户ID',
+    `version` INT NOT NULL DEFAULT 0 COMMENT '版本号',
+    `num` INT NOT NULL DEFAULT 0 COMMENT '突破层数',
+    `name1` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '奖励名称（旧版写日志时不写名称，为空串）',
+    `type1` INT NOT NULL DEFAULT 0 COMMENT '奖励物品1类型',
+    `value1` INT NOT NULL DEFAULT 0 COMMENT '参数（旧版手动领取时记的是 type1）',
+    `name2` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '奖励名称',
+    `type2` INT NOT NULL DEFAULT 0 COMMENT '奖励物品2类型',
+    `value2` INT NOT NULL DEFAULT 0 COMMENT '参数（自动领取时不写，为 0）',
+    `name3` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '奖励名称',
+    `type3` INT NOT NULL DEFAULT 0 COMMENT '奖励物品3类型',
+    `value3` INT NOT NULL DEFAULT 0 COMMENT '参数',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '操作时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid_version` (`uid`, `version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='过关斩将领取宝箱日志表';
+
+DROP TABLE IF EXISTS `zc_sanguo_passgeneral_achievement_log`;
+CREATE TABLE `zc_sanguo_passgeneral_achievement_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '自增ID',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '角色UID',
+    `version` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '版本号',
+    `achieve_id` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '成就id',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '兑奖时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_uid_version_achieve` (`uid`, `version`, `achieve_id`),
+    INDEX `idx_version` (`version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='过关斩将成就领取日志表（唯一键防止手动领取与活动结束自动领取重复发放）';
+
+DROP TABLE IF EXISTS `zc_sanguo_passgeneral_exchange_log`;
+CREATE TABLE `zc_sanguo_passgeneral_exchange_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '自增ID',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '角色UID',
+    `version` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '版本号',
+    `nickname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '角色名称',
+    `type` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '奖品类型',
+    `value` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '奖品数量',
+    `value1` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '装备精华数量',
+    `lottery_num` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '消耗奖券',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '兑奖时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='过关斩将奖券兑换日志表';
+
+-- -------------------------------------------------------------
+-- 四象圣域 (对齐原版 zc_sanguo_sanctum_log / sanctum_open_map / sanctum_mission_log / sanctum_report；
+-- 每日奖励领取时间为 member_activity.sanctumdate；关卡 / 守军 / 每日奖励倍率配置在 MasterData SanctumMission / SanctumMonster / SanctumReward)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_sanctum_log`;
+CREATE TABLE `zc_sanguo_sanctum_log` (
+    `uid` INT UNSIGNED NOT NULL PRIMARY KEY COMMENT '用户uid',
+    `missionlevel` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '圣域id',
+    `missionstage` INT NOT NULL DEFAULT 0 COMMENT '当前所在层数',
+    `missionid` INT NOT NULL DEFAULT 0 COMMENT '当前所在关卡',
+    `times` INT NOT NULL DEFAULT 0 COMMENT '剩余攻击次数',
+    `buy_times` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '四象剩余购买的次数',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '最后活动时间（每日重置免费次数的判断依据）',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='四象圣域用户记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_sanctum_open_map`;
+CREATE TABLE `zc_sanguo_sanctum_open_map` (
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户uid',
+    `city` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '圣域id（1~5）',
+    `stage` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '层数（1~5）',
+    `missionid` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已通过的关卡id',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '最后操作时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    PRIMARY KEY (`uid`, `city`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='四象圣域关卡开启表';
+
+DROP TABLE IF EXISTS `zc_sanguo_sanctum_mission_log`;
+CREATE TABLE `zc_sanguo_sanctum_mission_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id（即战报 sanctum_report.id）',
+    `missionid` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '关卡ID',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户uid',
+    `nickname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '用户昵称',
+    `level` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户等级',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '通过时间',
+    `tree` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '神树活动中的神树等级',
+    `first_reward` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '首杀标识',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid_mission` (`uid`, `missionid`),
+    INDEX `idx_mission` (`missionid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='四象圣域关卡通过记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_sanctum_report`;
+CREATE TABLE `zc_sanguo_sanctum_report` (
+    `id` INT UNSIGNED NOT NULL PRIMARY KEY COMMENT '战报id（sanctum_mission_log.id）',
+    `report` TEXT NOT NULL COMMENT '战斗过程（json_encode(base64(gzcompress(战报 json)))）',
+    `nickname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '玩家昵称',
+    `userlevel` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '玩家等级',
+    `name` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '关卡名称',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '关卡等级',
+    `background` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '战斗背景',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='四象圣域战报表';
+
+-- -------------------------------------------------------------
+-- 通天塔 (对齐原版 zc_sanguo_heaven_open_map / heaven_log / heaven_report；次数与每日奖励为 member_activity 的
+-- freeheaven / heaventimes / heavendate，扫荡补买次数为 member_field.heaventimes；关卡 / 守军配置在 MasterData HeavenMission / HeavenMonster)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_heaven_open_map`;
+CREATE TABLE `zc_sanguo_heaven_open_map` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户id',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '势力id',
+    `stage` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '场景id',
+    `mission` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已通过的最大关卡id',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '更新时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通天塔势力，任务开启记录';
+
+DROP TABLE IF EXISTS `zc_sanguo_heaven_log`;
+CREATE TABLE `zc_sanguo_heaven_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id（即战报 heaven_report.id）',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户id',
+    `nickname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '玩家昵称',
+    `missionlevel` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '势力id',
+    `missionid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '关卡id',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '首杀时间',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '首杀时用户等级',
+    `tree` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '神树活动时的神树等级',
+    `first_reward` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '首杀奖励领取标识（1 已领取，0 未领取）',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid_mission` (`uid`, `missionid`),
+    INDEX `idx_mission` (`missionid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通天塔任务记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_heaven_report`;
+CREATE TABLE `zc_sanguo_heaven_report` (
+    `id` INT UNSIGNED NOT NULL PRIMARY KEY COMMENT '战报id（heaven_log.id）',
+    `report` TEXT NOT NULL COMMENT '战斗过程（json_encode(base64(gzcompress(战报 json)))）',
+    `nickname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '玩家昵称',
+    `userlevel` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '玩家等级',
+    `name` VARCHAR(20) NOT NULL DEFAULT '' COMMENT '关卡名称',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '关卡等级',
+    `background` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '战斗背景（旧版写战报时不写入）',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='通天塔战报表';
+
+-- -------------------------------------------------------------
+-- 英雄王座 (对齐原版 zc_sanguo_herothrone_log；关卡 / 守军 / 宝箱奖励配置在 MasterData HerothroneMission / HerothroneMonster)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_herothrone_log`;
+CREATE TABLE `zc_sanguo_herothrone_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户uid',
+    `nickname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '用户名称',
+    `times` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '剩余免费次数',
+    `buytimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '剩余购买次数',
+    `today_buytimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '今日购买次数',
+    `today_buydate` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '今日最后购买时间',
+    `stage` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '当前进度',
+    `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '状态（1已开启，2失败，0未开启）',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '最后挑战时间（每日重置免费次数的判断依据）',
+    `laststage` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '历史最高过关记录',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='英雄王座用户记录';
+
+-- -------------------------------------------------------------
+-- 金银岛 (对齐原版 zc_sanguo_island_log / island_report；进度与次数为 member_activity 的 islandid / islandtimes / islanddate；
+-- 关卡 / 守军配置在 MasterData Island / IslandMonster)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_island_log`;
+CREATE TABLE `zc_sanguo_island_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id（即战报 island_report.id）',
+    `islandid` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '金银岛id',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT 'uid',
+    `nickname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '昵称',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '玩家等级',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '首胜时间',
+    `tree` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '神树活动中的神树等级',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid_island` (`uid`, `islandid`),
+    INDEX `idx_island` (`islandid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='金银岛记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_island_report`;
+CREATE TABLE `zc_sanguo_island_report` (
+    `id` INT UNSIGNED NOT NULL PRIMARY KEY COMMENT '战报id（island_log.id）',
+    `nickname` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '昵称',
+    `userlevel` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '玩家等级',
+    `name` VARCHAR(30) NOT NULL DEFAULT '' COMMENT '怪物名称',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '关卡等级（monsterlevel）',
+    `report` MEDIUMTEXT NOT NULL COMMENT '战斗过程（战报 json，旧版未压缩）',
+    `tree` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '神树活动中的神树等级（旧版写战报时不写入）',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='金银岛攻略表';
+
+-- -------------------------------------------------------------
+-- 群雄逐鹿 (对齐原版 zc_sanguo_compete / compete_action_log；活动时间在 MasterData ActivityTime（compete），
+-- 名次奖励在 MasterData CompeteReward / NewcompeteReward)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_compete`;
+CREATE TABLE `zc_sanguo_compete` (
+    `uid` INT UNSIGNED NOT NULL PRIMARY KEY COMMENT '用户uid',
+    `nickname` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '玩家名字（入榜时的昵称）',
+    `rank` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '排名',
+    `times` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '剩余次数',
+    `get_rank` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '领取奖励时排名（0 为未领取）',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '最后更新时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_rank` (`rank`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='用户逐鹿数据表';
+
+DROP TABLE IF EXISTS `zc_sanguo_compete_action_log`;
+CREATE TABLE `zc_sanguo_compete_action_log` (
+    `id` BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '流水号',
+    `uid` INT UNSIGNED NOT NULL COMMENT '参加活动的用户uid',
+    `level` INT UNSIGNED NOT NULL COMMENT '等级',
+    `dateline` INT UNSIGNED NOT NULL COMMENT '参加活动的时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_dateline` (`dateline`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='逐鹿活动参加记录';
+
+-- -------------------------------------------------------------
+-- 国家矿脉 (对齐原版 zc_sanguo_country_mine；矿系数 / 随机事件在 MasterData CountryMineRatio / CountryMineEvent；
+-- 占矿到期时间为 member_field.oncountrymine)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_country_mine`;
+CREATE TABLE `zc_sanguo_country_mine` (
+    `uid` INT UNSIGNED NOT NULL PRIMARY KEY COMMENT '用户uid',
+    `times` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '占领剩余次数',
+    `robtimes` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '抢劫剩余次数',
+    `page` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '第几页',
+    `site` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '第几个位置',
+    `type` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '矿的类型（CountryMineRatio.id）',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '占矿时等级',
+    `jointime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '占领矿区时间',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '每日进入矿区时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_page_site` (`page`, `site`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='矿战记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_country_fight_notice`;
+CREATE TABLE `zc_sanguo_country_fight_notice` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    `type` INT NOT NULL DEFAULT 0 COMMENT '战报类型 0，国家抢矿；1，海外贸易；',
+    `member1` BIGINT NOT NULL DEFAULT 0 COMMENT '角色1UID',
+    `member1_name` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '角色1名称',
+    `member_country` SMALLINT NOT NULL DEFAULT 0 COMMENT '角色1国家ID',
+    `member_country_name` VARCHAR(21) NOT NULL DEFAULT '' COMMENT '角色1国家名称',
+    `member2` BIGINT NOT NULL DEFAULT 0 COMMENT '角色2ID',
+    `member2_name` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '角色2名称',
+    `attack_uid` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '攻击者UID',
+    `attack_nickname` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '攻击者用户名',
+    `attack_country` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '攻击者国家ID',
+    `attack_country_name` VARCHAR(21) NOT NULL DEFAULT '' COMMENT '攻击值国家名称',
+    `win` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否成功（1，成功；0，失败；）',
+    `dateline` INT NOT NULL DEFAULT 0 COMMENT '操作时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_attack_country` (`attack_country`),
+    INDEX `idx_member_country` (`member_country`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家抢矿、海外贸易日志';
+
+-- -------------------------------------------------------------
+-- 国战 / 都城 (对齐原版 zc_sanguo_country_city / country_city_report / country_siege_log；
+-- 都城配置在 MasterData CountryCityEffect，NPC 守将在 MasterData CountryMission / CountryMonster)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_country_city`;
+CREATE TABLE `zc_sanguo_country_city` (
+    `maplevel` TINYINT UNSIGNED NOT NULL PRIMARY KEY COMMENT '都城id（CountryCityEffect.id）',
+    `challengercid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '挑战者国家id',
+    `challengername` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '挑战者国家名字',
+    `challengerlevel` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '挑战方等级',
+    `challengerdateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '挑战时间',
+    `cid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '占领的国家id',
+    `name` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '国家名称',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '占领者国家等级',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '占领时间',
+    `lock` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否被国家通过至尊占领锁定',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_cid` (`cid`),
+    INDEX `idx_challengercid` (`challengercid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='都城占领表';
+
+-- 原版 report 为 TEXT：整场团战战报 json 常超过 64KB，改为 MEDIUMTEXT
+DROP TABLE IF EXISTS `zc_sanguo_country_city_report`;
+CREATE TABLE `zc_sanguo_country_city_report` (
+    `id` MEDIUMINT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '战报id',
+    `city` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '城池id',
+    `report` MEDIUMTEXT NOT NULL COMMENT '战报内容（json：双方名单、团战过程 battle、杀敌榜）',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '战斗时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_city_dateline` (`city`, `dateline`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国战战报表';
+
+DROP TABLE IF EXISTS `zc_sanguo_country_siege_log`;
+CREATE TABLE `zc_sanguo_country_siege_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '主键ID',
+    `city` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '城池ID',
+    `city_name` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '城池名称',
+    `report` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '战报ID',
+    `country` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '被攻击方国家ID',
+    `country_name` VARCHAR(21) NOT NULL DEFAULT '' COMMENT '被攻击方国家名称',
+    `attack_country` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '攻击方国家ID',
+    `attack_country_name` VARCHAR(21) NOT NULL DEFAULT '' COMMENT '攻击方国家名称',
+    `zhizun` INT NOT NULL DEFAULT 0 COMMENT '是否是至尊攻城（0，不是；1，是；）',
+    `win_type` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '战胜or失败（1，战胜；0，失败；）',
+    `dateline` INT NOT NULL DEFAULT 0 COMMENT '操作时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_dateline` (`dateline`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家国战日志表';
 
 SET FOREIGN_KEY_CHECKS = 1;

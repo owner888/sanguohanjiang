@@ -1588,32 +1588,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(10, $this->towerMember($p['uid'], 'gold'));
     }
 
-    public function testPassGeneralSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            $res = $this->request('pass_general', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertSame(1, $res['current_pass']);
-            $this->assertCount(6, $res['list']);
-
-            // 1. 发起挑战第 1 关【华雄】
-            $battle = $this->request('pass_general', 'action', ['pass_id' => 1]);
-            $this->assertSame(1, $battle['status']);
-            $this->assertSame(1, $battle['win']);
-            $this->assertSame('华雄', $battle['boss_name']);
-            $this->assertSame(2, $battle['next_pass']);
-            $this->assertGreaterThan(0, $battle['silver']);
-
-            // 2. 尝试越级挑战第 3 关【文丑】被拦截
-            $skip = $this->request('pass_general', 'action', ['pass_id' => 3]);
-            $this->assertSame(0, $skip['status']);
-
-            // 3. 每日重置
-            $reset = $this->request('pass_general', 'reset');
-            $this->assertSame(1, $reset['status']);
-            $this->assertSame(1, $reset['current_pass']);
-        });
-    }
 
     public function testShopSystem(): void
     {
@@ -2578,28 +2552,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(2, $merge['level']);
     }
 
-    public function testHeavenSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看观星主界面
-            $res = $this->request('heaven', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertNotEmpty($res['stars']);
-
-            // 2. 挑战星宿守护神 (星宿 1)
-            $pk = $this->request('heaven', 'pk', ['id' => 1]);
-            $this->assertSame(1, $pk['status']);
-            $this->assertSame(1, $pk['win']);
-            $this->assertSame(2, $pk['next_star']);
-            $this->assertGreaterThan(0, $pk['silver']);
-
-            // 3. 一键观星扫荡
-            $sweep = $this->request('heaven', 'mop_up');
-            $this->assertSame(1, $sweep['status']);
-            $this->assertGreaterThan(0, $sweep['cleared_stars']);
-        });
-    }
-
     /**
      * 世界 / 国家 BOSS 测试的共同准备：清空两类 BOSS 的 Redis 键，固定 BossClock
      */
@@ -2974,28 +2926,6 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThan(5000, (int)$member['silver']);
     }
 
-    public function testSiegeSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看名城列表
-            $res = $this->request('siege', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertCount(6, $res['list']);
-
-            // 2. 攻打并占领濮阳城 (id: 6)
-            $action = $this->request('siege', 'action', ['city_id' => 6]);
-            $this->assertSame(1, $action['status']);
-            $this->assertSame(1, $action['win']);
-            $this->assertSame('中原·濮阳', $action['city_name']);
-
-            // 3. 领取已占领城池的每日岁贡
-            $reward = $this->request('siege', 'get_reward');
-            $this->assertSame(1, $reward['status']);
-            $this->assertGreaterThan(0, $reward['silver']);
-            $this->assertGreaterThan(0, $reward['gold']);
-        });
-    }
-
     public function testGvgSystem(): void
     {
         // 1. 查看跨服 GVG 对阵树
@@ -3286,44 +3216,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(2, $up['level']);
     }
 
-    public function testSanctumSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看四象圣域
-            $res = $this->request('sanctum', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertCount(4, $res['list']);
-
-            // 2. 挑战青龙圣域 (realm: 1)
-            $action = $this->request('sanctum', 'action', ['id' => 1]);
-            $this->assertSame(1, $action['status']);
-            $this->assertSame(1, $action['win']);
-            $this->assertGreaterThan(0, $action['silver']);
-            $this->assertGreaterThan(0, $action['gold']);
-        });
-    }
-
-    public function testCompeteSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看跨服论剑比武
-            $res = $this->request('compete', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertNotEmpty($res['opponents']);
-
-            // 2. 发起比武单挑 (对手 1)
-            $pk = $this->request('compete', 'action', ['id' => 1]);
-            $this->assertSame(1, $pk['status']);
-            $this->assertSame(1, $pk['win']);
-            $this->assertSame(50, $pk['add_score']);
-
-            // 3. 领取每日比武段位俸禄
-            $reward = $this->request('compete', 'get_reward');
-            $this->assertSame(1, $reward['status']);
-            $this->assertGreaterThan(0, $reward['silver']);
-        });
-    }
-
     /**
      * @return array{uid: int, auth: array{token: string, uid: int}}
      */
@@ -3506,21 +3398,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(0, $dup['status']);
     }
 
-    public function testChallengeSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看擂台
-            $res = $this->request('challenge', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertNotEmpty($res['masters']);
-
-            // 2. 挑战擂主 1
-            $pk = $this->request('challenge', 'action', ['id' => 1]);
-            $this->assertSame(1, $pk['status']);
-            $this->assertSame(1, $pk['win']);
-            $this->assertGreaterThan(0, $pk['silver']);
-        });
-    }
 
     /**
      * @param array<string, mixed> $params
@@ -5135,38 +5012,6 @@ final class GameApiTest extends TestCase
         $this->assertSame($gold, (int)DB::table('member')->where('uid', $uid)->value('gold'));
     }
 
-    public function testIslandSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看金银岛
-            $res = $this->request('island', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertCount(3, $res['islands']);
-
-            // 2. 挑战蓬莱仙境岛 (island: 1)
-            $battle = $this->request('island', 'pk', ['id' => 1]);
-            $this->assertSame(1, $battle['status']);
-            $this->assertSame(1, $battle['win']);
-            $this->assertGreaterThan(0, $battle['silver']);
-        });
-    }
-
-    public function testHerothroneSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看英雄王座
-            $res = $this->request('herothrone', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertCount(3, $res['thrones']);
-
-            // 2. 冲击青铜铁血王座 (throne: 1)
-            $action = $this->request('herothrone', 'action', ['id' => 1]);
-            $this->assertSame(1, $action['status']);
-            $this->assertSame(1, $action['win']);
-            $this->assertGreaterThan(0, $action['silver']);
-        });
-    }
-
     public function testBeatengodSystem(): void
     {
         // 1. 查看战神试炼
@@ -5203,32 +5048,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $buyBox['status']);
         $this->assertArrayHasKey('point', $buyBox);
         $this->assertArrayHasKey('silver', $buyBox);
-    }
-
-    public function testCountryMineSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看国家矿山
-            $res = $this->request('countrymine', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertNotEmpty($res['mines']);
-
-            // 2. 占领官渡铜矿
-            $claim = $this->request('countrymine', 'caikuang', ['id' => 1]);
-            $this->assertSame(1, $claim['status']);
-            $this->assertSame(1, $claim['mine_id']);
-
-            // 3. 掠夺敌国矿车
-            $rob = $this->request('countrymine', 'rob', ['id' => 2]);
-            $this->assertSame(1, $rob['status']);
-            $this->assertSame(1, $rob['win']);
-            $this->assertGreaterThan(0, $rob['rob_silver']);
-
-            // 4. 收取开采银饷
-            $harvest = $this->request('countrymine', 'get_reward');
-            $this->assertSame(1, $harvest['status']);
-            $this->assertGreaterThan(0, $harvest['silver']);
-        });
     }
 
     /**
@@ -5572,21 +5391,6 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThan(0, $reward['silver']);
     }
 
-    public function testEpicSystem(): void
-    {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看史诗战纪
-            $res = $this->request('epic', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertCount(3, $res['list']);
-
-            // 2. 挑战史诗白马之战
-            $battle = $this->request('epic', 'force', ['id' => 1]);
-            $this->assertSame(1, $battle['status']);
-            $this->assertSame(1, $battle['win']);
-            $this->assertGreaterThan(0, $battle['silver']);
-        });
-    }
 
     public function testActivationCodeSystem(): void
     {
@@ -5846,5 +5650,2307 @@ final class GameApiTest extends TestCase
         // 5. 进入跨服备战
         $enter = $this->request('worldarena', 'enter');
         $this->assertSame(1, $enter['status']);
+    }
+
+    // ---------------------------------------------------------------
+    // 切磋（旧版 controllers/challenge.php）
+    // ---------------------------------------------------------------
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    private function messagesOf(int $uid): array
+    {
+        return Redis::getJson('user_messages:' . $uid) ?: [];
+    }
+
+    public function testChallengeGuardsAndDeterministicResults(): void
+    {
+        $a = $this->newGuestPlayer();
+        $b = $this->newGuestPlayer();
+        $silver = (int)DB::table('member')->where('uid', $a['uid'])->value('silver');
+
+        // -1 没传对方 uid / 是自己；-2 对方不存在
+        $strip = static function (array $res): array {
+            unset($res['message'], $res['msg']);
+            return $res;
+        };
+        $this->assertSame(['status' => -1], $strip($this->request('challenge', 'action', ['token' => $a['auth']['token'], 'uid' => 0])));
+        $this->assertSame(['status' => -1], $strip($this->request('challenge', 'action', $a['auth'])));
+        $this->assertSame(['status' => -2], $strip($this->request('challenge', 'action', ['token' => $a['auth']['token'], 'uid' => 999999999])));
+
+        // 我方远强于对方：对方阵法没有武将（空队伍直接判 3 完胜），对方信件为「惨遭失败」
+        $this->emptyFormation($b['uid']);
+        $res = $this->request('challenge', 'action', ['token' => $a['auth']['token'], 'uid' => $b['uid']]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(3, $res['info']['win']);
+        $this->assertSame(3, $res['battle']['assess']);
+        $this->assertSame([], $res['battle']['rightteam']);
+        $self = DB::table('member')->where('uid', $a['uid'])->first();
+        $to = DB::table('member')->where('uid', $b['uid'])->first();
+        $this->assertSame(['name' => $self['nickname'], 'level' => (int)$self['level'], 'gender' => (int)$self['gender']], $res['battle']['left_role']);
+        $this->assertSame(['name' => $to['nickname'], 'level' => (int)$to['level'], 'gender' => (int)$to['gender']], $res['battle']['right_role']);
+        $this->assertSame((int)$to['gender'], $res['info']['gender']);
+        $this->assertGreaterThan(0, $res['info']['report']);
+        $this->assertSame(['id' => $res['info']['report'], 'type' => 'challenge'], $res['share']);
+        $msg = array_values(array_filter($this->messagesOf($b['uid']), static fn(array $m): bool => (int)$m['id'] === $res['info']['report']));
+        $this->assertCount(1, $msg);
+        $this->assertSame(4, $msg[0]['type']);
+        $this->assertSame($a['uid'], $msg[0]['fromuid']);
+        $this->assertSame('<em uid="' . $a['uid'] . '">' . $self['nickname'] . '</em>跟您切磋了一把，你惨遭失败。', $msg[0]['message']);
+        // 不消耗、不奖励
+        $this->assertSame($silver, (int)DB::table('member')->where('uid', $a['uid'])->value('silver'));
+
+        // 对方没有阵法（右侧 -1）：旧版不战斗，win 为 null，battle 只有双方信息，信件按平局
+        DB::table('member_field')->where('uid', $b['uid'])->update(['matrixid' => 0]);
+        $res = $this->request('challenge', 'action', ['token' => $a['auth']['token'], 'uid' => $b['uid']]);
+        $this->assertSame(1, $res['status']);
+        $this->assertNull($res['info']['win']);
+        $this->assertSame(['left_role', 'right_role'], array_keys($res['battle']));
+        $last = $this->messagesOf($b['uid']);
+        $this->assertStringEndsWith('跟您切磋了一把，双方实力相当，本次平局。', end($last)['message']);
+
+        // 我方阵法没有武将（左侧 -2 按空队伍）：判 -3 大败，对方信件为「大获全胜」
+        DB::table('member_field')->where('uid', $b['uid'])->update(['matrixid' => 1]);
+        $this->emptyFormation($a['uid']);
+        DB::table('matrix')->where('uid', $b['uid'])->update(['position2' => (int)DB::table('general')->where('uid', $b['uid'])->value('id')]);
+        $res = $this->request('challenge', 'action', ['token' => $a['auth']['token'], 'uid' => $b['uid']]);
+        $this->assertSame(-3, $res['info']['win']);
+        $last = $this->messagesOf($b['uid']);
+        $this->assertStringEndsWith('跟您切磋了一把，你大获全胜。', end($last)['message']);
+    }
+
+    public function testChallengeRealBattleReport(): void
+    {
+        $a = $this->newGuestPlayer();
+        $b = $this->newGuestPlayer();
+        $res = $this->request('challenge', 'action', ['token' => $a['auth']['token'], 'uid' => $b['uid']]);
+        $this->assertSame(1, $res['status']);
+        // 战报结构同演武榜（battle_model->battle_pk）
+        foreach (['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff', 'left_role', 'right_role'] as $key) {
+            $this->assertArrayHasKey($key, $res['battle']);
+        }
+        $this->assertNotEmpty($res['battle']['leftteam']);
+        $this->assertNotEmpty($res['battle']['rightteam']);
+        $this->assertNotEmpty($res['battle']['process']);
+        $this->assertSame($res['battle']['assess'], $res['info']['win']);
+        $this->assertContains($res['info']['win'], [-3, -2, -1, 0, 1, 2, 3]);
+    }
+
+    // ---------------------------------------------------------------
+    // 天下史诗（旧版 controllers/epic.php + models/epic_model.php）
+    // ---------------------------------------------------------------
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function epicRequest(array $p, string $method, array $params = []): array
+    {
+        $res = $this->request('epic', $method, $p['auth'] + $params);
+        unset($res['message'], $res['msg']);
+        return $res;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function epicRow(int $uid): array
+    {
+        return DB::table('epic_log')->where('uid', $uid)->first();
+    }
+
+    /**
+     * 找一个让 refresh 的下一次 mt_rand(0, 1390) 落在 (min, max] 的种子（残卷 id 按权重累加的区间）
+     */
+    private function epicSeed(int $min, int $max): int
+    {
+        for ($seed = 1; ; $seed++) {
+            mt_srand($seed);
+            $n = mt_rand(0, 1390);
+            if ($n > $min && $n <= $max) {
+                return $seed;
+            }
+        }
+    }
+
+    public function testEpicIndexSelectAndBuy(): void
+    {
+        // 主公 150 级开放
+        $low = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $low['uid'])->update(['level' => 149]);
+        foreach (['index', 'select_epic', 'refresh', 'force', 'buy_lock_times', 'buy_refresh_times'] as $m) {
+            $this->assertSame(-1, $this->epicRequest($low, $m, ['id' => 1])['status'], $m);
+        }
+        $this->assertNull(DB::table('epic_log')->where('uid', $low['uid'])->first());
+
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => 150, 'vip' => 1, 'gold' => 1000]);
+        $res = $this->epicRequest($p, 'index');
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(0, $res['get_price']);
+        $this->assertSame(10, $res['times']);
+        $this->assertSame(10, $res['refreshprice']);
+        $this->assertSame(5, $res['lockprice']);
+        $this->assertSame(array_values(\Hanjiang\MasterData\Epic::ROWS), $res['list']);
+        $this->assertSame([
+            'uid' => $p['uid'], 'refreshtimes' => 10, 'locktimes' => 5, 'epicid' => 0,
+            'site1' => 0, 'site2' => 0, 'site3' => 0, 'site4' => 0, 'site5' => 0, 'lock_site' => '',
+            'site1_lock' => 0, 'site2_lock' => 0, 'site3_lock' => 0, 'site4_lock' => 0, 'site5_lock' => 0,
+        ], $res['member']);
+
+        // 未选择史诗
+        $this->assertSame(-3, $this->epicRequest($p, 'refresh')['status']);
+        $this->assertSame(['status' => -3], $this->epicRequest($p, 'force'));
+        // 选择背景图
+        $this->assertSame(['status' => -2], $this->epicRequest($p, 'select_epic', ['id' => 0]));
+        $this->assertSame(['status' => -5], $this->epicRequest($p, 'select_epic', ['id' => 99]));
+        $this->assertSame(['status' => 1, 'epicid' => 2], $this->epicRequest($p, 'select_epic', ['id' => 2]));
+        $this->assertSame(['status' => -4], $this->epicRequest($p, 'select_epic', ['id' => 1]));
+        $this->assertSame(500, $this->epicRequest($p, 'index')['get_price']);
+
+        // 购买刷新次数：10 元宝 + 1 次
+        $buy = $this->epicRequest($p, 'buy_refresh_times');
+        $this->assertSame(['status' => 1, 'refreshtimes' => 11, 'all_gold' => 990], $buy);
+        $this->assertSame(1, $this->epicRow($p['uid'])['buy_refreshtimes']);
+        // 购买锁定次数：t = 1 只返回价格
+        $this->assertSame(['status' => 1, 'price' => 15, 'buy_times' => 3, 'locktimes' => 5, 'all_gold' => 990], $this->epicRequest($p, 'buy_lock_times', ['t' => 1, 'num' => 3]));
+        $this->assertSame(['status' => 1, 'price' => 15, 'buy_times' => 3, 'locktimes' => 8, 'all_gold' => 975], $this->epicRequest($p, 'buy_lock_times', ['num' => 3]));
+        $this->assertSame(['status' => 1, 'price' => 5, 'buy_times' => 1, 'locktimes' => 9, 'all_gold' => 970], $this->epicRequest($p, 'buy_lock_times'));
+        DB::table('member')->where('uid', $p['uid'])->update(['gold' => 9]);
+        $this->assertSame(['status' => -3], $this->epicRequest($p, 'buy_refresh_times'));
+        $this->assertSame(['status' => -3], $this->epicRequest($p, 'buy_lock_times', ['num' => 2]));
+        $this->assertSame(9, (int)DB::table('member')->where('uid', $p['uid'])->value('gold'));
+
+        // 强行领取：史诗 2 花 500 元宝得 1000 声望，拼图清空
+        $this->assertSame(['status' => -5], $this->epicRequest($p, 'force'));
+        DB::table('member')->where('uid', $p['uid'])->update(['gold' => 600, 'reputation' => 0]);
+        DB::table('epic_log')->where('uid', $p['uid'])->update(['site1' => 6, 'lock_site' => '1']);
+        $force = $this->epicRequest($p, 'force');
+        $this->assertSame(1, $force['status']);
+        $this->assertSame(1000, $force['add']);
+        $this->assertSame(1000, $force['reputation']);
+        $this->assertSame(100, $force['all_gold']);
+        $this->assertSame([
+            'uid' => $p['uid'], 'refreshtimes' => 11, 'locktimes' => 9, 'epicid' => 0,
+            'site1' => 0, 'site2' => 0, 'site3' => 0, 'site4' => 0, 'site5' => 0, 'lock_site' => '',
+        ], $force['member']);
+        $this->assertSame(0, $this->epicRow($p['uid'])['epicid']);
+
+        // 每日重置：刷新 / 锁定次数按 VIP 重置（VIP 13：55 / 50），购买的次数保留
+        DB::table('epic_log')->where('uid', $p['uid'])->update(['dateline' => time() - 86400, 'refreshtimes' => 0, 'locktimes' => 0]);
+        DB::table('member')->where('uid', $p['uid'])->update(['vip' => 13]);
+        $member = $this->epicRequest($p, 'index')['member'];
+        $this->assertSame(55 + 1, $member['refreshtimes']);
+        $this->assertSame(50 + 4, $member['locktimes']);
+    }
+
+    public function testEpicRefreshCompletesAndDeductsTimes(): void
+    {
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => 150, 'vip' => 1, 'reputation' => 0]);
+        $this->epicRequest($p, 'index');
+        $this->epicRequest($p, 'select_epic', ['id' => 1]);
+
+        // 5 个位置全部锁定 / 锁定次数不足 / 刷新次数不足
+        $this->assertSame(-4, $this->epicRequest($p, 'refresh', ['l' => '1,2,3,4,5'])['status']);
+        DB::table('epic_log')->where('uid', $p['uid'])->update(['locktimes' => 1]);
+        $res = $this->epicRequest($p, 'refresh', ['l' => '1,2']);
+        $this->assertSame(['status' => -6, 'complete' => 0, 'add_reputation' => 0, 'all_reputation' => 0], $res);
+        DB::table('epic_log')->where('uid', $p['uid'])->update(['refreshtimes' => 0]);
+        $this->assertSame(-5, $this->epicRequest($p, 'refresh')['status']);
+
+        // 没有锁定：5 个位置都重新掷（残卷 1 的区间是 [0, 100]），扣 1 次免费刷新
+        DB::table('epic_log')->where('uid', $p['uid'])->update(['refreshtimes' => 10, 'locktimes' => 5]);
+        $seed = $this->epicSeed(-1, 100);
+        mt_srand($seed);
+        $res = $this->epicRequest($p, 'refresh');
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(0, $res['complete']);
+        $this->assertSame(1, $res['member']['site1']);
+        $this->assertSame(2, $res['member']['site1_lock'], '位置 1 正好是史诗 1 的第 1 张残卷，提示可锁定');
+        $this->assertSame(9, $res['member']['refreshtimes']);
+        $this->assertSame(5, $res['member']['locktimes']);
+        $row = $this->epicRow($p['uid']);
+        $this->assertSame(9, $row['refreshtimes']);
+        for ($i = 1; $i <= 5; $i++) {
+            $this->assertSame($res['member']['site' . $i], $row['site' . $i]);
+        }
+
+        // 锁定 1~4（已经是残卷 1~4），只掷位置 5：落在残卷 5 的区间 (400, 500] 即完成，得 500 声望并清空
+        DB::table('epic_log')->where('uid', $p['uid'])->update(['site1' => 1, 'site2' => 2, 'site3' => 3, 'site4' => 4, 'site5' => 0, 'locktimes' => 2, 'buy_locktimes' => 3]);
+        mt_srand($this->epicSeed(400, 500));
+        $res = $this->epicRequest($p, 'refresh', ['l' => '1,2,3,4']);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1, $res['complete']);
+        $this->assertSame(500, $res['add_reputation']);
+        $this->assertSame(500, $res['all_reputation']);
+        $this->assertSame(0, $res['member']['epicid']);
+        $this->assertSame('', $res['member']['lock_site']);
+        // 锁定次数先扣免费（2）再扣购买（3 - 2）
+        $this->assertSame(0 + 1, $res['member']['locktimes']);
+        $row = $this->epicRow($p['uid']);
+        $this->assertSame([0, 1, 0, 0, ''], [$row['locktimes'], $row['buy_locktimes'], $row['epicid'], $row['site1'], $row['lock_site']]);
+        $this->assertSame(500, (int)DB::table('member')->where('uid', $p['uid'])->value('reputation'));
+
+        // 免费刷新次数用完后扣购买的次数；没完成时记录锁定位置
+        $this->epicRequest($p, 'select_epic', ['id' => 9]);
+        DB::table('epic_log')->where('uid', $p['uid'])->update(['refreshtimes' => 0, 'buy_refreshtimes' => 2, 'locktimes' => 5, 'buy_locktimes' => 0]);
+        $res = $this->epicRequest($p, 'refresh', ['l' => '2']);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1, $res['member']['site2_lock']);
+        $row = $this->epicRow($p['uid']);
+        $this->assertSame([0, 1, 4, '2'], [$row['refreshtimes'], $row['buy_refreshtimes'], $row['locktimes'], $row['lock_site']]);
+    }
+
+    // ---------------------------------------------------------------
+    // 过关斩将（旧版 controllers/pass_general.php + models/passgeneral_model.php + cron_acttask::pass_general）
+    // ---------------------------------------------------------------
+
+    /** 活动期间（activity_time pass_general：0 ~ 2016-12-31 00:00） */
+    private function passOpenAt(string $datetime = '2016-06-01 12:00:00'): int
+    {
+        $ts = (int)strtotime($datetime);
+        \Hanjiang\Model\BossClock::freeze($ts);
+        return $ts;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function passRequest(array $p, string $method, array $params = []): array
+    {
+        // 响应信封补的 message（以及成功时的 msg = ok）去掉；失败时的 msg 是旧版语言包文案，保留
+        $res = $this->request('pass_general', $method, $p['auth'] + $params);
+        unset($res['message']);
+        if (($res['msg'] ?? null) === 'ok') {
+            unset($res['msg']);
+        }
+        return $res;
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function passRow(int $uid): array
+    {
+        return array_map('intval', DB::table('passgeneral')->where('uid', $uid)->where('version', 34)->first());
+    }
+
+    /**
+     * @return array{uid: int, auth: array{token: string, uid: int}}
+     */
+    private function passPlayer(int $gold = 100000): array
+    {
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['gold' => $gold, 'silver' => 0, 'reputation' => 0]);
+        foreach (['_passgeneral_action_lock', '_passgeneral_lottery_lock', '_passgeneral_acieve_action_lock', '_passgeneral_reward_action_lock'] as $key) {
+            Redis::del($key . $p['uid']);
+        }
+        return $p;
+    }
+
+    private function passLottery(int $uid): int
+    {
+        return (int)DB::table('member_integral')->where('uid', $uid)->value('act_kemari_int');
+    }
+
+    private function passJade(int $uid, int $type): int
+    {
+        return (int)((Redis::getJson('user_trader:' . $uid) ?: [])['get' . $type] ?? 0);
+    }
+
+    /**
+     * 找一个让过人掷点 mt_rand(0, 100) 满足 $want 的种子
+     */
+    private function passSeed(callable $want): int
+    {
+        for ($seed = 1; ; $seed++) {
+            mt_srand($seed);
+            if ($want(mt_rand(0, 100))) {
+                return $seed;
+            }
+        }
+    }
+
+    public function testPassGeneralClosedInProduction(): void
+    {
+        // 活动 2016-12-31 结束：现在一律 -1（action 旧版不解锁，30 秒内再请求返回 2「操作太快了」）
+        $p = $this->passPlayer();
+        foreach (['index', 'achievement_reward', 'reward_info', 'lottery_index', 'action_achievement_reward', 'action_reward', 'action_lottery'] as $m) {
+            $this->assertSame(['status' => -1, 'msg' => '活动未开启！'], $this->passRequest($p, $m, ['id' => 1, 'aid' => 1]), $m);
+        }
+        $this->assertSame(['status' => -1, 'msg' => '活动未开启！'], $this->passRequest($p, 'action', ['id' => 1, 'type' => 1]));
+        $this->assertSame(['status' => 2, 'msg' => '操作太快了！'], $this->passRequest($p, 'action', ['id' => 1, 'type' => 1]));
+        $this->assertNull(DB::table('passgeneral')->where('uid', $p['uid'])->first());
+        $this->assertSame(0, \Hanjiang\Cron\PassGeneralCron::updatePassGeneralInfo(\Hanjiang\Model\PassGeneral::activity(), time()));
+    }
+
+    public function testPassGeneralIndexAndAction(): void
+    {
+        $now = $this->passOpenAt();
+        try {
+            $p = $this->passPlayer();
+            $res = $this->passRequest($p, 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(1, $res['pass_id']);
+            $this->assertSame('01月01日-12月31日', $res['time']);
+            $this->assertSame(0, $res['achieve_popo']);
+            $this->assertCount(11, $res['pass_info']);
+            $this->assertSame(['id' => 1, 'name' => \Hanjiang\MasterData\General::ROWS[106]['name'], 'image' => \Hanjiang\MasterData\General::ROWS[106]['image'], 'show_status' => 2], $res['pass_info'][0]);
+            $this->assertSame(3, $res['pass_info'][10]['show_status']);
+            $this->assertSame([
+                ['reward_status' => 1, 'box_id' => 1], ['reward_status' => 1, 'box_id' => 2],
+                ['reward_status' => 1, 'box_id' => 3], ['reward_status' => 1, 'box_id' => 4],
+            ], $res['reward_info']);
+            // 3 次免费过人；强行突破没有免费次数也没有 CD（旧版 cd = 0 - 当前时间）
+            $this->assertSame([
+                ['id' => 1, 'cd' => 0, 'price' => 0, 'times' => 3],
+                ['id' => 2, 'cd' => -$now, 'price' => 250, 'times' => 0],
+            ], $res['price_list']);
+            $row = $this->passRow($p['uid']);
+            $this->assertSame([0, 3, 1, 0, 0, 1], [$row['num'], $row['free_times1'], $row['pass_id'], $row['is_pass'], $row['succ_num'], $row['is_get']]);
+
+            // 参数 / 进度校验
+            $this->assertSame(['status' => -2, 'msg' => '传参类型错误'], $this->passRequest($p, 'action', ['id' => 0, 'type' => 1]));
+            $this->assertSame(['status' => -2, 'msg' => '传参类型错误'], $this->passRequest($p, 'action', ['id' => 1, 'type' => 3]));
+            $this->assertSame(['status' => 4, 'msg' => '您不能挑战该球员'], $this->passRequest($p, 'action', ['id' => 2, 'type' => 1]));
+            // 防刷锁
+            Redis::set('_passgeneral_action_lock' . $p['uid'], 1, 30);
+            $this->assertSame(['status' => 2, 'msg' => '操作太快了！'], $this->passRequest($p, 'action', ['id' => 1, 'type' => 1]));
+            Redis::del('_passgeneral_action_lock' . $p['uid']);
+
+            // 免费过人失败（掷点 > 80）：不扣元宝，退回本层第一名守将，免费次数 - 1，30 分钟 CD
+            mt_srand($this->passSeed(static fn(int $n): bool => $n > 80));
+            $res = $this->passRequest($p, 'action', ['id' => 1, 'type' => 1]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(0, $res['is_succ']);
+            $this->assertSame(1, $res['pass_id']);
+            $this->assertSame(100000, $res['all_gold']);
+            $this->assertSame(['id' => 1, 'cd' => 1800, 'price' => 125, 'times' => 2], $res['price_list'][0]);
+            $this->assertContains($res['reward']['type'], array_column(array_filter(\Hanjiang\MasterData\PassgeneralReward::ROWS, static fn(array $r): bool => $r['num'] === 1 && $r['is_succ'] === 0), 'type'));
+            $this->assertArrayNotHasKey('rate', $res['reward']);
+            $log = DB::table('passgeneral_log')->where('uid', $p['uid'])->get();
+            $this->assertCount(1, $log);
+            $this->assertSame([34, 1, 1, 106, 0, $res['reward']['type'], $res['reward']['value'], $now], [(int)$log[0]['version'], (int)$log[0]['num'], (int)$log[0]['num_id'], (int)$log[0]['g_id'], (int)$log[0]['is_succ'], (int)$log[0]['type'], (int)$log[0]['value'], (int)$log[0]['dateline']]);
+            $row = $this->passRow($p['uid']);
+            $this->assertSame([2, $now + 1800, 1, 0], [$row['free_times1'], $row['normal_time1'], $row['pass_id'], $row['is_pass']]);
+
+            // CD 中普通过人扣 price1（125）；成功进到下一名守将
+            mt_srand($this->passSeed(static fn(int $n): bool => $n <= 80));
+            $res = $this->passRequest($p, 'action', ['id' => 1, 'type' => 1]);
+            $this->assertSame(1, $res['is_succ']);
+            $this->assertSame(2, $res['pass_id']);
+            $this->assertSame(100000 - 125, $res['all_gold']);
+            $this->assertSame(2, $this->passRow($p['uid'])['free_times1'], 'CD 中不消耗免费次数');
+            $this->assertSame([1, 2, 3], array_column(array_slice($res['pass_info'], 0, 3), 'show_status'));
+
+            // 强行突破（price2，必定成功）：本层最后一名守将突破后宝箱可领取，未领取前不能继续
+            DB::table('passgeneral')->where('uid', $p['uid'])->update(['pass_id' => 4, 'is_pass' => 3]);
+            $res = $this->passRequest($p, 'action', ['id' => 4, 'type' => 2]);
+            $this->assertSame(1, $res['is_succ']);
+            $this->assertSame(5, $res['pass_id']);
+            $this->assertSame(100000 - 125 - 400, $res['all_gold']);
+            $this->assertSame(2, $res['reward_info'][0]['reward_status']);
+            $this->assertSame(['status' => 4, 'msg' => '请先领取您的宝箱奖励'], $this->passRequest($p, 'action', ['id' => 5, 'type' => 2]));
+
+            // 元宝不足
+            DB::table('passgeneral')->where('uid', $p['uid'])->update(['is_get' => 1]);
+            DB::table('member')->where('uid', $p['uid'])->update(['gold' => 299]);
+            $this->assertSame(['status' => 3, 'msg' => '元宝不足'], $this->passRequest($p, 'action', ['id' => 5, 'type' => 2]));
+            $this->assertSame(['status' => 4, 'msg' => '已经突破过该球员'], $this->passRequest($p, 'action', ['id' => 4, 'type' => 2]));
+
+            // 突破最后一名守将：pass_id 12、通关次数 + 1、第 4 层宝箱可领取、成就可领取
+            DB::table('member')->where('uid', $p['uid'])->update(['gold' => 100000]);
+            DB::table('passgeneral')->where('uid', $p['uid'])->update(['num' => 3, 'pass_id' => 11, 'is_pass' => 10]);
+            $res = $this->passRequest($p, 'action', ['id' => 11, 'type' => 2]);
+            $this->assertSame(12, $res['pass_id']);
+            $this->assertSame(1, $res['achieve_popo']);
+            $this->assertSame([1], array_values(array_unique(array_column($res['pass_info'], 'show_status'))));
+            $this->assertSame(['id' => 1, 'cd' => 1800, 'price' => 125, 'times' => 2], $res['price_list'][0], '全部突破后按第 1 名守将的价格');
+            $row = $this->passRow($p['uid']);
+            $this->assertSame([12, 11, 1, 2], [$row['pass_id'], $row['is_pass'], $row['succ_num'], $row['is_get']]);
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    public function testPassGeneralActionRewardGrantsByType(): void
+    {
+        $this->passOpenAt();
+        try {
+            $p = $this->passPlayer();
+            $this->passRequest($p, 'index');
+            // 强行突破第 1 名守将（必定成功），按奖励类型核对发放
+            for ($round = 0; $round < 8; $round++) {
+                DB::table('passgeneral')->where('uid', $p['uid'])->update(['pass_id' => 1, 'is_pass' => 0, 'is_get' => 1, 'num' => 0]);
+                $before = [
+                    'lottery' => $this->passLottery($p['uid']),
+                    'yellow' => $this->passJade($p['uid'], 2),
+                    'soul' => (int)DB::table('member')->where('uid', $p['uid'])->value('soul'),
+                    'freeleap' => (int)DB::table('member_field')->where('uid', $p['uid'])->value('freeleap'),
+                ];
+                $res = $this->passRequest($p, 'action', ['id' => 1, 'type' => 2]);
+                $this->assertSame(1, $res['status']);
+                $reward = $res['reward'];
+                $value = $reward['value'];
+                match ($reward['type']) {
+                    27 => $this->assertSame($before['lottery'] + $value, $this->passLottery($p['uid'])),
+                    3 => $this->assertSame($before['yellow'] + $value, $this->passJade($p['uid'], 2)),
+                    5 => $this->assertSame($before['soul'] + $value, (int)DB::table('member')->where('uid', $p['uid'])->value('soul')),
+                    10 => $this->assertSame($before['freeleap'] + $value, (int)DB::table('member_field')->where('uid', $p['uid'])->value('freeleap')),
+                    9 => $this->assertSame($before, [
+                        'lottery' => $this->passLottery($p['uid']), 'yellow' => $this->passJade($p['uid'], 2),
+                        'soul' => (int)DB::table('member')->where('uid', $p['uid'])->value('soul'),
+                        'freeleap' => (int)DB::table('member_field')->where('uid', $p['uid'])->value('freeleap'),
+                    ], '宝石碎片依赖未移植，不发放'),
+                    26 => $this->assertSame($value, $reward['general']['generalid']),
+                };
+                if ($reward['type'] === 27) {
+                    $log = DB::table('integral_log')->where('uid', $p['uid'])->orderBy('id', 'DESC')->first();
+                    $this->assertSame([1, $value, $this->passLottery($p['uid']), 'pass_general', 'action', 'act_kemari_int'], [(int)$log['type'], (int)$log['intnum'], (int)$log['balance'], $log['class'], $log['method'], $log['argument']]);
+                }
+            }
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    public function testPassGeneralRandArrIntervals(): void
+    {
+        // 区间 [k + 1, rate × 10 + k]，随机数须大于下限（下限本身落空）；最多掷 count 次，凑够 1 个即停
+        $rows = [['id' => 2, 'rate' => 1.0], ['id' => 1, 'rate' => 1.0]];
+        $pick = static function (int $n): int {
+            // 排序后 id 1 在前：id 1 为 [1, 10]、id 2 为 [11, 20]
+            return match (true) {
+                $n > 1 && $n <= 10 => 1,
+                $n > 11 && $n <= 20 => 2,
+                default => 0,
+            };
+        };
+        $seen = [];
+        for ($seed = 1; $seed <= 300; $seed++) {
+            mt_srand($seed);
+            $n = mt_rand(1, 10);
+            mt_srand($seed);
+            $one = \Hanjiang\Model\PassGeneral::randArr([$rows[0]], 1.0, 1)['info'];
+            $this->assertSame($n > 1 ? [2] : [], array_column($one, 'id'), "seed {$seed}");
+
+            mt_srand($seed);
+            $want = $pick(mt_rand(1, 20));
+            if ($want === 0) {
+                $want = $pick(mt_rand(1, 20));
+            }
+            mt_srand($seed);
+            $two = \Hanjiang\Model\PassGeneral::randArr($rows, 2.0, 1)['info'];
+            $this->assertSame($want === 0 ? [] : [$want], array_column($two, 'id'), "seed {$seed}");
+            $seen[$want] = true;
+        }
+        $this->assertArrayHasKey(0, $seen, '两次都落在下限上时没有奖励');
+        $this->assertArrayHasKey(1, $seen);
+        $this->assertArrayHasKey(2, $seen);
+    }
+
+    public function testPassGeneralBoxRewards(): void
+    {
+        $now = $this->passOpenAt();
+        try {
+            $p = $this->passPlayer();
+            $this->passRequest($p, 'index');
+
+            // 宝箱预览：第 1 层固定 3 件（兑奖券 10、紫宝石 50、声望 5000）
+            $preview = $this->passRequest($p, 'reward_info', ['id' => 1]);
+            $this->assertSame(1, $preview['status']);
+            $this->assertSame('第1层奖励', $preview['info']);
+            $this->assertSame(1, $preview['reward_status']);
+            $this->assertSame([
+                ['type' => 27, 'value' => 10, 'name' => '兑奖券'],
+                ['type' => 4, 'value' => 50, 'name' => '紫宝石'],
+                ['type' => 7, 'value' => 5000, 'name' => '声望'],
+            ], $preview['reward']);
+            $this->assertSame(['status' => 2, 'msg' => '传参类型错误'], $this->passRequest($p, 'reward_info', ['id' => 0]));
+            $this->assertSame(['status' => -2, 'msg' => '获取宝箱奖励失败'], $this->passRequest($p, 'reward_info', ['id' => 5]));
+            // 超级奖励：同类型只列第一次出现的，武将按星级从高到低排在最后
+            $super = $this->passRequest($p, 'reward_info', ['id' => 4]);
+            $this->assertSame('超级奖励', $super['info']);
+            $types = array_column($super['reward'], 'type');
+            $this->assertSame([4, 10, 7, 27, 20, 17, 21, 18, 22, 19], array_slice($types, 0, 10));
+            $generals = array_slice($super['reward'], 10 + 9);
+            $stars = array_column($generals, 'star');
+            $sorted = $stars;
+            rsort($sorted);
+            $this->assertSame($sorted, $stars);
+            $this->assertArrayHasKey('talent', $generals[0]['general']);
+
+            // 未达成 / 层数不对 / 已领取
+            $this->assertSame(['status' => 2, 'msg' => '不能领取该宝箱奖励'], $this->passRequest($p, 'action_reward', ['id' => 1]));
+            DB::table('passgeneral')->where('uid', $p['uid'])->update(['is_get' => 2, 'pass_id' => 5, 'is_pass' => 4]);
+            $this->assertSame(['status' => 2, 'msg' => '不能领取该宝箱奖励'], $this->passRequest($p, 'action_reward', ['id' => 2]));
+            $this->assertSame(['status' => -3, 'msg' => '传参类型错误'], $this->passRequest($p, 'action_reward', ['id' => 0]));
+            $this->assertSame(2, $this->passRequest($p, 'reward_info', ['id' => 1])['reward_status']);
+
+            $lottery = $this->passLottery($p['uid']);
+            $purple = $this->passJade($p['uid'], 3);
+            $res = $this->passRequest($p, 'action_reward', ['id' => 1]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(5, $res['pass_id']);
+            $this->assertSame(0, $res['is_full']);
+            $this->assertSame([
+                ['type' => 27, 'value' => 10, 'name' => '兑奖券'],
+                ['type' => 4, 'value' => 50, 'name' => '紫宝石'],
+                ['type' => 7, 'value' => 5000, 'name' => '声望'],
+            ], $res['reward']);
+            $this->assertSame([3, 1, 1, 1], array_column($res['reward_info'], 'reward_status'));
+            $this->assertSame($lottery + 10, $this->passLottery($p['uid']));
+            $this->assertSame($purple + 50, $this->passJade($p['uid'], 3));
+            $this->assertSame(5000, (int)DB::table('member')->where('uid', $p['uid'])->value('reputation'));
+            $row = $this->passRow($p['uid']);
+            $this->assertSame([1, 1, 5], [$row['num'], $row['is_get'], $row['pass_id']]);
+            // 旧版日志 value1 记的是 type1
+            $log = DB::table('passgeneral_box_log')->where('uid', $p['uid'])->get();
+            $this->assertCount(1, $log);
+            $this->assertSame([0, 27, 27, 4, 50, 7, 5000, $now], [(int)$log[0]['num'], (int)$log[0]['type1'], (int)$log[0]['value1'], (int)$log[0]['type2'], (int)$log[0]['value2'], (int)$log[0]['type3'], (int)$log[0]['value3'], (int)$log[0]['dateline']]);
+            $this->assertSame(['status' => 2, 'msg' => '不能领取该宝箱奖励'], $this->passRequest($p, 'action_reward', ['id' => 1]));
+            $this->assertSame(3, $this->passRequest($p, 'reward_info', ['id' => 1])['reward_status']);
+
+            // 第 4 层超级大奖：加权抽一行，领完回到第 1 名守将
+            DB::table('passgeneral')->where('uid', $p['uid'])->update(['num' => 3, 'is_get' => 2, 'pass_id' => 12, 'is_pass' => 11]);
+            $res = $this->passRequest($p, 'action_reward', ['id' => 4]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(1, $res['pass_id']);
+            $this->assertLessThanOrEqual(1, count($res['reward']));
+            $row = $this->passRow($p['uid']);
+            $this->assertSame([0, 1, 0, 1], [$row['num'], $row['pass_id'], $row['is_pass'], $row['is_get']]);
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    public function testPassGeneralAchievements(): void
+    {
+        $now = $this->passOpenAt();
+        try {
+            $p = $this->passPlayer();
+            $this->passRequest($p, 'index');
+            DB::table('passgeneral')->where('uid', $p['uid'])->update(['succ_num' => 1]);
+
+            $res = $this->passRequest($p, 'achievement_reward');
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(1, $res['num']);
+            $this->assertSame(array_column(\Hanjiang\MasterData\PassgeneralAchievement::ROWS, 'num'), $res['num_list']);
+            $this->assertSame(['id' => 1, 'desc' => '突破所有人1次', 'open' => 1, 'type1' => 27, 'value1' => 20, 'type2' => 4, 'value2' => 100, 'type3' => 2, 'value3' => 5000000], $res['list'][0]);
+            $this->assertSame(0, $res['list'][1]['open']);
+
+            $this->assertSame(['status' => -3, 'msg' => '传参类型错误'], $this->passRequest($p, 'action_achievement_reward', ['aid' => 0]));
+            $this->assertSame(['status' => -2, 'msg' => '获取奖券基础表信息失败'], $this->passRequest($p, 'action_achievement_reward', ['aid' => 99]));
+            $this->assertSame(['status' => 2, 'msg' => '成就未达成'], $this->passRequest($p, 'action_achievement_reward', ['aid' => 2]));
+
+            $lottery = $this->passLottery($p['uid']);
+            $purple = $this->passJade($p['uid'], 3);
+            $res = $this->passRequest($p, 'action_achievement_reward', ['aid' => 1]);
+            $this->assertSame(['achieve_popo' => 0, 'status' => 1, 'all_gold' => 100000, 'all_silver' => 5000000], $res);
+            $this->assertSame($lottery + 20, $this->passLottery($p['uid']));
+            $this->assertSame($purple + 100, $this->passJade($p['uid'], 3));
+            $this->assertSame(['status' => 3, 'msg' => '已经领取成就奖励'], $this->passRequest($p, 'action_achievement_reward', ['aid' => 1]));
+            $this->assertSame(2, $this->passRequest($p, 'achievement_reward')['list'][0]['open']);
+            $this->assertSame(1, DB::table('passgeneral_achievement_log')->where('uid', $p['uid'])->count());
+            $log = DB::table('integral_log')->where('uid', $p['uid'])->orderBy('id', 'DESC')->first();
+            $this->assertSame([1, 20, 'action_achievement_reward', $now], [(int)$log['type'], (int)$log['intnum'], $log['method'], (int)$log['dateline']]);
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    public function testPassGeneralLotteryExchange(): void
+    {
+        $now = $this->passOpenAt();
+        try {
+            $p = $this->passPlayer();
+            $res = $this->passRequest($p, 'lottery_index');
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(0, $res['lottery_num']);
+            $this->assertCount(count(\Hanjiang\MasterData\ActkemariExchangeLottery::ROWS), $res['list']);
+            $this->assertSame(['type' => 2, 'value' => 2000000, 'lottery_num' => 10, 'id' => 1, 'name' => '银币', 'is_exch' => 0], $res['list'][0]);
+            // 打造材料：value 为数量（value1），info 为材料模板
+            $this->assertSame(1, $res['list'][3]['value']);
+            $this->assertSame(23, $res['list'][3]['info']['materials_id']);
+            $this->assertSame(62, $res['list'][22]['info']['id']);
+
+            $this->assertSame(['status' => -3, 'msg' => '获取奖券基础表信息失败'], $this->passRequest($p, 'action_lottery', ['id' => 999]));
+            $this->assertSame(['status' => 3, 'msg' => '兑奖券不足'], $this->passRequest($p, 'action_lottery', ['id' => 1]));
+
+            DB::table('member_integral')->where('uid', $p['uid'])->update(['act_kemari_int' => 30]);
+            $res = $this->passRequest($p, 'action_lottery', ['id' => 1]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(20, $res['lottery_num']);
+            $this->assertSame(['id' => 1, 'type' => 2, 'value' => 2000000, 'value1' => 0, 'lottery_num' => 10, 'is_exch' => 1], $res['reward']);
+            $this->assertSame(1, $res['list'][0]['is_exch']);
+            $this->assertSame(2000000, (int)DB::table('member')->where('uid', $p['uid'])->value('silver'));
+            $log = DB::table('integral_log')->where('uid', $p['uid'])->orderBy('id', 'DESC')->first();
+            $this->assertSame([2, 10, 20, 'action_lottery'], [(int)$log['type'], (int)$log['intnum'], (int)$log['balance'], $log['method']]);
+            $ex = DB::table('passgeneral_exchange_log')->where('uid', $p['uid'])->first();
+            $this->assertSame([34, 2, 2000000, 10, $now], [(int)$ex['version'], (int)$ex['type'], (int)$ex['value'], (int)$ex['lottery_num'], (int)$ex['dateline']]);
+
+            // 打造材料：发到 own_materials
+            $res = $this->passRequest($p, 'action_lottery', ['id' => 4]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(2, $res['lottery_num']);
+            $this->assertSame(1, $res['reward']['value']);
+            $this->assertSame(23, $res['reward']['id']);
+            $this->assertSame(23, $res['reward']['equipmairt']['materials_id']);
+            $this->assertSame(1, (int)DB::table('own_materials')->where('uid', $p['uid'])->where('materials_id', 23)->value('num'));
+
+            // 参数错误：旧版解错了锁，30 秒内再兑换返回 2
+            $this->assertSame(['status' => -2, 'msg' => '传参类型错误'], $this->passRequest($p, 'action_lottery', ['id' => 0]));
+            $this->assertSame(['status' => 2, 'msg' => '操作太快了！'], $this->passRequest($p, 'action_lottery', ['id' => 1]));
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    public function testPassGeneralDailyResetAndCron(): void
+    {
+        $now = $this->passOpenAt();
+        try {
+            // 请求时的每日清理：刷新时间不是今天，未领取的宝箱自动发放并发信，再重置进度与免费次数
+            $p = $this->passPlayer();
+            $this->passRequest($p, 'index');
+            DB::table('passgeneral')->where('uid', $p['uid'])->update([
+                'refresh_time' => $now - 86400, 'is_get' => 2, 'num' => 0, 'pass_id' => 5, 'is_pass' => 4, 'free_times1' => 0, 'normal_time1' => $now + 600, 'succ_num' => 3,
+            ]);
+            $lottery = $this->passLottery($p['uid']);
+            $res = $this->passRequest($p, 'index');
+            $this->assertSame(1, $res['pass_id']);
+            $row = $this->passRow($p['uid']);
+            $this->assertSame([0, 1, 0, 1, 3, 0, $now, 3], [$row['num'], $row['pass_id'], $row['is_pass'], $row['is_get'], $row['free_times1'], $row['normal_time1'], $row['refresh_time'], $row['succ_num']]);
+            $this->assertSame($lottery + 10, $this->passLottery($p['uid']));
+            $this->assertSame(5000, (int)DB::table('member')->where('uid', $p['uid'])->value('reputation'));
+            $messages = $this->messagesOf($p['uid']);
+            $this->assertSame('亲爱的玩家！您今天未领取的过关斩将奖励，系统已自动领取，共获得：兑奖券10个，紫宝石50个，声望5000个，请查收!', end($messages)['message']);
+            $this->assertSame(1, end($messages)['type']);
+            // 同一天再请求不再清理
+            DB::table('passgeneral')->where('uid', $p['uid'])->update(['pass_id' => 2, 'is_pass' => 1]);
+            $this->passRequest($p, 'index');
+            $this->assertSame(2, $this->passRow($p['uid'])['pass_id']);
+
+            // 计划任务：活动开始 5 小时内不执行
+            DB::execute('DELETE FROM `zc_sanguo_passgeneral` WHERE `uid` <> :uid', ['uid' => $p['uid']]);
+            $q = $this->passPlayer();
+            $this->passRequest($q, 'index');
+            DB::table('passgeneral')->whereIn('uid', [$p['uid'], $q['uid']])->update(['is_get' => 2, 'num' => 0, 'pass_id' => 5]);
+            \Hanjiang\Cron\PassGeneralCron::run(17999);
+            $this->assertSame(2, $this->passRow($q['uid'])['is_get']);
+
+            // 旧版循环计数的缺陷照搬：只有第一个待领取的玩家拿到奖励，其余玩家只收到信件与日志；全部重置
+            $repP = (int)DB::table('member')->where('uid', $p['uid'])->value('reputation');
+            $repQ = (int)DB::table('member')->where('uid', $q['uid'])->value('reputation');
+            $activity = \Hanjiang\Model\PassGeneral::activity();
+            $this->assertSame(2, \Hanjiang\Cron\PassGeneralCron::updatePassGeneralInfo($activity, $now));
+            $this->assertSame($repP + 5000, (int)DB::table('member')->where('uid', $p['uid'])->value('reputation'));
+            $this->assertSame($repQ, (int)DB::table('member')->where('uid', $q['uid'])->value('reputation'));
+            $qMessages = $this->messagesOf($q['uid']);
+            $this->assertSame('亲爱的玩家！您今天未领取的过关斩将奖励，系统已自动领取，共获得：请查收!', end($qMessages)['message']);
+            $qLog = DB::table('passgeneral_box_log')->where('uid', $q['uid'])->get();
+            $this->assertCount(1, $qLog);
+            $this->assertSame([27, 0, 4, 7], [(int)$qLog[0]['type1'], (int)$qLog[0]['value1'], (int)$qLog[0]['type2'], (int)$qLog[0]['type3']]);
+            foreach ([$p['uid'], $q['uid']] as $uid) {
+                $row = $this->passRow($uid);
+                $this->assertSame([0, 1, 1, 3], [$row['num'], $row['pass_id'], $row['is_get'], $row['free_times1']]);
+            }
+            $this->assertSame(0, \Hanjiang\Cron\PassGeneralCron::updatePassGeneralInfo($activity, $activity['endtime'] + 1), '活动结束后不再清理');
+
+            // 活动结束后 10 小时内：兑奖券按 20000 银币兑换、自动领取未领的成就
+            $end = $activity['endtime'];
+            DB::table('member_integral')->where('act_kemari_int', '>', 0)->update(['act_kemari_int' => 0]);
+            \Hanjiang\Model\PassGeneral::lotteryInfo($q['uid']);
+            DB::table('member_integral')->where('uid', $q['uid'])->update(['act_kemari_int' => 7]);
+            DB::table('member')->where('uid', $q['uid'])->update(['silver' => 0]);
+            DB::table('passgeneral')->where('uid', $q['uid'])->update(['succ_num' => 3]);
+            DB::table('passgeneral')->where('uid', $p['uid'])->update(['succ_num' => 0]);
+            $this->assertSame(0, \Hanjiang\Cron\PassGeneralCron::getPassGeneralNumReward($activity, $end - 1));
+            $this->assertSame(0, \Hanjiang\Cron\PassGeneralCron::getPassGeneralNumReward($activity, $end + 36001));
+            $this->assertSame(1, \Hanjiang\Cron\PassGeneralCron::getPassGeneralNumReward($activity, $end + 3600));
+            $this->assertSame(0, $this->passLottery($q['uid']));
+            $this->assertSame(140000, (int)DB::table('member')->where('uid', $q['uid'])->value('silver'));
+            $qMessages = $this->messagesOf($q['uid']);
+            $this->assertSame('过关斩将活动已结束，您未兑换的兑奖券，系统已自动兑换，兑换银币140000个，请查收!', end($qMessages)['message']);
+
+            // 成就 1（1 次）、2（3 次）自动领取：同类型累加（兑奖券 50、紫宝石 300、银币 13000000）
+            $purple = $this->passJade($q['uid'], 3);
+            $this->assertSame(1, \Hanjiang\Cron\PassGeneralCron::getPassgeneralAchieveReward($activity, $end + 3600));
+            $this->assertSame(50, $this->passLottery($q['uid']));
+            $this->assertSame($purple + 300, $this->passJade($q['uid'], 3));
+            $this->assertSame(140000 + 13000000, (int)DB::table('member')->where('uid', $q['uid'])->value('silver'));
+            $this->assertSame(2, DB::table('passgeneral_achievement_log')->where('uid', $q['uid'])->count());
+            $qMessages = $this->messagesOf($q['uid']);
+            $this->assertSame('亲爱的玩家！过关斩将活动已结束，您未领取的成就奖励已自动帮您领取，共获得：兑奖券50个，紫宝石300个，银币13000000个，请查收!', end($qMessages)['message']);
+            $this->assertSame(0, \Hanjiang\Cron\PassGeneralCron::getPassgeneralAchieveReward($activity, $end + 3600), '已领取的不再发放');
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    // ---------------------------------------------------------------
+    // 批次 batch2：四象圣域 / 通天塔 / 英雄王座 / 金银岛（按旧版移植）
+    // ---------------------------------------------------------------
+
+    /**
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private function b2Request(string $controller, string $method, array $params = []): array
+    {
+        $res = $this->request($controller, $method, $params);
+        unset($res['message']);
+        if (($res['msg'] ?? null) === 'ok') {
+            unset($res['msg']);
+        }
+        return $res;
+    }
+
+    /**
+     * @param array<string, mixed> $member
+     * @return array{uid: int, auth: array<string, mixed>}
+     */
+    private function b2Player(int $level, array $member = []): array
+    {
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => $level] + $member);
+        return $p;
+    }
+
+    /**
+     * 阵法里的武将提到远超守军的等级（四象圣域 / 英雄王座高层守军血量近千万），让胜负不依赖随机数
+     */
+    private function b2Overpower(int $uid): void
+    {
+        DB::table('general')->where('uid', $uid)->update(['level' => 2000000]);
+    }
+
+    private function b2Member(int $uid, string $column): int
+    {
+        return (int)DB::table('member')->where('uid', $uid)->value($column);
+    }
+
+    /**
+     * @return array<string, int>
+     */
+    private function b2Row(string $table, int $uid, array $columns): array
+    {
+        $row = DB::table($table)->where('uid', $uid)->first();
+        $this->assertNotNull($row, $table);
+        $return = [];
+        foreach ($columns as $column) {
+            $return[$column] = (int)$row[$column];
+        }
+        return $return;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private static function sanctumMission(int $id): array
+    {
+        foreach (\Hanjiang\MasterData\SanctumMission::ROWS as $row) {
+            if ($row['id'] === $id) {
+                return $row;
+            }
+        }
+        throw new \RuntimeException("SanctumMission {$id}");
+    }
+
+    public function testSanctumIndexSelectMapAndMissionInfo(): void
+    {
+        // 旧版等级小于 140 不开放
+        $low = $this->b2Player(139);
+        foreach (['index', 'select_map', 'get_mission_info', 'buy_times', 'get_mission_report_list', 'get_reward'] as $m) {
+            $this->assertSame(2, $this->b2Request('sanctum', $m, $low['auth'] + ['id' => 1])['status'], $m);
+        }
+        $this->assertSame(2, $this->b2Request('sanctum', 'action', $low['auth'] + ['id' => 1])['status']);
+
+        $p = $this->b2Player(140);
+        $uid = $p['uid'];
+        $index = $this->b2Request('sanctum', 'index', $p['auth']);
+        $this->assertSame(['status' => 1, 'list' => [1 => ['pass' => 0], 2 => ['pass' => 0], 3 => ['pass' => 0], 4 => ['pass' => 0], 5 => ['pass' => 0]]], $index);
+        $this->assertNull(DB::table('sanctum_open_map')->where('uid', $uid)->first(), 'index 不建档');
+
+        // 不传圣域时取 sanctum_log 记录的上次位置（首次建档 1 圣域 1 层）
+        $map = $this->b2Request('sanctum', 'select_map', $p['auth']);
+        $this->assertSame(1, $map['status']);
+        $this->assertSame(['status', 'list', 'times', 'gem', 'stage', 'all_stage', 'name', 'price'], array_keys($map));
+        $this->assertCount(10, $map['list']);
+        $m1 = self::sanctumMission(1);
+        $this->assertSame(['id' => 1, 'name' => $m1['name'], 'type' => 1, 'city' => 1, 'stage' => 1, 'x' => $m1['x'], 'y' => $m1['y'], 'image' => 0, 'open' => 1, 'missionid' => 1, 'firstkill' => 1], $map['list'][0]);
+        $this->assertSame([3, 10], [$map['list'][9]['open'], $map['list'][9]['missionid']]);
+        $this->assertSame([10, 0, 1, 1, '青龙圣域一重天', 20], [$map['times'], $map['gem'], $map['stage'], $map['all_stage'], $map['name'], $map['price']]);
+        $this->assertSame(['times' => 10, 'buy_times' => 0, 'missionlevel' => 1, 'missionstage' => 1, 'missionid' => 1], $this->b2Row('sanctum_log', $uid, ['times', 'buy_times', 'missionlevel', 'missionstage', 'missionid']));
+        $this->assertSame(['city' => 1, 'stage' => 1, 'missionid' => 0], $this->b2Row('sanctum_open_map', $uid, ['city', 'stage', 'missionid']));
+
+        // 未开启的层 -3；没有关卡的圣域不建档，按旧版返回 -4
+        $this->assertSame(['status' => -3], $this->b2Request('sanctum', 'select_map', $p['auth'] + ['l' => 1, 's' => 2]));
+        $this->assertSame(['status' => -4], $this->b2Request('sanctum', 'select_map', $p['auth'] + ['l' => 9]));
+        $this->assertSame(1, DB::table('sanctum_open_map')->where('uid', $uid)->count());
+        // 第 2 圣域首次进入建档：missionid 为该圣域第一关 id - 1
+        $map2 = $this->b2Request('sanctum', 'select_map', $p['auth'] + ['l' => 2]);
+        $this->assertSame([51, 1, '玄武圣域一重天'], [$map2['list'][0]['id'], $map2['list'][0]['open'], $map2['name']]);
+        $this->assertSame(50, (int)DB::table('sanctum_open_map')->where('uid', $uid)->where('city', 2)->value('missionid'));
+
+        $info = $this->b2Request('sanctum', 'get_mission_info', $p['auth'] + ['id' => 1]);
+        $this->assertSame(['status' => 1, 'mop_up' => 0, 'mission' => [
+            'city' => 1, 'stage' => 1, 'type' => 1, 'chip_num' => 4, 'background' => 0, 'id' => 1, 'image' => 0, 'level' => $m1['level'], 'name' => $m1['name'],
+            'gem' => 0, 'gem_level' => 0, 'first_chip_num' => 80, 'attack' => 1, 'gem_name' => '', 'gem_value' => 0, 'gem_type' => 0, 'gem_quality' => 0,
+            'five_sub' => 0, 'ten_sub' => 0, 'fifty_sub' => 800, 'hundred_sub' => 1800, 'getrate' => '0', 'firstkill' => 1,
+        ]], $info);
+        $this->assertSame(0, $this->b2Request('sanctum', 'get_mission_info', $p['auth'] + ['id' => 2])['mission']['attack']);
+        // 宝石关：Gem 模板名称 / 0 级属性 / 类型，掉率 40% → getrate '1'
+        $gem = \Hanjiang\MasterData\Gem::ROWS[1];
+        $info = $this->b2Request('sanctum', 'get_mission_info', $p['auth'] + ['id' => 10]);
+        $this->assertSame([1, $gem['name'], $gem['level0'], $gem['type'], 1, '1'], [$info['mission']['gem'], $info['mission']['gem_name'], $info['mission']['gem_value'], $info['mission']['gem_type'], $info['mission']['gem_quality'], $info['mission']['getrate']]);
+        $this->assertSame(['status' => -1], $this->b2Request('sanctum', 'get_mission_info', $p['auth']));
+        $this->assertSame(['status' => -3], $this->b2Request('sanctum', 'get_mission_info', $p['auth'] + ['id' => 999]));
+
+        // 跨天重置剩余次数为 10，购买的次数保留
+        DB::table('sanctum_log')->where('uid', $uid)->update(['times' => 1, 'buy_times' => 3, 'dateline' => strtotime('yesterday')]);
+        $this->assertSame(13, $this->b2Request('sanctum', 'select_map', $p['auth'])['times']);
+        $this->assertSame(['times' => 10, 'buy_times' => 3], $this->b2Row('sanctum_log', $uid, ['times', 'buy_times']));
+    }
+
+    public function testSanctumActionLoseAndGuards(): void
+    {
+        $p = $this->b2Player(140);
+        $uid = $p['uid'];
+        $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $this->emptyFormation($uid);
+
+        // 阵法里没有武将：空队伍直接大败，照样扣 1 次
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(['status', 'info', 'battle', 'mission'], array_keys($res));
+        $this->assertSame([
+            'win' => -3, 'gem' => 0, 'chip' => 0, 'gem_name' => '', 'gem_type' => 0, 'gem_power' => 0, 'gem_num' => 0, 'gem_quality' => 0, 'complete' => 0, 'stage' => 1,
+            'five_sub' => 0, 'ten_sub' => 20, 'fifty_sub' => 820, 'hundred_sub' => 1820, 'report' => 0, 'times' => 9, 'all_chip' => 0, 'all_gold' => 9999,
+        ], $res['info']);
+        $this->assertSame(['firstkill' => 0], $res['mission']);
+        $this->assertSame(['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff', 'left_role', 'right_role'], array_keys($res['battle']));
+        $m1 = self::sanctumMission(1);
+        // 守军取 sanctum_mission 的 position1~9 → sanctum_monster
+        $this->assertSame(['1', '3', '8'], array_map('strval', array_keys($res['battle']['rightteam'])));
+        $this->assertSame(['name' => $nickname, 'level' => 140, 'gender' => 0], $res['battle']['left_role']);
+        $this->assertSame(['name' => $m1['name'], 'level' => $m1['level'], 'type' => 1], $res['battle']['right_role']);
+        $this->assertSame(['times' => 9, 'buy_times' => 0], $this->b2Row('sanctum_log', $uid, ['times', 'buy_times']));
+        $this->assertSame(0, DB::table('sanctum_mission_log')->where('uid', $uid)->count());
+
+        // 没有阵法：旧版控制器不看战斗状态，战报为空、按失败处理，照样扣次数
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 0]);
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1]);
+        $this->assertSame([1, null, 8], [$res['status'], $res['info']['win'], $res['info']['times']]);
+        $this->assertSame(['left_role', 'right_role'], array_keys($res['battle']));
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 1]);
+
+        $this->assertSame(-4, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 2])['status'], '关卡未开启');
+        $this->assertSame(-2, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 999])['status']);
+        $this->assertSame(-5, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1, 'num' => 5])['status'], '未通过不能扫荡');
+        $this->assertSame(0, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1, 'num' => -3])['status'], '负数次数');
+        DB::table('sanctum_log')->where('uid', $uid)->update(['times' => 0, 'buy_times' => 0]);
+        $this->assertSame(-6, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1])['status'], '次数不足');
+        // 有购买次数时先扣免费次数（为 0），再扣购买次数
+        DB::table('sanctum_log')->where('uid', $uid)->update(['buy_times' => 2]);
+        $this->assertSame(1, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1])['info']['times']);
+        $this->assertSame(['times' => 0, 'buy_times' => 1], $this->b2Row('sanctum_log', $uid, ['times', 'buy_times']));
+    }
+
+    public function testSanctumActionWinFirstKillReportAndComplete(): void
+    {
+        DB::execute('DELETE FROM `zc_sanguo_sanctum_mission_log`');
+        DB::execute('DELETE FROM `zc_sanguo_sanctum_report`');
+        $p = $this->b2Player(140);
+        $uid = $p['uid'];
+        $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $this->b2Overpower($uid);
+        $m1 = self::sanctumMission(1);
+
+        // 真实战斗：首通，记战报，首杀碎片（宝石碎片依赖未移植，只回报）
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1]);
+        $this->assertSame(1, $res['status']);
+        $battle = $res['battle'];
+        $this->assertNotEmpty($battle['leftteam']);
+        $this->assertNotEmpty($battle['process']);
+        $this->assertGreaterThanOrEqual(1, $battle['assess']);
+        $this->assertSame(['heroid', 'name', 'herotype', 'level', 'allblood', 'power', 'image', 'star', 'talent', 'skill', 'quality'], array_keys(reset($battle['rightteam'])));
+        $info = $res['info'];
+        $this->assertSame([$battle['assess'], 1, 80, 0, 1, 0, 9], [$info['win'], $info['firstkill'], $info['first_chip_num'], $info['chip'], $info['stage'], $info['complete'], $info['times']]);
+        $this->assertSame(['firstkill' => 1], $res['mission']);
+        $this->assertSame(['stage' => 1, 'missionid' => 1], $this->b2Row('sanctum_open_map', $uid, ['stage', 'missionid']));
+        $log = DB::table('sanctum_mission_log')->where('uid', $uid)->first();
+        $this->assertSame($info['report'], (int)$log['id'], '战报 id 即通过记录 id');
+        $this->assertSame([1, $nickname, 140, 0, 1], [(int)$log['missionid'], $log['nickname'], (int)$log['level'], (int)$log['tree'], (int)$log['first_reward']]);
+
+        // 战报回放与攻略列表
+        $report = $this->b2Request('sanctum', 'get_report_info', $p['auth'] + ['id' => $info['report']]);
+        $this->assertSame(1, $report['status']);
+        $expected = $battle;
+        $expected['left_role'] = ['name' => $nickname, 'level' => 140];
+        $expected['right_role'] = ['name' => $m1['name'], 'level' => $m1['level']];
+        $this->assertEquals($expected, $report['battle']);
+        $this->assertSame(['win' => $battle['assess'], 'background' => 0], $report['info']);
+        $this->assertSame(['status' => 2], $this->b2Request('sanctum', 'get_report_info', $p['auth'] + ['id' => 999999]));
+        $list = $this->b2Request('sanctum', 'get_mission_report_list', $p['auth'] + ['id' => 1]);
+        $this->assertSame('第1关', $list['missionid']);
+        $this->assertSame([['id' => $info['report'], 'missionid' => 1, 'uid' => $uid, 'nickname' => $nickname, 'level' => 140, 'dateline' => (int)$log['dateline'], 'tree' => 0, 'first_reward' => 1]], $list['list']);
+        $this->assertSame(['status' => 1, 'missionid' => '第3关', 'list' => []], $this->b2Request('sanctum', 'get_mission_report_list', $p['auth'] + ['id' => 53]));
+
+        // 再打一次：普通碎片，不再记战报
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1]);
+        $this->assertSame([0, 4, 0], [$res['info']['firstkill'], $res['info']['chip'], $res['info']['report']]);
+        $this->assertSame(['firstkill' => 0], $res['mission']);
+        $this->assertSame(1, DB::table('sanctum_mission_log')->where('uid', $uid)->count());
+        $this->assertSame(1, $this->b2Request('sanctum', 'get_mission_info', $p['auth'] + ['id' => 1])['mop_up']);
+
+        // 打过本层最后一关进入下一层
+        DB::table('sanctum_open_map')->where('uid', $uid)->update(['missionid' => 9]);
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 10]);
+        $this->assertSame([2, 0], [$res['info']['stage'], $res['info']['complete']]);
+        $this->assertSame(['stage' => 2, 'missionid' => 10], $this->b2Row('sanctum_open_map', $uid, ['stage', 'missionid']));
+        if ($res['info']['gem'] > 0) {
+            // 宝石掉落按掷点回报（own_gem 依赖未移植，不发放）
+            $this->assertSame([1, \Hanjiang\MasterData\Gem::ROWS[1]['name'], 1, 1], [$res['info']['gem'], $res['info']['gem_name'], $res['info']['gem_num'], $res['info']['gem_quality']]);
+        }
+
+        // 打过圣域最后一关：complete，index 显示通关
+        DB::table('sanctum_open_map')->where('uid', $uid)->update(['stage' => 5, 'missionid' => 49]);
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 50]);
+        $this->assertSame([5, 1], [$res['info']['stage'], $res['info']['complete']]);
+        $this->assertSame([1 => ['pass' => 1], 2 => ['pass' => 0], 3 => ['pass' => 0], 4 => ['pass' => 0], 5 => ['pass' => 0]], $this->b2Request('sanctum', 'index', $p['auth'])['list']);
+        // 最高关卡 250 没有下一关，按 _max_id 判通关
+        $this->b2Request('sanctum', 'select_map', $p['auth'] + ['l' => 5]);
+        DB::table('sanctum_open_map')->where('uid', $uid)->where('city', 5)->update(['stage' => 5, 'missionid' => 249]);
+        $this->assertSame(1, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 250])['info']['complete']);
+
+        // 旧版老玩家：有通过记录但未领首杀（first_reward 0），胜利时补发并标记
+        DB::table('sanctum_mission_log')->insert(['missionid' => 2, 'uid' => $uid, 'nickname' => $nickname, 'level' => 140, 'first_reward' => 0]);
+        DB::table('sanctum_open_map')->where('uid', $uid)->where('city', 1)->update(['stage' => 1, 'missionid' => 5]);
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 2]);
+        $this->assertSame([1, self::sanctumMission(2)['first_chip_num'], 0], [$res['info']['firstkill'], $res['info']['first_chip_num'], $res['info']['report']]);
+        $this->assertSame(1, (int)DB::table('sanctum_mission_log')->where('uid', $uid)->where('missionid', 2)->value('first_reward'));
+    }
+
+    public function testSanctumMopUpAndBuyTimes(): void
+    {
+        $p = $this->b2Player(140);
+        $uid = $p['uid'];
+        $this->b2Request('sanctum', 'select_map', $p['auth']);
+        DB::table('sanctum_open_map')->where('uid', $uid)->update(['missionid' => 3]);
+        DB::table('sanctum_mission_log')->insert(['missionid' => 1, 'uid' => $uid, 'level' => 140, 'first_reward' => 1]);
+
+        // 扫荡：默认胜利，不返回战斗过程，碎片 = chip_num × 次数
+        $gold = $this->b2Member($uid, 'gold');
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1, 'num' => 5]);
+        $this->assertSame(['status', 'info', 'mission'], array_keys($res));
+        $this->assertSame([1, 20, 0, 5, $gold, 0, 100, 900, 1900], [$res['info']['win'], $res['info']['chip'], $res['info']['firstkill'], $res['info']['times'], $res['info']['all_gold'], $res['info']['five_sub'], $res['info']['ten_sub'], $res['info']['fifty_sub'], $res['info']['hundred_sub']]);
+        $this->assertSame(['times' => 5, 'buy_times' => 0], $this->b2Row('sanctum_log', $uid, ['times', 'buy_times']));
+
+        // 次数不足：差额每次 20 元宝
+        $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1, 'num' => 12]);
+        $this->assertSame([1, 48, 0, $gold - 140], [$res['info']['win'], $res['info']['chip'], $res['info']['times'], $res['info']['all_gold']]);
+        $this->assertSame($gold - 140, $this->b2Member($uid, 'gold'));
+        DB::table('member')->where('uid', $uid)->update(['gold' => 99]);
+        $this->assertSame(-8, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1, 'num' => 5])['status'], '元宝不足');
+        $this->assertSame(99, $this->b2Member($uid, 'gold'));
+
+        // 旧版扣次数的写法：免费次数不够时免费次数清零、购买次数按「购买次数 - 本次次数」计
+        DB::table('sanctum_log')->where('uid', $uid)->update(['times' => 3, 'buy_times' => 5]);
+        $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1, 'num' => 5]);
+        $this->assertSame(['times' => 0, 'buy_times' => 0], $this->b2Row('sanctum_log', $uid, ['times', 'buy_times']));
+
+        // 未领首杀的关卡不能扫荡
+        DB::table('sanctum_mission_log')->where('uid', $uid)->update(['first_reward' => 0]);
+        DB::table('sanctum_log')->where('uid', $uid)->update(['times' => 10]);
+        $this->assertSame(-24, $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1, 'num' => 5])['status']);
+
+        // 购买次数：type 0 只查价格
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1000]);
+        $this->assertSame(['status' => 1, 'price' => 20, 'all_gold' => 1000, 'times' => 10], $this->b2Request('sanctum', 'buy_times', $p['auth']));
+        $this->assertSame(['status' => 1, 'price' => 40, 'all_gold' => 960, 'times' => 12], $this->b2Request('sanctum', 'buy_times', $p['auth'] + ['type' => 1, 'num' => 2]));
+        $this->assertSame(['times' => 10, 'buy_times' => 2], $this->b2Row('sanctum_log', $uid, ['times', 'buy_times']));
+        DB::table('member')->where('uid', $uid)->update(['gold' => 19]);
+        $this->assertSame(['status' => -2], $this->b2Request('sanctum', 'buy_times', $p['auth'] + ['type' => 1]));
+        $this->assertSame(['status' => 0], $this->b2Request('sanctum', 'buy_times', $p['auth'] + ['type' => 1, 'num' => -5]));
+        $this->assertSame(19, $this->b2Member($uid, 'gold'));
+    }
+
+    public function testSanctumDailyRewardAndSendToChat(): void
+    {
+        $p = $this->b2Player(140);
+        $uid = $p['uid'];
+        $this->assertSame(['status' => -1], $this->b2Request('sanctum', 'get_reward', $p['auth']), '没有圣域记录');
+        $this->b2Request('sanctum', 'select_map', $p['auth']);
+        $this->assertSame(['status' => -4], $this->b2Request('sanctum', 'get_reward', $p['auth']), '还未通过一关');
+
+        // 按各圣域里（相对本圣域）最靠后的已过关卡发奖
+        DB::table('sanctum_open_map')->where('uid', $uid)->update(['missionid' => 10]);
+        $this->b2Request('sanctum', 'select_map', $p['auth'] + ['l' => 2]);
+        DB::table('sanctum_open_map')->where('uid', $uid)->where('city', 2)->update(['missionid' => 55]);
+        $ratio = \Hanjiang\MasterData\SanctumReward::ROWS;
+        $view = $this->b2Request('sanctum', 'get_reward', $p['auth']);
+        $this->assertSame([
+            'status' => 1, 'effect' => 0, 'gem' => 300, 'all_gold' => 9999, 'all_gem' => 0,
+            'mission' => ['stage' => '一重天', 'id' => 10],
+            'normal_reward' => ['gold' => $ratio[1]['sub'], 'multiple' => intdiv($ratio[1]['ratio'], 100)],
+            'best_reward' => ['gold' => $ratio[2]['sub'], 'multiple' => intdiv($ratio[2]['ratio'], 100)],
+        ], $view);
+        $this->assertSame(0, (int)DB::table('member_activity')->where('uid', $uid)->value('sanctumdate'), '查看不算领取');
+
+        $this->assertSame(-6, $this->b2Request('sanctum', 'get_reward', $p['auth'] + ['type' => 1, 'multiple' => 3])['status']);
+        DB::table('member')->where('uid', $uid)->update(['gold' => $ratio[2]['sub'] - 1]);
+        $this->assertSame(-7, $this->b2Request('sanctum', 'get_reward', $p['auth'] + ['type' => 1, 'multiple' => 2])['status']);
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1000]);
+        $res = $this->b2Request('sanctum', 'get_reward', $p['auth'] + ['type' => 1, 'multiple' => 2]);
+        $this->assertSame([1, (int)(300 * $ratio[2]['ratio'] / 100), 1000 - $ratio[2]['sub']], [$res['status'], $res['gem'], $res['all_gold']]);
+        $this->assertGreaterThanOrEqual(strtotime('today'), (int)DB::table('member_activity')->where('uid', $uid)->value('sanctumdate'));
+        $this->assertSame(['status' => -3], $this->b2Request('sanctum', 'get_reward', $p['auth'] + ['type' => 1]), '今日已领取');
+
+        // 次日不翻倍领取
+        DB::table('member_activity')->where('uid', $uid)->update(['sanctumdate' => strtotime('yesterday')]);
+        $res = $this->b2Request('sanctum', 'get_reward', $p['auth'] + ['type' => 1]);
+        $this->assertSame([1, 300, 1000 - $ratio[2]['sub']], [$res['status'], $res['gem'], $res['all_gold']]);
+
+        // 战报分享：聊天室未移植，返回失败且不扣元宝
+        $this->assertSame(['status' => -1], $this->b2Request('sanctum', 'send_to_chat', $p['auth'] + ['id' => 1]));
+        $this->assertSame(['status' => -2], $this->b2Request('sanctum', 'send_to_chat', $p['auth'] + ['id' => 999, 'report' => 5]));
+        $this->assertSame(['status' => 0], $this->b2Request('sanctum', 'send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5]));
+        $this->assertSame(1000 - $ratio[2]['sub'], $this->b2Member($uid, 'gold'));
+    }
+
+    public function testHeavenIndexAndPkLoseGuards(): void
+    {
+        $low = $this->b2Player(159);
+        foreach (['index', 'get_mopup_price', 'pk', 'buy', 'reward_info', 'get_reward'] as $m) {
+            $res = $this->b2Request('heaven', $m, $low['auth'] + ['id' => 1]);
+            $this->assertSame([-1, '抱歉，您的等级不足！'], [$res['status'], $res['msg']], $m);
+        }
+        $this->assertSame(['status' => 1, 'price' => 20], $this->b2Request('heaven', 'get_price', $low['auth']));
+
+        $p = $this->b2Player(160);
+        $uid = $p['uid'];
+        $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $index = $this->b2Request('heaven', 'index', $p['auth']);
+        $this->assertSame(['status', 'index', 'resource', 'list', 'times', 'get_reward'], array_keys($index));
+        $this->assertCount(200, $index['list']);
+        $h1 = \Hanjiang\MasterData\HeavenMission::ROWS[1];
+        $this->assertSame([
+            'id' => 1, 'level' => 160, 'name' => $h1['name'], 'type' => 1, 'image' => $h1['image'], 'refinestone' => 12, 'colorstone' => 0, 'color_getrate' => 0,
+            'bloodstone' => 0, 'blood_getrate' => 0, 'equip' => 1, 'equip_value' => 1, 'background' => $h1['background'], 'first_type' => 1, 'first_value' => 600,
+            'openstatus' => 1, 'killed' => 0, 'mop_up' => 0, 'essence' => ['id' => 1, 'quality' => 1, 'num' => 1], 'firstkill' => 1,
+        ], $index['list'][0]);
+        $this->assertSame([0, 0, 0], [$index['list'][1]['openstatus'], $index['list'][9]['essence']['id'], $index['index']]);
+        // 首次读活动信息按旧版初始值建档：heaventimes 10、freeheaven 0；旧版 hevanedate 拼写错误，get_reward 恒为 0
+        $this->assertSame([10, 0, ['refinestone' => 0, 'colorstone' => 0, 'bloodstone' => 0]], [$index['times'], $index['get_reward'], $index['resource']]);
+        $this->assertSame(['heavenlevel' => 1, 'heavenmission' => 0, 'heaventimes' => 10, 'freeheaven' => 0], $this->b2Row('member_activity', $uid, ['heavenlevel', 'heavenmission', 'heaventimes', 'freeheaven']));
+        $this->assertSame(['level' => 1, 'stage' => 0, 'mission' => 0], $this->b2Row('heaven_open_map', $uid, ['level', 'stage', 'mission']));
+
+        // 阵法里没有武将：大败，扣 1 次（没有免费次数时扣购买的次数）
+        $this->emptyFormation($uid);
+        $res = $this->b2Request('heaven', 'pk', $p['auth'] + ['id' => 1]);
+        $this->assertSame(['status', 'info', 'clear', 'battle'], array_keys($res));
+        $this->assertSame(['firstkill' => 1, 'id' => 1, 'report' => 0, 'times' => 9, 'win' => -3, 'refinestone' => 0, 'bloodstone' => 0, 'colorstone' => 0, 'essence' => ['id' => 0, 'quality' => 0, 'num' => 0]], $res['info']);
+        $this->assertEqualsCanonicalizing([1, 2, 3, 7, 9], array_map('intval', array_keys($res['battle']['rightteam'])));
+        $this->assertSame(['name' => $nickname, 'level' => 160], $res['battle']['left_role']);
+        $this->assertSame(['name' => $h1['name'], 'level' => 160], $res['battle']['right_role']);
+        $this->assertSame(['heaventimes' => 9, 'freeheaven' => 0], $this->b2Row('member_activity', $uid, ['heaventimes', 'freeheaven']));
+
+        $this->assertSame(-6, $this->b2Request('heaven', 'pk', $p['auth'] + ['id' => 3])['status'], '关卡未开启');
+        $this->assertSame(-4, $this->b2Request('heaven', 'pk', $p['auth'] + ['id' => 999])['status']);
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 0]);
+        $this->assertSame(['status' => -7, 'msg' => '获取战斗信息失败'], $this->b2Request('heaven', 'pk', $p['auth'] + ['id' => 1]));
+        $this->assertSame(9, $this->b2Row('member_activity', $uid, ['heaventimes'])['heaventimes'], '战斗失败不扣次数');
+        DB::table('member_activity')->where('uid', $uid)->update(['heaventimes' => 0]);
+        $this->assertSame(['status' => -3, 'msg' => '次数不足'], $this->b2Request('heaven', 'pk', $p['auth'] + ['id' => 1]));
+    }
+
+    public function testHeavenPkWinFirstKillAndReports(): void
+    {
+        DB::execute('DELETE FROM `zc_sanguo_heaven_log`');
+        DB::execute('DELETE FROM `zc_sanguo_heaven_report`');
+        $p = $this->b2Player(160);
+        $uid = $p['uid'];
+        $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $this->b2Overpower($uid);
+        $this->b2Request('heaven', 'index', $p['auth']);
+        DB::table('member_activity')->where('uid', $uid)->update(['freeheaven' => 2]);
+
+        // 真实战斗：首杀奖励（石头依赖未移植，只回报）、记战报、开启下一关
+        $res = $this->b2Request('heaven', 'pk', $p['auth'] + ['id' => 1]);
+        $this->assertSame(1, $res['status']);
+        $battle = $res['battle'];
+        $this->assertNotEmpty($battle['process']);
+        $this->assertGreaterThanOrEqual(1, $battle['assess']);
+        $info = $res['info'];
+        $this->assertSame(['firstkill', 'first_type', 'first_value', 'id', 'report', 'times', 'win', 'refinestone', 'bloodstone', 'colorstone', 'essence'], array_keys($info));
+        $this->assertSame([1, 1, 600, 11, 0], [$info['firstkill'], $info['first_type'], $info['first_value'], $info['times'], $info['refinestone']]);
+        $this->assertSame(['freeheaven' => 1, 'heaventimes' => 10], $this->b2Row('member_activity', $uid, ['freeheaven', 'heaventimes']), '先扣免费次数');
+        $this->assertSame(1, $this->b2Row('heaven_open_map', $uid, ['mission'])['mission']);
+        $log = DB::table('heaven_log')->where('uid', $uid)->first();
+        $this->assertSame($info['report'], (int)$log['id']);
+        $this->assertSame([$nickname, 1, 1, 160, 1], [$log['nickname'], (int)$log['missionlevel'], (int)$log['missionid'], (int)$log['level'], (int)$log['first_reward']]);
+
+        $report = $this->b2Request('heaven', 'get_report_info', $p['auth'] + ['id' => $info['report']]);
+        $this->assertSame(['status', 'battle', 'win'], array_keys($report));
+        $this->assertEquals($battle, $report['battle']);
+        $this->assertSame($battle['assess'], $report['win']);
+        $this->assertSame(['status' => 2, 'battle' => [], 'msg' => '攻略不存在'], $this->b2Request('heaven', 'get_report_info', $p['auth'] + ['id' => 999999]));
+        $list = $this->b2Request('heaven', 'get_report_list', $p['auth'] + ['id' => 1]);
+        $this->assertSame([$info['report'] => ['id' => $info['report'], 'uid' => $uid, 'level' => 160, 'nickname' => $nickname, 'tree' => 0]], $list['list']);
+        $this->assertSame(['status' => 2, 'list' => [], 'msg' => '攻略不存在'], $this->b2Request('heaven', 'get_report_list', $p['auth'] + ['id' => 2]));
+
+        // 列表：已首杀的已过关卡可扫荡；当前关卡为第 2 关
+        $index = $this->b2Request('heaven', 'index', $p['auth']);
+        $this->assertSame([1, 1, 1, 0], [$index['list'][0]['killed'], $index['list'][0]['mop_up'], $index['list'][0]['openstatus'], $index['list'][0]['firstkill']]);
+        $this->assertSame([1, 0, 1], [$index['list'][1]['openstatus'], $index['list'][1]['killed'], $index['index']]);
+
+        // 再打一次：非首杀，精炼石 100% 掉落
+        $res = $this->b2Request('heaven', 'pk', $p['auth'] + ['id' => 1]);
+        $this->assertSame([0, 0, 12], [$res['info']['firstkill'], $res['info']['report'], $res['info']['refinestone']]);
+        $this->assertArrayNotHasKey('first_type', $res['info']);
+        $this->assertSame(1, DB::table('heaven_log')->where('uid', $uid)->count());
+
+        // 旧版老玩家：有记录但未领首杀，胜利时补发首杀并标记
+        DB::table('heaven_log')->insert(['uid' => $uid, 'nickname' => $nickname, 'missionlevel' => 1, 'missionid' => 2, 'level' => 160, 'first_reward' => 0]);
+        $res = $this->b2Request('heaven', 'pk', $p['auth'] + ['id' => 2]);
+        $this->assertSame([1, 1, 700, 0], [$res['info']['firstkill'], $res['info']['first_type'], $res['info']['first_value'], $res['info']['report']]);
+        $this->assertSame(1, (int)DB::table('heaven_log')->where('uid', $uid)->where('missionid', 2)->value('first_reward'));
+        $this->assertSame(2, $this->b2Row('heaven_open_map', $uid, ['mission'])['mission']);
+
+        $this->assertSame(['status' => -1, 'msg' => '传递类型错误'], $this->b2Request('heaven', 'send_to_chat', $p['auth'] + ['id' => 1]));
+        $this->assertSame(['status' => -3, 'msg' => '获取关卡列表失败'], $this->b2Request('heaven', 'send_to_chat', $p['auth'] + ['id' => 999, 'report' => 5]));
+        $this->assertSame(['status' => 0], $this->b2Request('heaven', 'send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5]));
+    }
+
+    public function testHeavenMopUpBuyAndDailyReward(): void
+    {
+        $p = $this->b2Player(160);
+        $uid = $p['uid'];
+        $this->b2Request('heaven', 'index', $p['auth']);
+        DB::table('heaven_open_map')->where('uid', $uid)->update(['mission' => 10]);
+        DB::table('heaven_log')->insert(['uid' => $uid, 'missionlevel' => 1, 'missionid' => 1, 'level' => 160, 'first_reward' => 1]);
+
+        $this->assertSame(['status' => 1, 'info' => ['five_sub' => 0, 'ten_sub' => 0, 'fifty_sub' => 800, 'hundred_sub' => 1800]], $this->b2Request('heaven', 'get_mopup_price', $p['auth'] + ['id' => 1]));
+        $this->assertSame(-4, $this->b2Request('heaven', 'get_mopup_price', $p['auth'] + ['id' => 11])['status'], '未击败的关卡无法扫荡');
+        $this->assertSame(-2, $this->b2Request('heaven', 'get_mopup_price', $p['auth'] + ['id' => 999])['status']);
+        $this->assertSame(['status' => -7, 'resource' => [], 'msg' => '传递参数失败'], $this->b2Request('heaven', 'mop_up', $p['auth'] + ['id' => 1, 'times' => 7]));
+        $this->assertSame(-5, $this->b2Request('heaven', 'mop_up', $p['auth'] + ['id' => 11, 'times' => 5])['status']);
+
+        // 次数够：不花元宝，精炼石 = refinestone × 次数
+        $gold = $this->b2Member($uid, 'gold');
+        $res = $this->b2Request('heaven', 'mop_up', $p['auth'] + ['id' => 1, 'times' => 5]);
+        $this->assertSame(['status', 'resource', 'info', 'times', 'gold'], array_keys($res));
+        $this->assertSame(['five_sub', 'ten_sub', 'fifty_sub', 'hundred_sub', 'essence', 'refinestone', 'colorstone', 'bloodstone'], array_keys($res['info']));
+        $this->assertSame([0, 100, 900, 1900, 60, 0, 0], [$res['info']['five_sub'], $res['info']['ten_sub'], $res['info']['fifty_sub'], $res['info']['hundred_sub'], $res['info']['refinestone'], $res['info']['colorstone'], $res['info']['bloodstone']]);
+        $this->assertSame([5, $gold], [$res['times'], $res['gold']]);
+        $this->assertSame(['freeheaven' => 0, 'heaventimes' => 5], $this->b2Row('member_activity', $uid, ['freeheaven', 'heaventimes']));
+
+        // 次数不足：差额每次 20 元宝，补买的次数累加到 member_field.heaventimes
+        $res = $this->b2Request('heaven', 'mop_up', $p['auth'] + ['id' => 1, 'times' => 10]);
+        $this->assertSame([0, $gold - 100], [$res['times'], $res['gold']]);
+        $this->assertSame(5, (int)DB::table('member_field')->where('uid', $uid)->value('heaventimes'));
+        $this->assertSame(['freeheaven' => 0, 'heaventimes' => 0], $this->b2Row('member_activity', $uid, ['freeheaven', 'heaventimes']));
+        DB::table('member')->where('uid', $uid)->update(['gold' => 99]);
+        $this->assertSame(['status' => -8, 'resource' => [], 'msg' => '元宝不足'], $this->b2Request('heaven', 'mop_up', $p['auth'] + ['id' => 1, 'times' => 5]));
+        DB::table('heaven_log')->where('uid', $uid)->update(['first_reward' => 0]);
+        $this->assertSame(-24, $this->b2Request('heaven', 'mop_up', $p['auth'] + ['id' => 1, 'times' => 5])['status'], '首杀阶段不能扫荡');
+
+        // 购买次数：每次 20 元宝
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1000]);
+        $this->assertSame(['status' => 1, 'times' => 1, 'gold' => 980], $this->b2Request('heaven', 'buy', $p['auth']));
+        $this->assertSame(1, $this->b2Row('member_activity', $uid, ['heaventimes'])['heaventimes']);
+        DB::table('member')->where('uid', $uid)->update(['gold' => 19]);
+        $this->assertSame(['status' => -2, 'msg' => '元宝不足'], $this->b2Request('heaven', 'buy', $p['auth']));
+        $this->assertSame(1, $this->b2Row('member_activity', $uid, ['heaventimes'])['heaventimes']);
+
+        // 每日奖励：按已过的最大关卡；上古血玉取本关 boss（第 10 关 5 个），五彩石取此前最近的五彩石关（没有为 0）
+        $q = $this->b2Player(160);
+        $this->assertSame(['status' => 3, 'msg' => '关卡未开启'], $this->b2Request('heaven', 'reward_info', $q['auth']), '未击败关卡');
+        DB::table('heaven_open_map')->where('uid', $q['uid'])->update(['mission' => 10]);
+        $h10 = \Hanjiang\MasterData\HeavenMission::ROWS[10];
+        $this->assertSame([
+            'status' => 1, 'effect' => 0, 'base_reward' => 90,
+            'info' => ['name' => $h10['name'], 'mission' => 10],
+            'two_reward' => ['gold' => 100, 'refine_reward' => 210, 'color_reward' => 0],
+            'four_reward' => ['gold' => 200, 'refine_reward' => 330, 'color_reward' => 0, 'blood_reward' => 15],
+            'eight_reward' => ['gold' => 400, 'refine_reward' => 570, 'color_reward' => 0, 'blood_reward' => 30],
+        ], $this->b2Request('heaven', 'reward_info', $q['auth']));
+        $this->assertSame(['status' => -3, 'msg' => '传递类型错误'], $this->b2Request('heaven', 'get_reward', $q['auth'] + ['type' => 4]));
+        DB::table('member')->where('uid', $q['uid'])->update(['gold' => 199]);
+        $this->assertSame(['status' => -6, 'effect' => 0, 'msg' => '元宝不足'], $this->b2Request('heaven', 'get_reward', $q['auth'] + ['type' => 2]));
+        DB::table('member')->where('uid', $q['uid'])->update(['gold' => 500]);
+        $this->assertSame([
+            'status' => 1, 'effect' => 0, 'reward' => ['refinestone' => 330, 'colorstone' => 0, 'bloodstone' => 15], 'gold' => 300,
+            'resource' => ['refinestone' => 0, 'colorstone' => 0, 'bloodstone' => 0],
+        ], $this->b2Request('heaven', 'get_reward', $q['auth'] + ['type' => 2]));
+        $this->assertSame(['status' => 2, 'msg' => '今日已领取过奖励'], $this->b2Request('heaven', 'reward_info', $q['auth']));
+        $this->assertSame(['status' => 2, 'msg' => '今日已领取过奖励'], $this->b2Request('heaven', 'get_reward', $q['auth']));
+        DB::table('member_activity')->where('uid', $q['uid'])->update(['heavendate' => strtotime('yesterday')]);
+        $this->assertSame(['refinestone' => 90, 'colorstone' => 0, 'bloodstone' => 0], $this->b2Request('heaven', 'get_reward', $q['auth'])['reward']);
+        $this->assertSame(300, $this->b2Member($q['uid'], 'gold'));
+    }
+
+    public function testBatch2DailyCronResets(): void
+    {
+        $p = $this->b2Player(160);
+        $uid = $p['uid'];
+        $this->b2Request('heaven', 'index', $p['auth']);
+        DB::table('member_activity')->where('uid', $uid)->update(['freeheaven' => 0, 'heaventimes' => 3, 'islandtimes' => 4]);
+        DB::table('member_field')->where('uid', $uid)->update(['heaventimes' => 6, 'dateline' => strtotime('yesterday')]);
+        Redis::del("daily_cron:{$uid}");
+
+        // 旧版 daily_cron：通天塔免费次数重置为 10、金银岛今日挑战次数归零；购买的次数与扫荡补买次数保留
+        $this->assertSame(13, $this->b2Request('heaven', 'index', $p['auth'])['times']);
+        $this->assertSame(['freeheaven' => 10, 'heaventimes' => 3, 'islandtimes' => 0], $this->b2Row('member_activity', $uid, ['freeheaven', 'heaventimes', 'islandtimes']));
+        $this->assertSame(6, (int)DB::table('member_field')->where('uid', $uid)->value('heaventimes'));
+    }
+
+    public function testHerothroneIndexStartAndRewards(): void
+    {
+        $low = $this->b2Player(100);
+        foreach (['index', 'go_back', 'start', 'action', 'buy_times', 'end_battle'] as $m) {
+            $this->assertSame(2, $this->b2Request('herothrone', $m, $low['auth'])['status'], $m);
+        }
+
+        $p = $this->b2Player(101);
+        $uid = $p['uid'];
+        $this->assertSame(['status' => -1], $this->b2Request('herothrone', 'go_back', $p['auth']), 'go_back 不建档');
+        $this->assertSame(['status' => -1], $this->b2Request('herothrone', 'start', $p['auth']));
+        $res = $this->b2Request('herothrone', 'index', $p['auth']);
+        $this->assertSame(['status' => 1, 'info' => ['uid' => $uid, 'times' => 2, 'buytimes' => 0, 'laststage' => 0, 'status' => 0], 'buy' => 0, 'price' => 1000, 'list' => []], $res);
+        $this->assertSame(['status' => 1, 'buy' => 0, 'info' => $res['info'], 'price' => 1000, 'list' => []], $this->b2Request('herothrone', 'go_back', $p['auth']));
+
+        // 新开一局：扣 1 次免费次数，从第 1 关开始
+        $silver = $this->b2Member($uid, 'silver');
+        $start = $this->b2Request('herothrone', 'start', $p['auth']);
+        $this->assertSame(['status', 'buy', 'mission', 'reward', 'price', 'info', 'get_reward', 'all_silver'], array_keys($start));
+        $this->assertSame([['id' => 1, 'image' => 81, 'open' => 1], ['id' => 2, 'image' => 82, 'open' => 0]], array_slice($start['mission'], 0, 2));
+        $this->assertCount(5, $start['mission']);
+        $this->assertCount(30, $start['reward']);
+        $this->assertSame(['id' => 10, 'gettype1' => 2, 'gettype2' => 1, 'gettype3' => 0, 'getvalue1' => 20000, 'getvalue2' => 50000, 'getvalue3' => 0, 'getnum1' => 0, 'getnum2' => 0, 'getnum3' => 0], $start['reward'][0]);
+        $equip = \Hanjiang\MasterData\Equip::ROWS[60];
+        $this->assertSame(['id' => 60, 'name' => $equip['name'] . '碎片', 'type' => $equip['type'], 'quality' => $equip['quality']], $start['reward'][4]['getvalue3']);
+        $mount = \Hanjiang\MasterData\MountTemp::ROWS[101];
+        $this->assertSame(['id' => 101, 'name' => $mount['name'] . '碎片', 'quality' => $mount['quality']], $start['reward'][15]['getvalue3']);
+        $this->assertSame(2, $start['reward'][15]['getnum3']);
+        $this->assertSame([1, 0, 1, 0, 50, 0], [$start['info']['times'], $start['info']['stage'], $start['info']['status'], $start['info']['laststage'], $start['info']['price'], $start['info']['buytimes']]);
+        $this->assertSame([[], $silver], [$start['get_reward'], $start['all_silver']]);
+        $this->assertSame(['times' => 1, 'stage' => 0, 'status' => 1], $this->b2Row('herothrone_log', $uid, ['times', 'stage', 'status']));
+        // 已开局：index 直接进开始界面，再 start 不再扣次数
+        $this->assertSame(['status' => 3, 'price' => 1000], $this->b2Request('herothrone', 'index', $p['auth']));
+        $this->assertSame(1, $this->b2Request('herothrone', 'start', $p['auth'])['info']['times']);
+
+        // 重新开局从历史最高所在十层的前十层开始，并发放之前的宝箱奖励（声望排在最前，装备碎片按 getsort 排在后面）
+        DB::table('herothrone_log')->where('uid', $uid)->update(['status' => 0, 'stage' => 0, 'laststage' => 155]);
+        $silver = $this->b2Member($uid, 'silver');
+        $reputation = $this->b2Member($uid, 'reputation');
+        $soul = $this->b2Member($uid, 'soul');
+        $start = $this->b2Request('herothrone', 'start', $p['auth']);
+        $this->assertSame(140, $start['info']['stage']);
+        $this->assertSame([141, 1], [$start['mission'][0]['id'], $start['mission'][0]['open']]);
+        $this->assertSame(140, $this->b2Row('herothrone_log', $uid, ['stage'])['stage']);
+        $sum = [1 => 0, 2 => 0, 7 => 0, 8 => 0];
+        $chips = [];
+        foreach (\Hanjiang\MasterData\HerothroneMission::ROWS as $row) {
+            if ($row['id'] % 10 !== 0 || $row['id'] > 141) {
+                continue;
+            }
+            for ($i = 1; $i <= 3; $i++) {
+                if (isset($sum[$row['gettype' . $i]])) {
+                    $sum[$row['gettype' . $i]] += $row['getvalue' . $i];
+                } elseif ($row['gettype' . $i] === 4) {
+                    $chips[] = $row['getvalue' . $i];
+                }
+            }
+        }
+        $types = array_column($start['get_reward'], 'gettype');
+        $this->assertSame(7, $types[0]);
+        $this->assertSame(['gettype' => 7, 'getvalue' => $sum[7], 'getsort' => 0], $start['get_reward'][0]);
+        $this->assertSame([2, 1], array_slice($types, 1, 2));
+        $this->assertSame(array_fill(0, count($chips), 4), array_slice($types, 3));
+        $first = \Hanjiang\MasterData\Equip::ROWS[$chips[0]];
+        $this->assertSame(['gettype' => 4, 'getvalue' => ['itemtype' => 1, 'itemid' => $chips[0], 'quality' => $first['quality'], 'itemname' => $first['name'] . '碎片'], 'getsort' => 4], $start['get_reward'][3]);
+        $this->assertSame($silver + $sum[1], $start['all_silver']);
+        $this->assertSame([$silver + $sum[1], $reputation + $sum[7], $soul + $sum[8]], [$this->b2Member($uid, 'silver'), $this->b2Member($uid, 'reputation'), $this->b2Member($uid, 'soul')]);
+    }
+
+    public function testHerothroneActionBuyTimesAndEndBattle(): void
+    {
+        $p = $this->b2Player(101);
+        $uid = $p['uid'];
+        $this->b2Request('herothrone', 'index', $p['auth']);
+        $this->assertSame(['status' => -2, 'info' => ['reward' => [], 'win' => 0, 'view' => 0]], $this->b2Request('herothrone', 'action', $p['auth']), '还未开始');
+        $this->assertSame(['status' => -2], $this->b2Request('herothrone', 'end_battle', $p['auth']));
+
+        // 战败（VIP 不足 10）：直接结束本局
+        $this->b2Request('herothrone', 'start', $p['auth']);
+        $this->emptyFormation($uid);
+        $res = $this->b2Request('herothrone', 'action', $p['auth']);
+        $this->assertSame(['status', 'info', 'battle'], array_keys($res));
+        $this->assertSame(['reward' => [], 'win' => -3, 'view' => 0, 'all_gold' => 9999, 'all_silver' => $this->b2Member($uid, 'silver')], $res['info']);
+        $monster = \Hanjiang\MasterData\HerothroneMonster::ROWS[1];
+        // 守方取 5 号位守将
+        $this->assertSame(['name', 'level', 'type'], array_keys($res['battle']['right_role']));
+        $this->assertSame($monster['name'], $res['battle']['right_role']['name']);
+        $this->assertSame(['name', 'level', 'gender'], array_keys($res['battle']['left_role']));
+        $this->assertSame(['stage' => 0, 'status' => 0], $this->b2Row('herothrone_log', $uid, ['stage', 'status']));
+
+        // VIP 10 战败：状态改为失败，可花 50 元宝继续
+        DB::table('member')->where('uid', $uid)->update(['vip' => 10]);
+        $this->b2Request('herothrone', 'start', $p['auth']);
+        $res = $this->b2Request('herothrone', 'action', $p['auth']);
+        $this->assertSame([-3, 50, 1], [$res['info']['win'], $res['info']['price'], $res['info']['view']]);
+        $this->assertSame(2, $this->b2Row('herothrone_log', $uid, ['status'])['status']);
+        $this->assertSame(['status' => 3, 'price' => 1000], $this->b2Request('herothrone', 'index', $p['auth']));
+        $res = $this->b2Request('herothrone', 'action', $p['auth']);
+        $this->assertSame([1, 9999 - 50], [$res['status'], $res['info']['all_gold']]);
+        DB::table('member')->where('uid', $uid)->update(['gold' => 49]);
+        $this->assertSame(-3, $this->b2Request('herothrone', 'action', $p['auth'])['status'], '元宝不足');
+        DB::table('member')->where('uid', $uid)->update(['vip' => 9]);
+        $this->assertSame(-4, $this->b2Request('herothrone', 'action', $p['auth'])['status'], '先结束上一局');
+
+        // 结束本局
+        $this->assertSame(['status' => 1], $this->b2Request('herothrone', 'end_battle', $p['auth']));
+        $this->assertSame(['stage' => 0, 'status' => 0], $this->b2Row('herothrone_log', $uid, ['stage', 'status']));
+
+        // 真实战斗胜利：进度 + 1，刷新历史最高；第 10 关奖励银币（玉石依赖未移植，只回报）
+        $q = $this->b2Player(101);
+        $quid = $q['uid'];
+        $this->b2Overpower($quid);
+        $this->b2Request('herothrone', 'index', $q['auth']);
+        $this->b2Request('herothrone', 'start', $q['auth']);
+        $res = $this->b2Request('herothrone', 'action', $q['auth']);
+        $this->assertGreaterThanOrEqual(1, $res['battle']['assess']);
+        $this->assertNotEmpty($res['battle']['process']);
+        $this->assertSame([[], 0], [$res['info']['reward'], $res['info']['view']]);
+        $this->assertSame(['stage' => 1, 'status' => 1, 'laststage' => 1], $this->b2Row('herothrone_log', $quid, ['stage', 'status', 'laststage']));
+        DB::table('herothrone_log')->where('uid', $quid)->update(['stage' => 9]);
+        $silver = $this->b2Member($quid, 'silver');
+        $res = $this->b2Request('herothrone', 'action', $q['auth']);
+        $this->assertSame([['gettype' => 2, 'getvalue' => 20000], ['gettype' => 1, 'getvalue' => 50000]], $res['info']['reward']);
+        $this->assertSame([$silver + 50000, $silver + 50000], [$res['info']['all_silver'], $this->b2Member($quid, 'silver')]);
+        $this->assertSame(['stage' => 10, 'laststage' => 10], $this->b2Row('herothrone_log', $quid, ['stage', 'laststage']));
+        // 打过最高层：本局结束
+        DB::table('herothrone_log')->where('uid', $quid)->update(['stage' => 299]);
+        $res = $this->b2Request('herothrone', 'action', $q['auth']);
+        $this->assertSame(0, $res['info']['view']);
+        $this->assertSame(['stage' => 0, 'status' => 0, 'laststage' => 300], $this->b2Row('herothrone_log', $quid, ['stage', 'status', 'laststage']));
+
+        // 购买次数：VIP 9 每日 1 次、每次 1000 元宝
+        $this->assertSame(['status' => -2], $this->b2Request('herothrone', 'buy_times', $q['auth']), 'VIP 不足');
+        DB::table('member')->where('uid', $quid)->update(['vip' => 9, 'gold' => 999]);
+        $this->assertSame(['status' => -3], $this->b2Request('herothrone', 'buy_times', $q['auth']));
+        DB::table('member')->where('uid', $quid)->update(['gold' => 2500]);
+        $this->assertSame(['status' => 1, 'times' => 1, 'buytimes' => 1, 'all_gold' => 1500], $this->b2Request('herothrone', 'buy_times', $q['auth']));
+        $this->assertSame(['status' => -2], $this->b2Request('herothrone', 'buy_times', $q['auth']), '今日已达上限');
+        $this->assertSame(1, $this->b2Row('herothrone_log', $quid, ['today_buytimes'])['today_buytimes']);
+
+        // 跨天：index 重置免费次数与今日购买次数，购买的次数保留
+        DB::table('herothrone_log')->where('uid', $quid)->update(['times' => 0, 'dateline' => strtotime('yesterday')]);
+        $res = $this->b2Request('herothrone', 'index', $q['auth']);
+        $this->assertSame([2, 1, 1], [$res['info']['times'], $res['info']['buytimes'], $res['buy']]);
+        $this->assertSame(['times' => 2, 'buytimes' => 1, 'today_buytimes' => 0, 'today_buydate' => 0], $this->b2Row('herothrone_log', $quid, ['times', 'buytimes', 'today_buytimes', 'today_buydate']));
+        // 免费次数用完后用购买的次数开局；都用完不能开局
+        DB::table('herothrone_log')->where('uid', $quid)->update(['times' => 0]);
+        $this->b2Request('herothrone', 'start', $q['auth']);
+        $this->assertSame(['times' => 0, 'buytimes' => 0], $this->b2Row('herothrone_log', $quid, ['times', 'buytimes']));
+        $this->b2Request('herothrone', 'end_battle', $q['auth']);
+        $this->assertSame(['status' => -2], $this->b2Request('herothrone', 'start', $q['auth']));
+    }
+
+    public function testIslandIndexMissionAndPk(): void
+    {
+        $low = $this->b2Player(35);
+        $this->assertSame(['status' => -1, 'list' => []], $this->b2Request('island', 'index', $low['auth']));
+
+        $p = $this->b2Player(40);
+        $uid = $p['uid'];
+        $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $index = $this->b2Request('island', 'index', $p['auth']);
+        $this->assertSame(1, $index['status']);
+        $this->assertCount(5, $index['list']);
+        $i6 = \Hanjiang\MasterData\Island::ROWS[6];
+        $this->assertSame(['id' => 6, 'name' => $i6['name'], 'x' => $i6['x'], 'y' => $i6['y'], 'background' => $i6['background'], 'killed' => 0, 'openstatus' => 1], $index['list'][0]);
+        $this->assertSame([10, 0], [$index['list'][4]['id'], $index['list'][1]['openstatus']]);
+        $this->assertSame(['islandid' => 6, 'islandtimes' => 0], $this->b2Row('member_activity', $uid, ['islandid', 'islandtimes']));
+
+        $this->assertSame(['status' => 1, 'info' => ['id' => 6, 'monsterlevel' => 41, 'name' => $i6['name'], 'image' => $i6['image'], 'silver' => 41000, 'gold' => 3, 'act' => 1]], $this->b2Request('island', 'get_mission', $p['auth'] + ['id' => 6]));
+        $this->assertSame(['status' => -2, 'info' => []], $this->b2Request('island', 'get_mission', $p['auth'] + ['id' => 999]));
+        // 等级组不符：返回 4，并把进度改到本等级组第一关
+        DB::table('member_activity')->where('uid', $uid)->update(['islandid' => 8]);
+        $this->assertSame(['status' => 4, 'info' => []], $this->b2Request('island', 'get_mission', $p['auth'] + ['id' => 1]));
+        $this->assertSame(6, $this->b2Row('member_activity', $uid, ['islandid'])['islandid']);
+
+        // 战败：扣军令（今日挑战次数 + 1），不加挑战次数
+        $this->emptyFormation($uid);
+        $act = $this->b2Member($uid, 'act');
+        $res = $this->b2Request('island', 'pk', $p['auth'] + ['id' => 6]);
+        $this->assertSame(['status', 'info', 'battle'], array_keys($res));
+        $this->assertSame(['id' => 6, 'background' => 0, 'report' => 0, 'act' => $act - 1, 'win' => -3, 'reward_gold' => 0, 'reward_silver' => 0, 'gold' => 9999, 'silver' => $this->b2Member($uid, 'silver'), 'cd' => 0], $res['info']);
+        $this->assertSame(['name' => $nickname, 'level' => 40], $res['battle']['left_role']);
+        $this->assertSame(['name' => $i6['name'], 'level' => 40], $res['battle']['right_role']);
+        $this->assertEqualsCanonicalizing([1, 3, 5, 7, 9], array_map('intval', array_keys($res['battle']['rightteam'])));
+        $this->assertSame(0, $this->b2Row('member_activity', $uid, ['islandtimes'])['islandtimes']);
+
+        $this->assertSame(2, $this->b2Request('island', 'pk', $p['auth'] + ['id' => 7])['status'], '未开启');
+        $this->assertSame(3, $this->b2Request('island', 'pk', $p['auth'] + ['id' => 1])['status'], '等级组不符');
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 0]);
+        $this->assertSame(-4, $this->b2Request('island', 'pk', $p['auth'] + ['id' => 6])['status']);
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 1]);
+        DB::table('member')->where('uid', $uid)->update(['act' => 0]);
+        $this->assertSame(4, $this->b2Request('island', 'pk', $p['auth'] + ['id' => 6])['status'], '军令不足');
+        // 战斗 CD（旧版 cd_model->get_attack）
+        DB::table('member')->where('uid', $uid)->update(['act' => 100]);
+        DB::table('member_field')->where('uid', $uid)->update(['attackstatus' => 1, 'attackdateline' => time() + 60]);
+        $this->assertSame(-1, $this->b2Request('island', 'pk', $p['auth'] + ['id' => 6])['status']);
+        DB::table('member_field')->where('uid', $uid)->update(['attackstatus' => 0, 'attackdateline' => time() + 1801]);
+        $this->assertSame(-1, $this->b2Request('island', 'pk', $p['auth'] + ['id' => 6])['status']);
+        DB::table('member_field')->where('uid', $uid)->update(['attackdateline' => time() + 1700]);
+        $this->assertSame(1, $this->b2Request('island', 'pk', $p['auth'] + ['id' => 6])['status']);
+    }
+
+    public function testIslandPkWinReportsAndProgress(): void
+    {
+        DB::execute('DELETE FROM `zc_sanguo_island_log`');
+        DB::execute('DELETE FROM `zc_sanguo_island_report`');
+        $p = $this->b2Player(40);
+        $uid = $p['uid'];
+        $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $this->b2Overpower($uid);
+        $this->b2Request('island', 'index', $p['auth']);
+
+        // 真实战斗：首胜开启下一关、银两必得、元宝按 50% 掉落、记战报
+        $silver = $this->b2Member($uid, 'silver');
+        $gold = $this->b2Member($uid, 'gold');
+        $act = $this->b2Member($uid, 'act');
+        $res = $this->b2Request('island', 'pk', $p['auth'] + ['id' => 6]);
+        $battle = $res['battle'];
+        $this->assertGreaterThanOrEqual(1, $battle['assess']);
+        $this->assertNotEmpty($battle['process']);
+        $info = $res['info'];
+        $this->assertContains($info['reward_gold'], [0, 3]);
+        $this->assertSame([41000, $silver + 41000, $gold + $info['reward_gold'], $act - 1], [$info['reward_silver'], $info['silver'], $info['gold'], $info['act']]);
+        $this->assertSame(['islandid' => 7, 'islandtimes' => 1], $this->b2Row('member_activity', $uid, ['islandid', 'islandtimes']));
+        $log = DB::table('island_log')->where('uid', $uid)->first();
+        $this->assertSame($info['report'], (int)$log['id']);
+        $this->assertSame([6, $nickname, 40, 0], [(int)$log['islandid'], $log['nickname'], (int)$log['level'], (int)$log['tree']]);
+
+        $report = $this->b2Request('island', 'get_report_info', $p['auth'] + ['id' => $info['report']]);
+        $this->assertSame(['status', 'battle', 'info'], array_keys($report));
+        $expected = $battle;
+        $expected['left_role'] = ['name' => $nickname, 'level' => 40];
+        $expected['right_role'] = ['name' => \Hanjiang\MasterData\Island::ROWS[6]['name'], 'level' => 41];
+        $this->assertEquals($expected, $report['battle']);
+        $this->assertSame(['win' => $battle['assess']], $report['info']);
+        $this->assertSame(['status' => 2, 'battle' => [], 'info' => []], $this->b2Request('island', 'get_report_info', $p['auth'] + ['id' => 999999]));
+        $this->assertSame(['status' => -1, 'battle' => [], 'info' => []], $this->b2Request('island', 'get_report_info', $p['auth']));
+        $list = $this->b2Request('island', 'get_report_list', $p['auth'] + ['id' => 6]);
+        $this->assertSame([['id' => $info['report'], 'islandid' => 6, 'uid' => $uid, 'nickname' => $nickname, 'level' => 40, 'dateline' => (int)$log['dateline'], 'tree' => 0]], $list['list']);
+        $this->assertSame(['status' => 2, 'list' => []], $this->b2Request('island', 'get_report_list', $p['auth'] + ['id' => 7]));
+
+        // 再打已过的关卡：军令按今日挑战次数 + 1 递增，不再记战报，进度不变
+        $res = $this->b2Request('island', 'pk', $p['auth'] + ['id' => 6]);
+        $this->assertSame([0, $act - 3], [$res['info']['report'], $res['info']['act']]);
+        $this->assertSame(['islandid' => 7, 'islandtimes' => 2], $this->b2Row('member_activity', $uid, ['islandid', 'islandtimes']));
+        $this->assertSame(['status' => 1, 'info' => ['id' => 7, 'monsterlevel' => 43, 'name' => \Hanjiang\MasterData\Island::ROWS[7]['name'], 'image' => \Hanjiang\MasterData\Island::ROWS[7]['image'], 'silver' => 43000, 'gold' => 3, 'act' => 3]], $this->b2Request('island', 'get_mission', $p['auth'] + ['id' => 7]));
+        $index = $this->b2Request('island', 'index', $p['auth']);
+        $this->assertSame([1, 1, 0, 1], [$index['list'][0]['killed'], $index['list'][1]['openstatus'], $index['list'][1]['killed'], $index['status']]);
+
+        // 跨天进入：回到本等级组第一关
+        DB::table('member_activity')->where('uid', $uid)->update(['islanddate' => strtotime('yesterday')]);
+        $this->b2Request('island', 'index', $p['auth']);
+        $this->assertSame(6, $this->b2Row('member_activity', $uid, ['islandid'])['islandid']);
+        // 升级到新等级组：进度改到新等级组第一关
+        DB::table('member')->where('uid', $uid)->update(['level' => 50]);
+        $index = $this->b2Request('island', 'index', $p['auth']);
+        $this->assertSame([11, 1], [$index['list'][0]['id'], $index['list'][0]['openstatus']]);
+        $this->assertSame(11, $this->b2Row('member_activity', $uid, ['islandid'])['islandid']);
+
+        $gold = $this->b2Member($uid, 'gold');
+        $this->assertSame(['status' => -1], $this->b2Request('island', 'send_to_chat', $p['auth'] + ['id' => 6]));
+        $this->assertSame(['status' => -2], $this->b2Request('island', 'send_to_chat', $p['auth'] + ['id' => 999, 'report' => 5]));
+        $this->assertSame(['status' => 0], $this->b2Request('island', 'send_to_chat', $p['auth'] + ['id' => 6, 'report' => 5]));
+        $this->assertSame($gold, $this->b2Member($uid, 'gold'));
+    }
+
+    // ---------------------------------------------------------------
+    // 批次 batch3：群雄逐鹿 / 国家矿脉 / 国战（按旧版移植）
+    // ---------------------------------------------------------------
+
+    /**
+     * @param array<string, mixed> $member
+     * @return array{uid: int, auth: array<string, mixed>}
+     */
+    private function b3Player(int $level, array $member = []): array
+    {
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => $level, 'nickname' => 'p' . $p['uid']] + $member);
+        Redis::del('player:' . $p['uid']);
+        return $p;
+    }
+
+    /**
+     * 国家（玩家军团）
+     */
+    private function b3Country(int $level): int
+    {
+        return (int)DB::table('country')->insertGetId(['name' => '国' . substr((string)hrtime(true), -6), 'level' => $level, 'member' => 1, 'uid' => 0, 'nickname' => '']);
+    }
+
+    /**
+     * 让玩家加入国家（member.country + member_country，加入时间为 0，不受当天加入的限制）
+     *
+     * @param array{uid: int} $p
+     */
+    private function b3Join(array $p, int $country, int $job): void
+    {
+        DB::table('member')->where('uid', $p['uid'])->update(['country' => $country]);
+        DB::table('member_country')->insert(['uid' => $p['uid'], 'nickname' => 'p' . $p['uid'], 'country' => $country, 'job' => $job, 'joindateline' => 0]);
+        Redis::del('player:' . $p['uid']);
+    }
+
+    private function b3At(string $datetime): int
+    {
+        $ts = (int)strtotime($datetime);
+        \Hanjiang\Model\BossClock::freeze($ts);
+        return $ts;
+    }
+
+    private function competeReset(): void
+    {
+        DB::execute('DELETE FROM `zc_sanguo_compete`');
+        DB::execute('DELETE FROM `zc_sanguo_compete_action_log`');
+        Redis::del('compete_topuser');
+    }
+
+    /**
+     * 群雄逐鹿活动行（ActivityTime：compete）
+     *
+     * @return array<string, int|string>
+     */
+    private static function competeActivity(): array
+    {
+        foreach (\Hanjiang\MasterData\ActivityTime::ROWS as $row) {
+            if ($row['name'] === 'compete') {
+                return $row;
+            }
+        }
+        throw new \RuntimeException('compete');
+    }
+
+    public function testCompeteClosedInProduction(): void
+    {
+        $this->competeReset();
+        $p = $this->b3Player(30);
+        foreach (['index', 'get_reward', 'get_reward_list', 'buy_pk_num', 'action'] as $m) {
+            $this->assertSame(-1, $this->b2Request('compete', $m, $p['auth'])['status'], $m);
+        }
+        $this->assertSame(0, DB::table('compete')->count(), '活动未开启时不入榜');
+    }
+
+    public function testCompeteLadderChallengeAndRewards(): void
+    {
+        $this->competeReset();
+        $end = (int)self::competeActivity()['endtime'];
+        try {
+            $now = $this->b3At(date('Y-m-d H:i:s', $end - 86400 * 5));
+            $low = $this->b3Player(25);
+            foreach (['index', 'get_reward', 'get_reward_list', 'buy_pk_num', 'action'] as $m) {
+                $this->assertSame(2, $this->b2Request('compete', $m, $low['auth'])['status'], $m);
+            }
+
+            // 首次打开以「最后一名 + 1」入榜，挑战次数 100
+            [$a, $b, $c, $d] = [$this->b3Player(26), $this->b3Player(26), $this->b3Player(26), $this->b3Player(26)];
+            foreach ([$a, $b, $c, $d] as $i => $p) {
+                $res = $this->b2Request('compete', 'index', $p['auth']);
+                $this->assertSame(1, $res['status']);
+                $this->assertSame($i + 1, $res['log']['rank']);
+            }
+            $this->assertSame(['uid' => $d['uid'], 'nickname' => 'p' . $d['uid'], 'rank' => 4, 'times' => 100, 'dateline' => $now], $res['log'], '首次插入返回插入的数据');
+            $this->assertSame($end - 86400 - $now, $res['cd']);
+            $this->assertSame(0, $res['is_get']);
+            $this->assertSame(0, $res['type']);
+            $reward4 = \Hanjiang\MasterData\CompeteReward::ROWS[4];
+            $this->assertSame(\Hanjiang\MasterData\MountTemp::ROWS[$reward4['value1']], $res['reward']['value1'], '坐骑换成坐骑模板');
+            $this->assertSame([3, $reward4['value2'], 5, $reward4['value3'], 2, $reward4['value4'], '4~11'], [$res['reward']['type2'], $res['reward']['value2'], $res['reward']['type3'], $res['reward']['value3'], $res['reward']['type4'], $res['reward']['value4'], $res['reward']['rank_str']]);
+            $this->assertSame([1, 2, 3], array_keys($res['top_list']));
+            $this->assertSame(['uid' => $a['uid'], 'nickname' => 'p' . $a['uid'], 'tree' => 0], $res['top_list'][1]);
+            // 可挑战名单：名次 1 ~ 5 + 自己，比自己靠前的 status 1
+            $this->assertSame([1, 2, 3, 4], array_column($res['list'], 'rank'));
+            $this->assertSame([1, 1, 1, 0], array_column($res['list'], 'status'));
+            $this->assertSame(['uid', 'nickname', 'rank', 'get_rank', 'status', 'gender', 'level'], array_keys($res['list'][1]));
+
+            // 奖励列表：10 档，坐骑换成模板
+            $list = $this->b2Request('compete', 'get_reward_list', $a['auth']);
+            $this->assertSame(1, $list['status']);
+            $this->assertSame([1, 2, 3, '4~11', '11~21', '21~31', '31~51', '51~76', '76~101', '101~200'], array_column($list['list'], 'rank_str'));
+            $this->assertSame(\Hanjiang\MasterData\MountTemp::ROWS[\Hanjiang\MasterData\CompeteReward::ROWS[1]['value1']], $list['list'][0]['value1']);
+
+            // 购买次数：2 元宝 + 1 次
+            $this->assertSame(['status' => 1, 'price' => 2], $this->b2Request('compete', 'buy_pk_num', $d['auth'] + ['t' => 0]));
+            $gold = $this->b2Member($d['uid'], 'gold');
+            $buy = $this->b2Request('compete', 'buy_pk_num', $d['auth'] + ['t' => 1]);
+            $this->assertSame(['status' => 1, 'price' => 2, 'gold' => $gold - 2, 'times' => 101], $buy);
+            $this->assertSame($gold - 2, $this->b2Member($d['uid'], 'gold'));
+
+            // 挑战未结束不能领奖
+            $this->assertSame(-2, $this->b2Request('compete', 'get_reward', $a['auth'])['status']);
+
+            // 守门：不在名单 / 打比自己低的 / 对方正在 pk / 次数用完
+            $outsider = $this->b3Player(26);
+            $this->assertSame(-4, $this->b2Request('compete', 'action', $c['auth'] + ['t' => $outsider['uid']])['status']);
+            $this->assertSame(-7, $this->b2Request('compete', 'action', $b['auth'] + ['t' => $c['uid']])['status']);
+            Redis::set('compete_battle_' . $a['uid'], 1, 500);
+            $this->assertSame(-5, $this->b2Request('compete', 'action', $c['auth'] + ['t' => $a['uid']])['status']);
+            Redis::del('compete_battle_' . $a['uid']);
+            DB::table('compete')->where('uid', $b['uid'])->update(['times' => 0]);
+            $this->assertSame(-3, $this->b2Request('compete', 'action', $b['auth'] + ['t' => $a['uid']])['status']);
+
+            // D（4）挑战阵法里没有武将的 A（1）：空队伍直接完胜（assess 3），互换名次
+            $this->emptyFormation($a['uid']);
+            $win = $this->b2Request('compete', 'action', $d['auth'] + ['t' => $a['uid']]);
+            $this->assertSame(1, $win['status']);
+            $info = $win['info'];
+            $this->assertSame(3, $info['win']);
+            $this->assertSame(1, $info['rank']);
+            $this->assertSame(1, $info['reward_status']);
+            $this->assertSame(\Hanjiang\MasterData\MountTemp::ROWS[\Hanjiang\MasterData\CompeteReward::ROWS[1]['value1']], $info['reward']['value1']);
+            $this->assertSame(100, $info['times']);
+            $this->assertSame([1, 2, 3, 4], array_column($info['list'], 'rank'));
+            $this->assertSame([$d['uid'], $b['uid'], $c['uid'], $a['uid']], array_column($info['list'], 'uid'));
+            $this->assertSame([$d['uid'], $b['uid'], $c['uid']], array_column($info['top_list'], 'uid'), '前 3 名缓存已刷新');
+            $this->assertSame(['id' => $info['report'], 'type' => 'compete'], $win['share']);
+            $this->assertSame(['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff', 'left_role', 'right_role'], array_keys($win['battle']));
+            $this->assertSame([], $win['battle']['rightteam']);
+            $this->assertSame([4, 1], [(int)DB::table('compete')->where('uid', $a['uid'])->value('rank'), (int)DB::table('compete')->where('uid', $d['uid'])->value('rank')]);
+            $mail = $this->messagesOf($a['uid']);
+            $last = end($mail);
+            $this->assertSame([4, $d['uid'], $info['report']], [$last['type'], $last['fromuid'], $last['id']]);
+            $this->assertStringEndsWith('在群雄逐鹿将您击败，排名跌落至第4名。', $last['message']);
+            $this->assertSame(1, DB::table('compete_action_log')->where('uid', $d['uid'])->count());
+
+            // A（4）阵法为空挑战 C（3）：直接大败，名次不变
+            $lose = $this->b2Request('compete', 'action', $a['auth'] + ['t' => $c['uid']]);
+            $this->assertSame([-3, 4, 0, []], [$lose['info']['win'], $lose['info']['rank'], $lose['info']['reward_status'], $lose['info']['reward']]);
+            $this->assertSame(99, $lose['info']['times']);
+            $mail = $this->messagesOf($c['uid']);
+            $this->assertStringEndsWith('在群雄逐鹿向您挑战，被您打的落花流水。', end($mail)['message']);
+
+            // 双方都有阵容的正常战斗
+            $real = $this->b2Request('compete', 'action', $c['auth'] + ['t' => $b['uid']]);
+            $this->assertSame(1, $real['status']);
+            $this->assertNotEmpty($real['battle']['leftteam']);
+            $this->assertNotEmpty($real['battle']['rightteam']);
+            $this->assertNotEmpty($real['battle']['process']);
+            $won = $real['battle']['assess'] >= 1;
+            $this->assertSame($won ? 2 : 3, (int)DB::table('compete')->where('uid', $c['uid'])->value('rank'));
+
+            // 挑战结束（活动最后一天）：不能挑战 / 买次数，可以领奖
+            $this->b3At(date('Y-m-d H:i:s', $end - 3600));
+            $this->assertSame(-2, $this->b2Request('compete', 'action', $c['auth'] + ['t' => $d['uid']])['status']);
+            $this->assertSame(-2, $this->b2Request('compete', 'buy_pk_num', $c['auth'] + ['t' => 1])['status']);
+            $silver = $this->b2Member($d['uid'], 'silver');
+            $soul = $this->b2Member($d['uid'], 'soul');
+            $reward = $this->b2Request('compete', 'get_reward', $d['auth']);
+            $row1 = \Hanjiang\MasterData\CompeteReward::ROWS[1];
+            $this->assertSame(1, $reward['status']);
+            $this->assertSame(\Hanjiang\MasterData\MountTemp::ROWS[$row1['value1']], $reward['reward']['value1'], '坐骑只回报不发放');
+            $this->assertSame($silver + $row1['value4'], $this->b2Member($d['uid'], 'silver'));
+            $this->assertSame($soul + $row1['value3'], $this->b2Member($d['uid'], 'soul'));
+            $this->assertSame($silver + $row1['value4'], $reward['all_silver']);
+            $this->assertSame($row1['value2'], (int)(Redis::getJson('user_trader:' . $d['uid'])['get3'] ?? 0), '紫宝石');
+            $this->assertSame(1, (int)DB::table('compete')->where('uid', $d['uid'])->value('get_rank'));
+            $this->assertSame(-5, $this->b2Request('compete', 'get_reward', $d['auth'])['status']);
+            $this->assertSame(1, $this->b2Request('compete', 'index', $d['auth'])['is_get']);
+            $this->b2Request('compete', 'index', $outsider['auth']);
+            DB::table('compete')->where('uid', $outsider['uid'])->update(['rank' => 201]);
+            $this->assertSame(-4, $this->b2Request('compete', 'get_reward', $outsider['auth'])['status']);
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    public function testCompeteCronSettlesUnclaimedRewards(): void
+    {
+        $this->competeReset();
+        $end = (int)self::competeActivity()['endtime'];
+        $p = $this->b3Player(26);
+        $q = $this->b3Player(26);
+        DB::table('compete')->insert(['uid' => $p['uid'], 'nickname' => 'x', 'rank' => 12, 'times' => 0, 'get_rank' => 0, 'dateline' => 0]);
+        DB::table('compete')->insert(['uid' => $q['uid'], 'nickname' => 'y', 'rank' => 2, 'times' => 0, 'get_rank' => 2, 'dateline' => 0]);
+        $this->assertSame(-2, \Hanjiang\Cron\CompeteCron::run($end - 1), '活动未结束');
+        $this->assertSame(-3, \Hanjiang\Cron\CompeteCron::run($end + 36001), '结束超过 10 小时');
+        $silver = $this->b2Member($p['uid'], 'silver');
+        $qSilver = $this->b2Member($q['uid'], 'silver');
+        $this->assertSame(1, \Hanjiang\Cron\CompeteCron::run($end + 3600));
+        $this->assertSame($silver + \Hanjiang\MasterData\CompeteReward::ROWS[5]['value4'], $this->b2Member($p['uid'], 'silver'), '12 名取 11 ~ 21 档');
+        $this->assertSame(12, (int)DB::table('compete')->where('uid', $p['uid'])->value('get_rank'));
+        $this->assertSame($qSilver, $this->b2Member($q['uid'], 'silver'), '已领取的不重复发放');
+        $this->assertSame(-4, \Hanjiang\Cron\CompeteCron::run($end + 3600), '没有可发放的用户');
+    }
+
+    /**
+     * 国家矿脉玩家：91 级并加入国家
+     *
+     * @return array{uid: int, auth: array<string, mixed>}
+     */
+    private function minePlayer(int $country): array
+    {
+        $p = $this->b3Player(91);
+        $this->b3Join($p, $country, 51);
+        return $p;
+    }
+
+    public function testCountryMineIndexCaikuangAndGiveUp(): void
+    {
+        DB::execute('DELETE FROM `zc_sanguo_country_mine`');
+        try {
+            $now = $this->b3At('2026-10-27 10:00:00');
+            $low = $this->b3Player(90);
+            $noCountry = $this->b3Player(91);
+            foreach (['index', 'get_countrymine_info', 'get_reward', 'give_up', 'caikuang', 'rob'] as $m) {
+                $params = in_array($m, ['caikuang', 'rob'], true) ? ['p' => 2, 'id' => 1, 't' => 3] : [];
+                $this->assertSame(2, $this->b2Request('countrymine', $m, $low['auth'] + $params)['status'], $m);
+                $this->assertSame(3, $this->b2Request('countrymine', $m, $noCountry['auth'] + $params)['status'], $m);
+            }
+
+            $country = $this->b3Country(5);
+            $a = $this->minePlayer($country);
+            $res = $this->b2Request('countrymine', 'index', $a['auth']);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(2, $res['page']);
+            $this->assertSame(['uid' => $a['uid'], 'times' => 3, 'robtimes' => 3, 'page' => 0, 'site' => 0, 'type' => 0, 'level' => 0, 'jointime' => 0, 'dateline' => $now], $res['log']);
+            $this->assertSame($now, $res['dateline']);
+            // 第 1 页：1 个 1 类矿（挪到第 5 个显示）+ 8 个 2 类矿
+            $this->assertSame([2, 3, 4, 5, 1, 6, 7, 8, 9], array_column($res['list'], 'id'));
+            $this->assertSame(['id' => 1, 'page' => 1, 'type' => 1, 'status' => 0, 'series' => 6, 'jade' => 65520, 'get_jade' => 0], $res['list'][4], '没有人占矿的页面累计收益为 0');
+            $this->assertSame(-1, $this->b2Request('countrymine', 'index', $a['auth'] + ['p' => 11])['status']);
+            $this->assertSame(0, $this->b2Request('countrymine', 'index', $a['auth'] + ['p' => 10])['page']);
+
+            // 开采：页码 / 位置 / 类型与配置不符时 -5
+            $this->assertSame(-5, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 11, 'id' => 1, 't' => 5])['status']);
+            $this->assertSame(-5, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 1, 'id' => 1, 't' => 2])['status']);
+            $this->assertSame(-5, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 1, 'id' => 10, 't' => 2])['status']);
+            Redis::set('countrymine_lock_1_1', 1, 600);
+            $this->assertSame(-5, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 1, 'id' => 1, 't' => 1])['status']);
+            Redis::del('countrymine_lock_1_1');
+            $dig = $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 1, 'id' => 1, 't' => 1]);
+            $countryName = (string)DB::table('country')->where('id', $country)->value('name');
+            $this->assertSame(['status' => 1, 'country' => $countryName, 'country_name' => mb_substr($countryName, 0, 1), 'dateline' => 900, 'times' => 2], $dig);
+            $this->assertNull(Redis::get('countrymine_lock_1_1'), '操作完成后解锁');
+            $this->assertSame($now + 900, (int)DB::table('member_field')->where('uid', $a['uid'])->value('oncountrymine'));
+            $this->assertSame(-2, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 1, 'id' => 2, 't' => 2])['status'], '已占领一个矿');
+            $b = $this->minePlayer($country);
+            $this->assertSame(-4, $this->b2Request('countrymine', 'caikuang', $b['auth'] + ['p' => 1, 'id' => 1, 't' => 1])['status'], '该矿已被占领');
+
+            // 5 分钟后：矿区页面与矿区信息
+            $this->b3At('2026-10-27 10:05:30');
+            $page = $this->b2Request('countrymine', 'index', $a['auth']);
+            $mine = $page['list'][4];
+            $this->assertSame([1, 2, 'p' . $a['uid'], 91, $a['uid'], $countryName, 570, 65520, 4368 * 5, 0], [$mine['id'], $mine['status'], $mine['nickname'], $mine['level'], $mine['uid'], $mine['country'], $mine['time'], $mine['jade'], $mine['get_jade'], $mine['friend']]);
+            $info = $this->b2Request('countrymine', 'get_countrymine_info', $b['auth'] + ['p' => 1, 'id' => 1, 't' => 1]);
+            $this->assertSame(['uid' => $a['uid'], 'nickname' => 'p' . $a['uid'], 'country' => $countryName, 'country_name' => mb_substr($countryName, 0, 1), 'status' => 1, 'time' => 570, 'jade' => 65520, 'get_jade' => 21840, 'friend' => 0], $info['info']);
+            $empty = $this->b2Request('countrymine', 'get_countrymine_info', $b['auth'] + ['p' => 2, 'id' => 3, 't' => 3]);
+            $this->assertSame(['status' => 0, 'get_jade' => 0, 'jade' => 27300, 'time' => 0, 'friend' => 0, 'country' => 0, 'uid' => 0, 'nickname' => 0], $empty['info']);
+
+            // 未到收获时间不能收获；放弃得到已累积的玉石（5 分钟 × 每分钟 4368）
+            $this->assertSame(-3, $this->b2Request('countrymine', 'get_reward', $a['auth'])['status']);
+            $give = $this->b2Request('countrymine', 'give_up', $a['auth']);
+            $this->assertSame(['status' => 1, 'jade' => 21840, 'all_jade' => 0], $give);
+            $this->assertSame(0, (int)DB::table('member_field')->where('uid', $a['uid'])->value('oncountrymine'));
+            $this->assertSame(-2, $this->b2Request('countrymine', 'give_up', $a['auth'])['status']);
+            $this->assertSame(-2, $this->b2Request('countrymine', 'get_reward', $a['auth'])['status']);
+
+            // 次数用完；次日重置 3 / 3
+            DB::table('country_mine')->where('uid', $a['uid'])->update(['times' => 0]);
+            $this->assertSame(-3, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 1, 'id' => 1, 't' => 1])['status']);
+            $this->b3At('2026-10-28 00:00:01');
+            $this->assertSame([3, 3], [$this->b2Request('countrymine', 'index', $a['auth'])['log']['times'], $this->b2Request('countrymine', 'index', $a['auth'])['log']['robtimes']]);
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    /**
+     * 第一个让 mt_rand(1, 100) 依次落在要求区间的种子
+     *
+     * @param list<array{int, int}> $ranges 每次 mt_rand 的 [min, max] 与期望区间 [lo, hi]
+     */
+    private function mineSeed(array $ranges): int
+    {
+        for ($seed = 1; $seed < 200000; $seed++) {
+            mt_srand($seed);
+            $ok = true;
+            foreach ($ranges as [$min, $max, $lo, $hi]) {
+                $roll = mt_rand($min, $max);
+                if ($roll < $lo || $roll > $hi) {
+                    $ok = false;
+                    break;
+                }
+            }
+            if ($ok) {
+                return $seed;
+            }
+        }
+        $this->fail('no seed');
+    }
+
+    public function testCountryMineHarvestEventsRobAndFightNotice(): void
+    {
+        DB::execute('DELETE FROM `zc_sanguo_country_mine`');
+        try {
+            $now = $this->b3At('2026-10-27 12:00:00');
+            $x = $this->b3Country(5);
+            $y = $this->b3Country(5);
+            $a = $this->minePlayer($x);
+            $b = $this->minePlayer($y);
+            $a2 = $this->minePlayer($x);
+
+            // 收获：占满 15 分钟，不触发事件（第一次掷点大于 1 类矿的事件概率 50）
+            $this->assertSame(1, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 1, 'id' => 1, 't' => 1])['status']);
+            $this->b3At('2026-10-27 12:15:00');
+            $this->assertSame(1, $this->b2Request('member', 'index', $a['auth'])['oncountrymine'], '主城提示国家矿可收获');
+            mt_srand($this->mineSeed([[1, 100, 51, 100]]));
+            $gold = $this->b2Member($a['uid'], 'gold');
+            $harvest = $this->b2Request('countrymine', 'get_reward', $a['auth']);
+            $this->assertSame(['status' => 1, 'event_status' => 0, 'event_name' => '', 'event_type' => 0, 'event_value' => 0, 'event_add' => 0, 'jade' => 65520, 'all_jade' => 0, 'all_gold' => $gold], $harvest);
+            $this->assertSame([0, 0], array_map('intval', array_values(DB::table('country_mine')->select('page', 'site')->where('uid', $a['uid'])->first())));
+            $this->assertSame(0, $this->b2Request('member', 'index', $a['auth'])['oncountrymine']);
+
+            // 收获触发事件「石中藏金-小」（权重 91 ~ 120）：加 10 元宝
+            $this->assertSame(1, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 1, 'id' => 2, 't' => 2])['status']);
+            $this->b3At('2026-10-27 12:30:00');
+            mt_srand($this->mineSeed([[1, 100, 1, 40], [1, 180, 91, 120]]));
+            $gold = $this->b2Member($a['uid'], 'gold');
+            $harvest = $this->b2Request('countrymine', 'get_reward', $a['auth']);
+            $this->assertSame([1, '石中藏金-小', 3, 10, 0, 91 * 120 * 4], [$harvest['event_status'], $harvest['event_name'], $harvest['event_type'], $harvest['event_value'], $harvest['event_add'], $harvest['jade']]);
+            $this->assertSame($gold + 10, $this->b2Member($a['uid'], 'gold'));
+
+            // 抢夺：同国家不能抢；A 的矿被 B（他国）抢
+            $this->assertSame(1, $this->b2Request('countrymine', 'caikuang', $a['auth'] + ['p' => 2, 'id' => 1, 't' => 3])['status']);
+            $this->assertSame(-5, $this->b2Request('countrymine', 'rob', $a2['auth'] + ['p' => 2, 'id' => 1, 't' => 3])['status']);
+            $this->assertSame(-4, $this->b2Request('countrymine', 'rob', $b['auth'] + ['p' => 2, 'id' => 2, 't' => 3])['status'], '空矿不能抢');
+            $this->assertSame(-4, $this->b2Request('countrymine', 'rob', $b['auth'] + ['p' => 2, 'id' => 1, 't' => 5])['status'], '类型与矿区配置不符');
+            Redis::set('countrymine_lock_2_1', 1, 600);
+            $this->assertSame(-7, $this->b2Request('countrymine', 'rob', $b['auth'] + ['p' => 2, 'id' => 1, 't' => 3])['status']);
+            Redis::del('countrymine_lock_2_1');
+
+            // 10 分钟后 B 抢夺阵法为空的 A：完胜，A 被清出，B 占矿，得到 10 分钟累积的玉石；掷点不触发事件
+            $this->b3At('2026-10-27 12:40:00');
+            $this->emptyFormation($a['uid']);
+            mt_srand($this->mineSeed([[1, 100, 31, 100]]));
+            $rob = $this->b2Request('countrymine', 'rob', $b['auth'] + ['p' => 2, 'id' => 1, 't' => 3]);
+            $this->assertSame(1, $rob['status']);
+            $perMinute = intdiv(91 * 120 * 25 / 10, 15);
+            $this->assertSame([3, 2, $perMinute * 10, 0, 0, 'p' . $a['uid']], [$rob['info']['win'], $rob['info']['robtimes'], $rob['info']['jade'], $rob['info']['all_jade'], $rob['info']['event_status'], $rob['info']['name']]);
+            $this->assertSame(['id' => $rob['info']['report'], 'type' => 'countrymine'], $rob['share']);
+            $this->assertSame(['name', 'level', 'gender'], array_keys($rob['battle']['right_role']));
+            $this->assertSame([0, 0], array_map('intval', array_values(DB::table('country_mine')->select('page', 'site')->where('uid', $a['uid'])->first())));
+            $this->assertSame([2, 1, 3, 91, $now + 2400], array_map('intval', array_values(DB::table('country_mine')->select('page', 'site', 'type', 'level', 'jointime')->where('uid', $b['uid'])->first())));
+            $this->assertSame(0, (int)DB::table('member_field')->where('uid', $a['uid'])->value('oncountrymine'));
+            $this->assertSame($now + 2400 + 900, (int)DB::table('member_field')->where('uid', $b['uid'])->value('oncountrymine'));
+            $mail = $this->messagesOf($a['uid']);
+            $last = end($mail);
+            $this->assertSame([11, $b['uid'], $rob['info']['report']], [$last['type'], $last['fromuid'], $last['id']]);
+            $this->assertStringEndsWith('攻打了您的国家矿，掠夺了你的玉石' . ($perMinute * 10), $last['message']);
+            $notice = DB::table('country_fight_notice')->where('attack_uid', $b['uid'])->first();
+            $this->assertSame([0, $a['uid'], 'p' . $a['uid'], $x, $y, 1], [(int)$notice['type'], (int)$notice['member1'], $notice['member1_name'], (int)$notice['member_country'], (int)$notice['attack_country'], (int)$notice['win']]);
+            // 国家战报：B 的国家是荣誉（type 1），A 的国家是屈辱（type 0）
+            $honor = $this->b2Request('country', 'fight_notice', $b['auth'] + ['type' => 1]);
+            $this->assertSame(1, $honor['total']);
+            $this->assertSame(['type' => 0, 'attack' => $b['uid'], 'attack_nickname' => 'p' . $b['uid'], 'member_country' => $x, 'member_country_name' => (string)DB::table('country')->where('id', $x)->value('name'), 'member1' => $a['uid'], 'member1_name' => 'p' . $a['uid'], 'dateline' => date('m-d H:i:s', $now + 2400)], $honor['log'][0]);
+            $this->assertSame(1, $this->b2Request('country', 'fight_notice', $a['auth'] + ['type' => 0])['total']);
+            $this->assertSame(-2, $this->b2Request('countrymine', 'rob', $b['auth'] + ['p' => 2, 'id' => 2, 't' => 3])['status'], '已占领一个矿不能再抢');
+
+            // A2（同国）阵法为空去抢 B 的矿以外：A 阵法为空抢 B 的矿，直接大败
+            $lose = $this->b2Request('countrymine', 'rob', $a['auth'] + ['p' => 2, 'id' => 1, 't' => 3]);
+            $this->assertSame([1, -3, 2, 0], [$lose['status'], $lose['info']['win'], $lose['info']['robtimes'], $lose['info']['jade']]);
+            $mail = $this->messagesOf($b['uid']);
+            $this->assertStringEndsWith('攻打了您的国家矿，被您击败了。', end($mail)['message']);
+            DB::table('country_mine')->where('uid', $a['uid'])->update(['robtimes' => 0]);
+            $this->assertSame(-3, $this->b2Request('countrymine', 'rob', $a['auth'] + ['p' => 2, 'id' => 1, 't' => 3])['status']);
+
+            // 双方都有阵容的正常抢夺
+            $real = $this->b2Request('countrymine', 'rob', $a2['auth'] + ['p' => 2, 'id' => 1, 't' => 3]);
+            $this->assertSame(1, $real['status']);
+            $this->assertNotEmpty($real['battle']['leftteam']);
+            $this->assertNotEmpty($real['battle']['rightteam']);
+            $this->assertSame($real['battle']['assess'] >= 1 ? $a2['uid'] : $b['uid'], (int)DB::table('country_mine')->where('page', 2)->where('site', 1)->value('uid'));
+
+            $this->assertSame(['status' => 0], $this->b2Request('countrymine', 'send_to_chat', $b['auth'] + ['touid' => $a['uid'], 'report' => 5, 'win' => 1]));
+            $this->assertSame(['status' => -1], $this->b2Request('countrymine', 'send_to_chat', $b['auth'] + ['touid' => 0, 'report' => 5]));
+        } finally {
+            \Hanjiang\Model\BossClock::freeze(null);
+        }
+    }
+
+    /**
+     * 国战准备：清空城池 / 战报 / 国战 Redis，并让 13 座都城全部开放（全服主线进度到第 14 个势力）
+     */
+    private function siegeReset(): void
+    {
+        foreach (['country_city', 'country_city_report', 'country_siege_log'] as $table) {
+            DB::execute('DELETE FROM `zc_sanguo_' . $table . '`');
+        }
+        foreach (Redis::keys('siege_*') as $key) {
+            $prefix = (string)Redis::instance()->getOption(\Redis::OPT_PREFIX);
+            Redis::del(str_starts_with($key, $prefix) ? substr($key, strlen($prefix)) : $key);
+        }
+        DB::table('map')->where('uid', 0)->delete();
+        DB::table('map')->insert(['uid' => 0, 'level' => 14, 'stage' => 1, 'mission' => 1]);
+    }
+
+    private function siegeCleanup(): void
+    {
+        \Hanjiang\Model\BossClock::freeze(null);
+        DB::table('map')->where('uid', 0)->delete();
+    }
+
+    public function testSiegeIndexCapitalInfoAndOccupy(): void
+    {
+        $this->siegeReset();
+        try {
+            $this->b3At('2026-10-26 12:00:00');
+            $none = $this->b3Player(30);
+            $this->assertSame(['status' => -1], $this->b2Request('siege', 'index', $none['auth']));
+            $this->assertSame(['status' => -1], $this->b2Request('siege', 'capital_info', $none['auth'] + ['id' => 1]));
+
+            $x = $this->b3Country(5);
+            $y = $this->b3Country(3);
+            $kingX = $this->b3Player(60, ['vip' => 7, 'gold' => 5000]);
+            $this->b3Join($kingX, $x, 1);
+            $memberX = $this->b3Player(60);
+            $this->b3Join($memberX, $x, 30);
+            $officerX = $this->b3Player(60);
+            $this->b3Join($officerX, $x, 2);
+            $kingY = $this->b3Player(60, ['vip' => 7, 'gold' => 5000]);
+            $this->b3Join($kingY, $y, 1);
+
+            // 退国 7 天内
+            $left = $this->b3Player(30);
+            $this->b3Join($left, $x, 51);
+            DB::table('member_country')->where('uid', $left['uid'])->update(['leavedateline' => (int)strtotime('2026-10-25 12:00:00')]);
+            $this->assertSame(['status' => 3, 'cd' => 6 * 86400], $this->b2Request('siege', 'index', $left['auth']));
+
+            $index = $this->b2Request('siege', 'index', $kingX['auth']);
+            $this->assertSame(1, $index['status']);
+            $this->assertCount(13, $index['list']);
+            $this->assertSame(['id' => 1, 'name' => '濮阳', 'time' => 1830, 'type' => 1, 'value' => 3, 'team' => '张角', 'open' => 1, 'size' => 0, 'occupy' => 0, 'occupy_name' => ''], $index['list'][0]);
+            $this->assertSame([0, 0, 1, 0, 0, 1, 1, 1, 1, 0, 1, 0, 1], array_column($index['list'], 'size'));
+
+            $info = $this->b2Request('siege', 'capital_info', $kingX['auth'] + ['id' => 1]);
+            $this->assertSame(['status' => 1, 'info' => [
+                'id' => 1, 'name' => '濮阳', 'time' => '周六18:30分', 'team' => '张角', 'open' => 1, 'str' => '全国成员免费征收次数+3',
+                'castellanid' => 0, 'castellanname' => '张角', 'generalname' => '张角', 'challengercid' => 0, 'challengername' => '张角',
+                'status' => 0, 'force' => 0,
+            ], 'price' => 1000], $info);
+            $this->assertSame('全国通天塔每日领取500%', $this->b2Request('siege', 'capital_info', $kingX['auth'] + ['id' => 13])['info']['str']);
+            $this->assertSame(['status' => -2], $this->b2Request('siege', 'capital_info', $kingX['auth'] + ['id' => 14]));
+
+            // 占领（请战）守门
+            $this->assertSame(-2, $this->b2Request('siege', 'occupy', $memberX['auth'] + ['id' => 1])['status'], '官职不够');
+            $this->assertSame(-5, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 14])['status']);
+            // 全服主线进度只到第 1 个势力（其他用例的进度暂时软删除）：都城未开放
+            $others = array_column(DB::table('map')->select('id')->where('uid', '<>', 0)->whereNull('deleted_at')->get(), 'id');
+            DB::table('map')->whereIn('id', $others !== [] ? $others : [0])->update(['deleted_at' => date('Y-m-d H:i:s')]);
+            DB::table('map')->where('uid', 0)->update(['level' => 1]);
+            try {
+                $this->assertSame(0, $this->b2Request('siege', 'index', $kingX['auth'])['list'][0]['open']);
+                $this->assertSame(-6, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1])['status'], '都城未开放');
+            } finally {
+                DB::table('map')->whereIn('id', $others !== [] ? $others : [0])->update(['deleted_at' => null]);
+                DB::table('map')->where('uid', 0)->update(['level' => 14]);
+            }
+            $this->b3At('2026-10-30 18:00:00');
+            $this->assertSame(-3, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1])['status'], '周五 18 点起不能占领');
+            $this->b3At('2026-10-26 12:00:00');
+
+            // X 请战 NPC 城濮阳
+            $ok = $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1]);
+            $this->assertSame(['status' => 1], $ok);
+            $city = DB::table('country_city')->where('maplevel', 1)->first();
+            $this->assertSame([$x, 0, 0], [(int)$city['challengercid'], (int)$city['cid'], (int)$city['lock']]);
+            $this->assertSame([1, 2], [(int)DB::table('country')->where('id', $x)->value('city'), (int)DB::table('country')->where('id', $x)->value('city_status')]);
+            $mail = $this->messagesOf($memberX['uid']);
+            $this->assertSame([7, 1000, '国家通知'], [end($mail)['type'], end($mail)['fromuid'], end($mail)['fromname']]);
+            $this->assertStringEndsWith('成功对濮阳发起了攻占,请各位做好作战准备，请在周六18时30分准备应战！', end($mail)['message']);
+            $this->assertSame(-4, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1])['status']);
+            $this->assertSame(2, $this->b2Request('siege', 'capital_info', $kingX['auth'] + ['id' => 1])['status'], '本国已请战');
+            $this->assertSame([2, ''], [$this->b2Request('siege', 'index', $kingX['auth'])['list'][0]['occupy'], $this->b2Request('siege', 'index', $kingX['auth'])['list'][0]['occupy_name']]);
+
+            // 主城国战提示：国家已请战，等待开战（敌方为 NPC）
+            $war = $this->b2Request('member', 'index', $kingX['auth']);
+            $this->assertSame([0, 0, '17:30', '张角军团', 0], [$war['country_war'], $war['is_saturday'], $war['country_date'], $war['enemy_name'], $war['country_lock']]);
+
+            // Y（3 级）普通攻占：等级不高于挑战方 X（5 级）失败
+            $low = $this->b2Request('siege', 'occupy', $kingY['auth'] + ['id' => 1]);
+            $this->assertSame(-8, $low['status']);
+            $this->assertStringContainsString('国家等级低于当前挑战方', $low['msg']);
+            // Y 升到 6 级：取代 X 的挑战资格，X 成员收到信件
+            DB::table('country')->where('id', $y)->update(['level' => 6]);
+            $take = $this->b2Request('siege', 'occupy', $kingY['auth'] + ['id' => 1]);
+            $this->assertSame(1, $take['status']);
+            $this->assertStringContainsString('国家等级超过', $take['msg']);
+            $this->assertSame($y, (int)DB::table('country_city')->where('maplevel', 1)->value('challengercid'));
+            $this->assertSame([0, 0], [(int)DB::table('country')->where('id', $x)->value('city'), (int)DB::table('country')->where('id', $x)->value('city_status')]);
+            $mail = $this->messagesOf($memberX['uid']);
+            $this->assertStringContainsString('自动变为进攻方', end($mail)['message']);
+
+            // X 请战邺城后改打下邳：先返回 3 询问，确认后放弃邺城
+            $this->assertSame(1, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 2])['status']);
+            $ask = $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 8]);
+            $this->assertSame(3, $ask['status']);
+            $this->assertStringStartsWith('您当前已经申请打城池【邺城】，确认攻打【下邳】', $ask['msg']);
+            $this->assertSame(1, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 8, 'sure' => 1])['status']);
+            $this->assertSame(0, (int)DB::table('country_city')->where('maplevel', 2)->value('challengercid'));
+            $this->assertSame([8, 2], [(int)DB::table('country')->where('id', $x)->value('city'), (int)DB::table('country')->where('id', $x)->value('city_status')]);
+
+            // 至尊攻城：非君主 / vip 不足 / 元宝不足
+            $this->assertSame(-11, $this->b2Request('siege', 'occupy', $officerX['auth'] + ['id' => 1, 'force' => 1, 'sure' => 1])['status']);
+            DB::table('member')->where('uid', $kingX['uid'])->update(['vip' => 6]);
+            $this->assertSame(['status' => -8, 'msg' => 'vip等级达到7级才可使用至尊攻城！'], $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1, 'force' => 1, 'sure' => 1]));
+            DB::table('member')->where('uid', $kingX['uid'])->update(['vip' => 7, 'gold' => 999]);
+            $this->assertSame(-13, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1, 'force' => 1, 'sure' => 1])['status']);
+            DB::table('member')->where('uid', $kingX['uid'])->update(['gold' => 5000]);
+
+            // 至尊攻城失败（X 君主阵法为空）：扣 1000 元宝，返回战报，城池不变
+            $this->emptyFormation($kingX['uid']);
+            $fail = $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1, 'force' => 1, 'sure' => 1]);
+            $this->assertSame([1, -3], [$fail['status'], $fail['info']['win']]);
+            $this->assertSame(['p' . $kingY['uid'], 60], [$fail['battle']['right_role']['name'], $fail['battle']['right_role']['level']]);
+            $this->assertSame(4000, $this->b2Member($kingX['uid'], 'gold'));
+            $this->assertSame($y, (int)DB::table('country_city')->where('maplevel', 1)->value('challengercid'));
+
+            // 至尊攻城成功（Y 君主阵法为空）：取代 Y 的挑战资格并锁定城池；X 放弃下邳
+            $this->emptyFormation($kingY['uid']);
+            $this->b2Overpower($kingX['uid']);
+            DB::table('matrix')->where('uid', $kingX['uid'])->update(['position5' => (int)DB::table('general')->where('uid', $kingX['uid'])->value('id')]);
+            $force = $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1, 'force' => 1, 'sure' => 1]);
+            $this->assertSame(1, $force['status']);
+            $this->assertSame(3, $force['info']['win']);
+            $this->assertSame(3000, $this->b2Member($kingX['uid'], 'gold'));
+            $this->assertSame([$x, 1], [(int)DB::table('country_city')->where('maplevel', 1)->value('challengercid'), (int)DB::table('country_city')->where('maplevel', 1)->value('lock')]);
+            $this->assertSame(0, (int)DB::table('country_city')->where('maplevel', 8)->value('challengercid'));
+            $mail = $this->messagesOf($kingY['uid']);
+            $this->assertStringContainsString('发起至尊攻城成功', end($mail)['message']);
+            $this->assertSame(1, $this->b2Request('siege', 'capital_info', $kingX['auth'] + ['id' => 1])['info']['force']);
+            // 锁定后：Y 普通攻占不能取代；X 不能改打别的城
+            DB::table('country')->where('id', $y)->update(['level' => 9]);
+            $this->assertStringContainsString('已被', $this->b2Request('siege', 'occupy', $kingY['auth'] + ['id' => 1])['msg']);
+            $this->assertSame(-10, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 3])['status']);
+        } finally {
+            $this->siegeCleanup();
+        }
+    }
+
+    public function testSiegeBattleFlowRewardsAndCityEffect(): void
+    {
+        $this->siegeReset();
+        try {
+            $x = $this->b3Country(5);
+            $players = [];
+            for ($job = 1; $job <= 5; $job++) {
+                $p = $this->b3Player(60);
+                $this->b3Join($p, $x, $job);
+                $this->b2Overpower($p['uid']);
+                $players[] = $p;
+            }
+            $king = $players[0];
+            DB::table('country_city')->insert(['maplevel' => 1, 'challengercid' => $x, 'challengername' => 'x', 'challengerlevel' => 5, 'challengerdateline' => 0]);
+            DB::table('country')->where('id', $x)->update(['city' => 1, 'city_status' => 2]);
+
+            // 周六 17:20：报名尚未开始
+            $this->b3At('2026-10-31 17:20:00');
+            $early = $this->b2Request('siege', 'battle_prepare', $king['auth']);
+            $this->assertSame(['status' => -5, 'msg' => '国战报名将于周六17:30开启,请准时参加'], $early);
+            $this->b3At('2026-10-30 17:40:00');
+            $this->assertSame(['status' => -2], $this->b2Request('siege', 'battle_prepare', $king['auth']), '不是周六');
+            $this->assertSame(['status' => -2], $this->b2Request('siege', 'join_battle', $king['auth']));
+
+            // 周六 17:40：报名
+            $now = $this->b3At('2026-10-31 17:40:00');
+            $prep = $this->b2Request('siege', 'battle_prepare', $king['auth']);
+            $this->assertSame(1, $prep['status']);
+            $this->assertSame([1, 0, 0, '濮阳', '张角军团', 0, 28, 1], [$prep['type'], $prep['in_battle'], $prep['attack_num'], $prep['city_name'], $prep['defense_name'], $prep['defense_level'], $prep['defense_num'], $prep['npc']]);
+            $this->assertSame(['uid' => 2, 'nickname' => '裴元绍', 'level' => 30], $prep['defense'][0]);
+            $this->assertSame(50 * 60 + 10, $prep['dateline']);
+            $war = $this->b2Request('member', 'index', $king['auth']);
+            $this->assertSame([1, 1], [$war['country_war'], $war['is_saturday']]);
+            foreach ($players as $i => $p) {
+                $join = $this->b2Request('siege', 'join_battle', $p['auth']);
+                $this->assertSame(1, $join['status']);
+                $this->assertSame(2, $join['type']);
+                $this->assertSame($i + 1, $join['attack_num']);
+            }
+            $this->assertSame(array_reverse(array_column($players, 'uid')), array_column($join['attack'], 'uid'), '按官职倒序');
+            $this->assertSame([1, 1], array_map('intval', array_values(DB::table('member_country')->select('city', 'warstatus')->where('uid', $king['uid'])->first())));
+            $this->assertSame(-6, $this->b2Request('siege', 'join_battle', $king['auth'])['status']);
+            $this->assertSame(1, $this->b2Request('siege', 'battle_prepare', $king['auth'])['in_battle']);
+            $this->b3At('2026-10-31 18:28:00');
+            $late = $this->b3Player(60);
+            $this->b3Join($late, $x, 51);
+            $this->assertSame(-5, $this->b2Request('siege', 'join_battle', $late['auth'])['status'], '开战前 3 分钟停止报名');
+
+            // 开战前进入战场：-5
+            $this->assertSame(['status' => -5], $this->b2Request('siege', 'action', $king['auth']));
+
+            // 计划任务 18:27 起算出战斗：5 名玩家各连胜 6 场打完 28 名 NPC 守将，攻方胜，X 占领濮阳
+            $this->assertSame(0, \Hanjiang\Cron\SiegeCron::battle((int)strtotime('2026-10-31 18:26:00')));
+            $at = (int)strtotime('2026-10-31 18:27:00');
+            $this->assertSame(1, \Hanjiang\Cron\SiegeCron::battle($at));
+            $this->assertSame(0, \Hanjiang\Cron\SiegeCron::battle($at + 60), '已有战报不重复计算');
+            $city = DB::table('country_city')->where('maplevel', 1)->first();
+            $this->assertSame([$x, 0, $at, 0], [(int)$city['cid'], (int)$city['challengercid'], (int)$city['dateline'], (int)$city['lock']]);
+            $this->assertSame([1, 1], [(int)DB::table('country')->where('id', $x)->value('city'), (int)DB::table('country')->where('id', $x)->value('city_status')]);
+            $this->assertSame(1, DB::table('country_city_report')->count());
+            $log = DB::table('country_siege_log')->first();
+            $this->assertSame([1, '濮阳', 1, $x, 0, '张角军团', 0], [(int)$log['city'], $log['city_name'], (int)$log['win_type'], (int)$log['attack_country'], (int)$log['country'], $log['country_name'], (int)$log['zhizun']]);
+            $this->assertNull(Redis::get('siege_1_attack'), '报名列表已清空');
+
+            // 进入战场播放战报
+            $this->b3At('2026-10-31 18:31:00');
+            $act = $this->b2Request('siege', 'action', $players[2]['auth']);
+            $this->assertSame(1, $act['status']);
+            $this->assertSame(1, $act['info']['win']);
+            $this->assertSame(['win', 'battle_ready', 'battle_log', 'general_arr', 'kill_rank'], array_keys($act['battle']));
+            $this->assertSame(1, $act['battle']['win']);
+            $this->assertSame([5, 28, 1, '濮阳'], [$act['attack_num'], $act['defense_num'], $act['npc'], $act['city_name']]);
+            $this->assertSame(['id' => (int)DB::table('country_city_report')->value('id'), 'type' => 'siege'], $act['share']);
+            $this->assertSame(array_sum($act['battle']['kill_rank']['left']), 28, '攻方杀敌数合计为 28');
+            $report = $this->b2Request('siege', 'get_report', $king['auth'] + ['id' => 1]);
+            $this->assertSame([1, $act['battle'], '濮阳', 5], [$report['status'], $report['battle'], $report['city_name'], $report['attack_num']]);
+            $this->assertSame(['status' => -1], $this->b2Request('siege', 'get_report', $king['auth'] + ['id' => 2]));
+
+            // 领奖：国家 5 级俸禄 × 官职系数，占领成功 3 倍；先看杀敌榜
+            $rule = \Hanjiang\MasterData\CountryLevel::ROWS[5];
+            $ratio = \Hanjiang\MasterData\CountryJob::ROWS[1]['ratio'];
+            $view = $this->b2Request('siege', 'get_reward', $king['auth']);
+            $this->assertSame(1, $view['status']);
+            $this->assertSame(['level' => 5, 'silver' => (int)round(60 * $rule['silver'] * $ratio) * 3, 'act' => (int)round($rule['act'] * $ratio) * 3, 'soul' => (int)round($rule['soul'] * $ratio) * 3, 'jade' => 0], $view['rule']);
+            $this->assertCount(5, $view['list']);
+            $this->assertSame(['nickname', 'num', 'uid'], array_keys($view['list'][0]));
+            $silver = $this->b2Member($king['uid'], 'silver');
+            $get = $this->b2Request('siege', 'get_reward', $king['auth'] + ['type' => 1]);
+            $this->assertSame($silver + $view['rule']['silver'], $get['all_silver']);
+            $this->assertSame([0, 0], array_map('intval', array_values(DB::table('member_country')->select('city', 'warstatus')->where('uid', $king['uid'])->first())));
+            $this->assertSame(['status' => -2], $this->b2Request('siege', 'get_reward', $king['auth'] + ['type' => 1]));
+
+            // 国战日志：周六 21:00 以后显示本周
+            $this->assertSame([], $this->b2Request('siege', 'siege_notice', $king['auth'])['log']);
+            $this->b3At('2026-10-31 21:30:00');
+            $this->assertCount(1, $this->b2Request('siege', 'siege_notice', $king['auth'])['log']);
+            $this->b3At('2026-11-02 10:00:00');
+            $this->assertCount(1, $this->b2Request('siege', 'siege_notice', $king['auth'])['log'], '下周显示上周');
+            $this->assertSame(['status' => 2, 'log' => []], $this->b2Request('siege', 'siege_notice', $this->b3Player(25)['auth']));
+
+            // 每周六 00:00 清除参战状态
+            $this->assertSame(0, \Hanjiang\Cron\SiegeCron::clearWarstatus((int)strtotime('2026-11-06 00:00:00')));
+            $this->assertSame(1, (int)DB::table('member_country')->where('uid', $players[1]['uid'])->value('warstatus'));
+            $this->assertGreaterThan(0, \Hanjiang\Cron\SiegeCron::clearWarstatus((int)strtotime('2026-11-07 00:00:00')));
+            $this->assertSame(0, (int)DB::table('member_country')->where('uid', $players[1]['uid'])->value('warstatus'));
+
+            // 都城效果：濮阳为征收 +3，每天 7 点后首次调用加一次
+            $now = $this->b3At('2026-11-02 10:00:00');
+            $kingRow = DB::table('member')->where('uid', $king['uid'])->first();
+            $levy = (int)DB::table('member_field')->where('uid', $king['uid'])->value('levytimes');
+            $effect = \Hanjiang\Handler\Pvp\SiegeHandler::getCityEffect($kingRow, $now);
+            $this->assertSame(['status' => 1, 'times' => $levy + 3, 'type' => 1, 'value' => 3], $effect);
+            $this->assertSame(['status' => 1, 'times' => 0, 'type' => 1, 'value' => 3], \Hanjiang\Handler\Pvp\SiegeHandler::getCityEffect($kingRow, $now));
+            $this->assertSame($levy + 3, (int)DB::table('member_field')->where('uid', $king['uid'])->value('levytimes'));
+            DB::table('member_country')->where('uid', $king['uid'])->update(['joindateline' => $now]);
+            $this->assertSame(-5, \Hanjiang\Handler\Pvp\SiegeHandler::getCityEffect($kingRow, $now)['status'], '当天加入国家');
+            $outsider = DB::table('member')->where('uid', $this->b3Player(60)['uid'])->first();
+            $this->assertSame(-1, \Hanjiang\Handler\Pvp\SiegeHandler::getCityEffect($outsider, $now)['status']);
+            // 将魂星路（都城效果 type 4，寿春）：占领后每日奖励加成
+            DB::table('country_city')->where('maplevel', 1)->update(['maplevel' => 7]);
+            DB::table('member_country')->where('uid', $king['uid'])->update(['joindateline' => 0]);
+            $this->assertSame(['status' => 1, 'times' => 0, 'type' => 4, 'value' => 100], \Hanjiang\Handler\Pvp\SiegeHandler::getCityEffect($kingRow, $now));
+
+            // 国家解散时清除国战状态
+            $this->assertSame(1, \Hanjiang\Handler\Pvp\SiegeHandler::clearBattleStatus($x));
+            $this->assertSame(0, (int)DB::table('country_city')->where('maplevel', 7)->value('cid'));
+        } finally {
+            $this->siegeCleanup();
+        }
+    }
+
+    public function testSiegeNpcLosesAndMonsterSiegeAndPvpRush(): void
+    {
+        $this->siegeReset();
+        try {
+            // 单人进攻 NPC 城：连胜 6 场后下阵，NPC 守城成功，挑战资格清除
+            $x = $this->b3Country(5);
+            $p = $this->b3Player(60);
+            $this->b3Join($p, $x, 1);
+            $this->b2Overpower($p['uid']);
+            DB::table('country_city')->insert(['maplevel' => 2, 'challengercid' => $x, 'challengername' => 'x', 'challengerlevel' => 5, 'challengerdateline' => 0]);
+            DB::table('country')->where('id', $x)->update(['city' => 2, 'city_status' => 2]);
+            $this->b3At('2026-10-31 18:00:00');
+            $this->assertSame(1, $this->b2Request('siege', 'join_battle', $p['auth'])['status']);
+            // 邺城 18:40 开战：玩家在国战期间进入战场时由本次请求算出战斗
+            $this->b3At('2026-10-31 18:41:00');
+            $act = $this->b2Request('siege', 'action', $p['auth']);
+            $this->assertSame([1, 2, 2], [$act['status'], $act['info']['win'], $act['battle']['win']]);
+            $this->assertSame([$p['uid'] => 6], $act['battle']['kill_rank']['left']);
+            $this->assertSame([0, 0], [(int)DB::table('country_city')->where('maplevel', 2)->value('challengercid'), (int)DB::table('country')->where('id', $x)->value('city_status')]);
+            $this->assertSame(0, (int)DB::table('country_siege_log')->where('city', 2)->value('win_type'));
+            $this->assertSame($act['battle'], $this->b2Request('siege', 'action', $p['auth'])['battle'], '再次进入读同一份战报');
+            // 战报 6 天内仍可回放；之后没有战报
+            $this->b3At('2026-11-03 12:00:00');
+            $this->assertSame(1, $this->b2Request('siege', 'action', $p['auth'])['status']);
+            Redis::del('siege_2_battle');
+            $this->assertSame(1, $this->b2Request('siege', 'action', $p['auth'])['status'], 'Redis 战报丢失时读数据库');
+            $this->b3At('2026-11-07 12:00:00');
+            Redis::del('siege_2_battle');
+            $this->assertSame(['status' => -2], $this->b2Request('siege', 'action', $p['auth']));
+
+            // 怪物攻城（团战类型 3）：Y 占领北平且没有挑战国，NPC 守将进攻，Y 单人守城连胜 6 场后下阵，城池回到 NPC
+            $y = $this->b3Country(4);
+            $d = $this->b3Player(60);
+            $this->b3Join($d, $y, 1);
+            $this->b2Overpower($d['uid']);
+            DB::table('country_city')->insert(['maplevel' => 3, 'cid' => $y, 'name' => 'y', 'level' => 4]);
+            DB::table('country')->where('id', $y)->update(['city' => 3, 'city_status' => 1]);
+            $this->b3At('2026-11-07 18:00:00');
+            $prep = $this->b2Request('siege', 'battle_prepare', $d['auth']);
+            $this->assertSame([1, 2, '公孙瓒军团', 0], [$prep['status'], $prep['type'], $prep['attack_name'], $prep['attack_level']]);
+            $this->assertSame(1, $this->b2Request('siege', 'join_battle', $d['auth'])['status']);
+            $this->assertSame(1, \Hanjiang\Cron\SiegeCron::battle((int)strtotime('2026-11-07 18:47:00')));
+            $data = Redis::get('siege_3_battle');
+            $this->assertSame([3, 1, 1], [$data['npc'], $data['att_type'], $data['battle']['win']]);
+            $this->assertSame([$d['uid'] => 6], $data['battle']['kill_rank']['right']);
+            $this->assertSame([0, 0], [(int)DB::table('country_city')->where('maplevel', 3)->value('cid'), (int)DB::table('country')->where('id', $y)->value('city_status')]);
+
+            // 玩家对玩家（团战类型 0）：Z 挑战 Y 占领的长安，双方各两人，正常战斗
+            $z = $this->b3Country(4);
+            DB::table('country_city')->insert(['maplevel' => 4, 'cid' => $y, 'name' => 'y', 'level' => 4, 'challengercid' => $z, 'challengername' => 'z', 'challengerlevel' => 4]);
+            DB::table('country')->where('id', $y)->update(['city' => 4, 'city_status' => 3]);
+            DB::table('country')->where('id', $z)->update(['city' => 4, 'city_status' => 2]);
+            DB::table('general')->where('uid', $d['uid'])->update(['level' => 60]);
+            $d2 = $this->b3Player(60);
+            $this->b3Join($d2, $y, 2);
+            $a1 = $this->b3Player(60);
+            $this->b3Join($a1, $z, 1);
+            $a2 = $this->b3Player(60);
+            $this->b3Join($a2, $z, 2);
+            DB::table('member_country')->whereIn('uid', [$d['uid'], $d2['uid']])->update(['warstatus' => 0, 'city' => 0]);
+            foreach ([$d, $d2, $a1, $a2] as $q) {
+                $this->assertSame(1, $this->b2Request('siege', 'join_battle', $q['auth'])['status']);
+            }
+            $this->b3At('2026-11-07 19:01:00');
+            $act = $this->b2Request('siege', 'action', $a1['auth']);
+            $this->assertSame(1, $act['status']);
+            $this->assertSame([0, 2, 2], [$act['npc'], $act['attack_num'], $act['defense_num']]);
+            $this->assertSame([$a2['uid'], $a1['uid']], array_column($act['attack'], 'uid'));
+            $this->assertNotEmpty($act['battle']['battle_log']);
+            $win = $act['battle']['win'];
+            $this->assertSame($win === 1 ? 1 : 2, $act['info']['win']);
+            $this->assertSame($win === 1 ? 2 : 1, $this->b2Request('siege', 'action', $d['auth'])['info']['win'], '守方看到相反的结果');
+            $this->assertSame($win === 1 ? $z : $y, (int)DB::table('country_city')->where('maplevel', 4)->value('cid'));
+        } finally {
+            $this->siegeCleanup();
+        }
     }
 }

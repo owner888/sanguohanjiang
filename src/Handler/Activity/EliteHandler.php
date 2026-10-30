@@ -53,7 +53,7 @@ final class EliteHandler
     private const string LANG_BASE_SCROLL = '天赋卷轴';
 
     /** 旧版语言包 language/chinese_s/equipment_lang.php（equipment_model->get_scroll_name：卷轴类型 → 名称） */
-    private const array SCROLL_NAME = [1 => '物攻', 2 => '物防', 3 => '策攻', 4 => '策防', 5 => '生命'];
+    public const array SCROLL_NAME = [1 => '物攻', 2 => '物防', 3 => '策攻', 4 => '策防', 5 => '生命'];
 
     /** 至尊组队队长 VIP 等级要求 */
     private const int TOPTEAM_VIP = 8;

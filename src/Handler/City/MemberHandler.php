@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\City;
 
+use Hanjiang\Handler\Pvp\SiegeHandler;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\General;
 use Hanjiang\Model\OwnMatrix;
@@ -43,8 +44,8 @@ final class MemberHandler
         $cached = Redis::getJson($cacheKey);
         if (is_array($cached)) {
             $cached['timestamp'] = time();
-            // 世界 BOSS 开启 / 领奖标识随时间变化，不走缓存
-            return array_merge($cached, WorldBoss::memberInit($uid, (int)($cached['level'] ?? 0), BossClock::now()));
+            // 世界 BOSS 开启 / 领奖、国战、国家矿可收获标识随时间变化，不走缓存
+            return array_merge($cached, self::liveInfo($uid, (int)($cached['level'] ?? 0), (int)($cached['country'] ?? 0)));
         }
 
         // 2. 从 MySQL 数据库读取
@@ -183,7 +184,25 @@ final class MemberHandler
         // 存入 Redis 缓存，TTL 1小时
         Redis::setJson($cacheKey, $data, 3600);
 
-        return array_merge($data, WorldBoss::memberInit($uid, $level, BossClock::now()));
+        return array_merge($data, self::liveInfo($uid, $level, (int)$member['country']));
+    }
+
+    /**
+     * 随时间变化的主城标识（不进玩家缓存）：世界 BOSS（worldboss_init）、国战提示（get_country_war）、
+     * 国家矿可收获 oncountrymine（member_field.oncountrymine 到期）
+     *
+     * @return array<string, mixed>
+     */
+    private static function liveInfo(int $uid, int $level, int $country): array
+    {
+        $now = BossClock::now();
+        $onCountryMine = (int)DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->value('oncountrymine');
+        return array_merge(
+            WorldBoss::memberInit($uid, $level, $now),
+            SiegeHandler::countryWar(['uid' => $uid, 'country' => $country], $now),
+            // 判断国家矿是否可收获
+            ['oncountrymine' => $onCountryMine > 0 && $now >= $onCountryMine ? 1 : 0],
+        );
     }
 
     /**

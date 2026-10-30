@@ -33,6 +33,8 @@ final class CountryHandler
     private const int COUNTRY_JOIN_NUM = 50;  // 每日国家加入人数
     private const int PERPAGE = 5;            // 国家排行每页条数
     private const int TTL = 86400;
+    private const int FIGHT_NOTICE_LIMIT = 4;  // 国家战报每页条数（countryfight_model->_limit）
+    private const int FIGHT_NOTICE_MAX = 200;  // 国家战报最多条数（countryfight_model->_max_pag）
 
     private const string AUDIT_KEY = 'country_audit_';
     private const string JOIN_NUM_KEY = 'country_join_num_';
@@ -974,7 +976,8 @@ final class CountryHandler
                 ->where('id', (int)$info['id'])
                 ->whereNull('deleted_at')
                 ->update(['deleted_at' => $deletedAt]);
-            // 依赖未移植：siege_model->clear_battle_status 清除国战状态
+            // 清除国战状态
+            SiegeHandler::clearBattleStatus((int)$info['id']);
         } else {
             $data = ['member' => (int)$info['member'] - 1];
             // 君主叛国清空国家君主信息
@@ -1010,7 +1013,8 @@ final class CountryHandler
 
         // 依赖未移植：overseastrade_model->clear_team 海外贸易队伍清理
         // 依赖未移植：banquet_model->repaire_banquet 国家宴会队伍清理
-        // 依赖未移植：siege_model->clear_siege_status 国战报名状态清理
+        // 国战报名状态清理
+        SiegeHandler::clearSiegeStatus($uid);
         // 依赖未移植：expostulation_model->clear_sup_status / clear_expos 国家谏言状态清理
         // 依赖未移植：dice_model->clear_dice_info 清除国家骰子信息
         // 依赖未移植：warcollege_use_model->clear_buffcd 清理国家学院buffcd
@@ -1419,7 +1423,8 @@ final class CountryHandler
         // 依赖未移植：overseastrade_model->clear_team 海外贸易队伍清理
         // 依赖未移植：banquet_model->repaire_banquet 国家宴会队伍清理
         // 依赖未移植：expostulation_model->clear_sup_status / clear_expos 国家谏言状态清理
-        // 依赖未移植：siege_model->clear_siege_status 国战报名状态清理
+        // 国战报名状态清理
+        SiegeHandler::clearSiegeStatus($uid);
         // 依赖未移植：dice_model->clear_dice_info 清除国家骰子信息
 
         // 添加国家退出记录(状态 1退出，2进入，3被踢出)
@@ -2352,10 +2357,49 @@ final class CountryHandler
             $return['status'] = 2;
             return $return;
         }
-        // 依赖未移植：countryfight_model（zc_sanguo_country_fight_notice 国家玉矿/海外贸易战斗日志的写入与按 type(1 荣誉/0 屈辱)、page 分页查询）
+        // 选择战报显示类型 1 荣誉；0 屈辱
+        $type = (int)$ctx->input('type', 0);
+        // 分页
+        $page = (int)$ctx->input('page', 0);
+        $page = $page !== 0 ? $page : 1;
+        $country = (int)$self['country'];
+        $column = $type === 1 ? 'attack_country' : 'member_country';
+        // 获取战报总数（countryfight_model->get_fight_notice_total，最多 200 条）
+        $total = min(self::FIGHT_NOTICE_MAX, DB::table('country_fight_notice')->where($column, $country)->where('win', 1)->whereNull('deleted_at')->count());
+        // 获取战报日志（countryfight_model->get_fight_notice_list：每页 4 条）
+        $rows = DB::table('country_fight_notice')->where($column, $country)->where('win', 1)->whereNull('deleted_at')
+            ->orderBy('dateline', 'DESC')->limit(self::FIGHT_NOTICE_LIMIT)->offset(max(0, ($page - 1) * self::FIGHT_NOTICE_LIMIT))->get();
+        $fightLog = [];
+        foreach ($rows as $val) {
+            $tmp = [];
+            // 1 海外贸易；0 国家玉矿
+            $tmp['type'] = (int)$val['type'];
+            $tmp['attack'] = (int)$val['attack_uid'];
+            $tmp['attack_nickname'] = (string)$val['attack_nickname'];
+            if ($type !== 0) {
+                $tmp['member_country'] = (int)$val['member_country'];
+                $tmp['member_country_name'] = (string)$val['member_country_name'];
+            } else {
+                $tmp['attack_country'] = (int)$val['attack_country'];
+                $tmp['attack_country_name'] = (string)$val['attack_country_name'];
+            }
+            if ((int)$val['member1'] === 0) {
+                $tmp['member1'] = (int)$val['member2'];
+                $tmp['member1_name'] = (string)$val['member2_name'];
+            } else {
+                $tmp['member1'] = (int)$val['member1'];
+                $tmp['member1_name'] = (string)$val['member1_name'];
+                if ((int)$val['member2'] !== 0) {
+                    $tmp['member2'] = (int)$val['member2'];
+                    $tmp['member2_name'] = (string)$val['member2_name'];
+                }
+            }
+            $tmp['dateline'] = date('m-d H:i:s', (int)$val['dateline']);
+            $fightLog[] = $tmp;
+        }
         $return['status'] = 1;
-        $return['log'] = [];
-        $return['total'] = 0;
+        $return['log'] = $fightLog;
+        $return['total'] = $total;
         return $return;
     }
 
@@ -2430,7 +2474,7 @@ final class CountryHandler
      *
      * @param list<int> $touids
      */
-    private static function sendMessage(array $touids, string $message, int $report = 0): int
+    public static function sendMessage(array $touids, string $message, int $report = 0): int
     {
         return MessageHandler::sendSystemMessage($touids, self::MESSAGE_TYPE_COUNTRY, self::LANG_MESSAGE_COUNTRY_TITLE, $message, $report);
     }
@@ -2448,7 +2492,7 @@ final class CountryHandler
     /**
      * @return array<string, mixed>|null
      */
-    private static function memberCountry(int $uid): ?array
+    public static function memberCountry(int $uid): ?array
     {
         $row = DB::table('member_country')->where('uid', $uid)->whereNull('deleted_at')->first();
         return $row === null ? null : self::strip($row);
@@ -2459,7 +2503,7 @@ final class CountryHandler
      *
      * @return array<string, mixed>|null
      */
-    private static function memberInfo(int $uid, int $country): ?array
+    public static function memberInfo(int $uid, int $country): ?array
     {
         $row = DB::table('member_country')
             ->where('country', $country)
@@ -2478,6 +2522,22 @@ final class CountryHandler
             ->where('country', $country)
             ->where('job', $job)
             ->whereNull('deleted_at')
+            ->limit(1)
+            ->first();
+        return $row === null ? null : self::strip($row);
+    }
+
+    /**
+     * 国家官职最高的成员（country_model->get_top_job：按 job 升序取第一个）
+     *
+     * @return array<string, mixed>|null
+     */
+    public static function topJob(int $country): ?array
+    {
+        $row = DB::table('member_country')
+            ->where('country', $country)
+            ->whereNull('deleted_at')
+            ->orderBy('job', 'ASC')
             ->limit(1)
             ->first();
         return $row === null ? null : self::strip($row);
@@ -2712,7 +2772,7 @@ final class CountryHandler
      * @param int $sortType 排序:1 总贡献; 2 今日贡献
      * @return list<array<string, mixed>>
      */
-    private static function memberList(int $id, int $sortType = 1, int $output = 1): array
+    public static function memberList(int $id, int $sortType = 1, int $output = 1): array
     {
         $rows = DB::table('member_country')->where('country', $id)->whereNull('deleted_at')->get();
         if ($rows === []) {
@@ -2943,7 +3003,7 @@ final class CountryHandler
      *
      * @return array<string, mixed>|null
      */
-    private static function levelupRule(int $level): ?array
+    public static function levelupRule(int $level): ?array
     {
         if ($level > 200) {
             return null;

@@ -31,7 +31,7 @@ const TABLES = [
     'chingming_achievement', 'chingming_rank_reward', 'chingming_reward',
     'christmasbuy_discount', 'christmasbuy_gift', 'christmasbuy_goods', 'christmasgift_reward', 'city_addition',
     'compete_reward', 'copies_buy_times_gold', 'copies_info', 'copies_reward', 'copies_vip_buy_times',
-    'country_banquet', 'country_boss_reward', 'country_city', 'country_city_effect', 'country_donate', 'country_job',
+    'country_banquet', 'country_boss_reward', 'country_city_effect', 'country_donate', 'country_job',
     'country_learn', 'country_level', 'country_mine_event', 'country_mine_ratio', 'country_mission', 'country_monster',
     'country_shop', 'country_taxes_shop', 'country_worship', 'dice_rank_reward', 'dice_reward',
     'dinner_achievement', 'dinner_menu', 'drink', 'elite_city', 'elite_mission', 'elite_monster', 'elite_price',

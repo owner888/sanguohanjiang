@@ -45,7 +45,7 @@
 ├── src/
 │   ├── Battle/              # 九宫格战斗引擎（移植旧版 battle_model，随机数可注入）
 │   │   ├── BattleEngine.php # 移植旧版 battle() / process / process_effect / process_hurt，输出旧版战报结构
-│   │   ├── BattleRush.php   # 移植旧版三路团战 battle_rush（只含 PVE：国战怪物 / 多人副本）
+│   │   ├── BattleRush.php   # 移植旧版三路团战 battle_rush（国战玩家对战、国战 / 多人副本怪物、怪物攻城）
 │   │   ├── Position.php     # 九宫格战位 (1-9号位) 枚举
 │   │   ├── LegacyStats.php  # 旧版武将/装备数值公式（纯函数，逐条注明旧版出处）
 │   │   └── TeamBuilder.php  # 旧版组队（玩家 / 怪物队伍、team_return_arr）
@@ -106,7 +106,7 @@
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
-   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。`20261031_matrix_legacy.sql` 把每个玩家一行的 `matrix` 表转成旧版每个阵法一行，按原阵法行写入 `member_field.matrixid`，按原 `pos` / 阵法站位重建 `general.goout`，然后删除 `general.pos` / `general.matrix_id`。`20261031_arena_legacy.sql` 假定演武榜只有测试数据：重建演武榜相关表（不保留旧排名）、新增积分表，并把所有玩家 `member_field.rank` 归 0，玩家下次打开演武榜时按旧版重新入榜。`20261031_tower_legacy.sql` 假定将魂星路（tower）进度只有测试数据（原先只存 Redis `tower_progress:{uid}`）：新建旧版星路表（`member_activity`、`soul_open_map`、`soul_log`、`soul_report`）并给 `member_field` 加 `soultimes`；旧进度不转换，所有玩家从第 1 关重新开始。`20261031_copies_legacy.sql` 假定平乱副本（copies）只有测试数据（原先只有 Redis 里的今日次数 `copies_times:{uid}`）：（重新）创建旧版副本表（`copies_beat`、`copies_beat_log`、`copies_report`）与锻造材料表（`own_materials`、`own_materials_log`）；不转换任何数据，玩家首次打开某个副本时按旧版建档。`20261031_elite_legacy.sql` 假定多人副本（elite）只有测试数据（原先只有 Redis 里的今日次数 `elite_times:{uid}`）：（重新）创建 `elite_log` / `elite_mission_log`，并给 `member_activity` 加 `elite*` 字段；不转换任何数据，已有活动记录的玩家多人副本次数为 0，到下次每日重置才恢复（文件末尾的可选 `UPDATE` 可立即给 10 次）。
+   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。`20261031_matrix_legacy.sql` 把每个玩家一行的 `matrix` 表转成旧版每个阵法一行，按原阵法行写入 `member_field.matrixid`，按原 `pos` / 阵法站位重建 `general.goout`，然后删除 `general.pos` / `general.matrix_id`。`20261031_arena_legacy.sql` 假定演武榜只有测试数据：重建演武榜相关表（不保留旧排名）、新增积分表，并把所有玩家 `member_field.rank` 归 0，玩家下次打开演武榜时按旧版重新入榜。`20261031_tower_legacy.sql` 假定将魂星路（tower）进度只有测试数据（原先只存 Redis `tower_progress:{uid}`）：新建旧版星路表（`member_activity`、`soul_open_map`、`soul_log`、`soul_report`）并给 `member_field` 加 `soultimes`；旧进度不转换，所有玩家从第 1 关重新开始。`20261031_copies_legacy.sql` 假定平乱副本（copies）只有测试数据（原先只有 Redis 里的今日次数 `copies_times:{uid}`）：（重新）创建旧版副本表（`copies_beat`、`copies_beat_log`、`copies_report`）与锻造材料表（`own_materials`、`own_materials_log`）；不转换任何数据，玩家首次打开某个副本时按旧版建档。`20261031_elite_legacy.sql` 假定多人副本（elite）只有测试数据（原先只有 Redis 里的今日次数 `elite_times:{uid}`）：（重新）创建 `elite_log` / `elite_mission_log`，并给 `member_activity` 加 `elite*` 字段；不转换任何数据，已有活动记录的玩家多人副本次数为 0，到下次每日重置才恢复（文件末尾的可选 `UPDATE` 可立即给 10 次）。`20261101_batch1.sql` 假定切磋（challenge）、天下史诗（epic）、过关斩将（pass_general）只有测试数据（原先只存 Redis `challenge_master:{uid}`、`epic_cleared:{uid}`、`pass_general_stage:{uid}`）：（重新）创建 `epic_log` 与 `passgeneral*` 各表，并更新 `member_integral` 表注释；不转换任何数据，上述 Redis 键不再读取。`20261101_batch3.sql` 假定群雄逐鹿（compete）、国家矿脉（countrymine）、国战（siege）只有测试数据（原先只存 Redis `compete_score:{uid}`、`compete_times:{uid}`、`user_country_mine:{uid}`、`siege_reward:{uid}` 与新版自定的 `zc_sanguo_siege` 表）：删除 `zc_sanguo_siege`，新建旧版 `compete`、`compete_action_log`、`country_mine`、`country_fight_notice`、`country_city`、`country_city_report`、`country_siege_log` 表并给 `member_field` 加 `oncountrymine`；不转换任何数据。
 
 4. 启动服务：
    ```bash
@@ -167,7 +167,7 @@
 - `c=shop&m=index`：商城道具（旧版 `Shop` 表：兵符，装备 7、9–15、53–56）与军令体力购买
 - `c=arena&m=index|action|buy_pk_num|get_reward|get_reward_list|clear_cd|send_to_chat|shop_index|shop_exchange`：演武榜（按旧版移植）：主公 26 级以「最后一名 + 1」入榜，挑战名次在前的玩家、胜则互换名次（带旧版战报），每日 15 次挑战与元宝购买次数，按昨日名次领演武积分，积分商城取 `ArenaExchange`
 - `c=tower&m=get_scene_list|get_mission_list|get_mission_info|get_mopup_price|mop_up|pk|get_report_list|get_report_info|get_price|buy|reward_info|get_reward|send_to_chat`：将魂星路（按旧版移植，主公 51 级开放）：`SoulScene` / `SoulMission` 的 7 个星域、175 个关卡，守军取 `SoulMonster` 并带旧版战报，首杀原魂与攻略战报，元宝扫荡，每日 10 次免费挑战与元宝购买次数，以及按 `SoulReward` 元宝加倍的每日原魂奖励
-- `c=pass_general&m=index|action|reset`：经典过关斩将单挑六大名将（华雄/颜良/文丑/庞德/典韦/吕布）与通关宝箱开启
+- `c=pass_general&m=index|action|achievement_reward|action_achievement_reward|reward_info|action_reward|lottery_index|action_lottery`：过关斩将限时活动（按旧版移植，没有战斗）：按 `PassgeneralInfo` 的过人概率突破 4 层 11 名守将（每日 3 次免费，其余扣元宝），按 `PassgeneralReward` 加权发奖，逐层宝箱与超级大奖取 `PassgeneralBoxReward`，通关次数成就，兑奖券兑换（`ActkemariExchangeLottery`）；每日重置与活动结束结算见 `PassGeneralCron`。`ActivityTime` 里的活动已于 2016-12-31 结束，目前一律返回 -1
 - `c=soul&m=index|upgrade`：将魂星盘八大命格孔位激活、试炼塔将魂消耗升级与攻防血量永久加成
 - `c=country&m=create|get_rank|get_member_list|apply|del_apply|get_apply_list|get_audit_list|ignore_all|audit|publish_notice|betray|make_way_info|make_way|kick_out_info|kick_out|get_usurp_info|usurp|storage|donate|get_salary|search|get_country_info|learn_index|learn|fight_notice`：玩家自建国家（军团，`member.country` 即国家 id）：建国、国家排行、申请与审核、国家公告、禅让、踢人、升官/篡位挑战、国库捐献、每日俸禄与国师授艺
 - `c=cultivate&m=index|roll|save`：武将洗髓培养系统，武力/智力/体力永久洗练与属性注入强化
@@ -182,9 +182,9 @@
 - `c=beauty&m=index|give_flower|gift`：铜雀台绝色美人后宫宠幸（貂蝉/大乔/小乔/甄姬/孙尚香）、亲密度提升与全军属性光环
 - `c=mount&m=index|fit_on|take_down|levelup`：三国神品名驹坐骑（赤兔/的卢/绝影/爪黄飞电）、战马乘骑与进阶驯化
 - `c=gem&m=index|adron|pick_off|merge_gem`：神装宝石孔位镶嵌、宝石安全拆卸与4合1宝石熔炼进阶升级
-- `c=heaven&m=index|pk|mop_up`：天命观星二十八星宿点亮、星盘守护神决战与一键观星扫荡
+- `c=heaven&m=index|get_mopup_price|mop_up|pk|get_report_list|get_report_info|buy|reward_info|get_reward|send_to_chat|get_price`：通天塔（按旧版移植，主公 160 级开放）：`HeavenMission` 的 200 层，守军取 `HeavenMonster` 并带旧版战报，首杀奖励与攻略战报，每日 10 次免费挑战与 20 元宝购买次数，5 / 10 / 50 / 100 次扫荡，以及 2 / 4 / 8 倍元宝档位的每日奖励。精炼石 / 五彩石 / 上古血玉与装备精华按旧版计算并回报，旧版存储未移植，暂不发放
 - `c=worldboss&m=index|powerup|battle|reward`：世界 BOSS 刑天（按旧版移植，主公 46 级开放）：每天 12:00–12:15、20:00–20:15 两场、每人每天只能参加一场；BOSS 取 `WorldBoss` 行 1，血条按剩余时间减少，打法走旧版 `battle_worldboss`（带战报）；60 秒复活 CD（10 元宝立即复活），银币（等级 × 500）/ 元宝（10）鼓舞每次 +10%、上限 200%；结束后按个人累计伤害排名领演武榜积分（`WorldBossIntreward`，最后一击 × 1.5）。状态存 Redis（旧版键名，原子累计），未领的奖励由每日 00:30 的计划任务（`Hanjiang\Cron\WorldBossCron`，旧版 `cron_acttask::worldboss`）代领并清空。主城 `c=member&m=index` 的 `openboss` / `openbossreward` 同旧版
-- `c=siege&m=index|battle_prepare|action|get_reward`：攻城掠地天下名城占领（洛阳/长安/建业/成都/襄阳/濮阳）、城池决战与每日封邑岁贡分红
+- `c=siege&m=index|capital_info|occupy|battle_prepare|join_battle|action|get_reward|get_report|siege_notice`：国战 / 都城（按旧版移植；国家即玩家军团）：`CountryCityEffect` 的 13 座都城按全服主线最远进度开放；君主与前三官职在周五 18:00 前请战一座城（君主可花 1000 元宝、VIP 7 以上发起「至尊攻城」，与占领国君主单挑），成员在周六该城开战前 1 小时内报名，`Hanjiang\Cron\SiegeCron` 在开战前 3 分钟用旧版三路团战（`BattleRush`，玩家或 `CountryMission` NPC 军团）结算每座有争夺的城；玩家回放战报、按国家等级领奖（胜方 3 倍），占领国全体成员享受都城效果（征收 / 将魂星路 / 四象圣域 / 通天塔加成）。每周六 00:00 清除参战状态。`c=member&m=index` 的 `country_war` 等字段按旧版计算
 - `c=gvg&m=index|betting|sync_info`：军团跨服 GVG 巅峰争霸赛对阵树、冠军押注竞猜与胜利分红结算
 - `c=general_inherit&m=index|preview|go_inherit`：武将功法传承、经验与洗髓三围属性无损转移（普通传承 80% 与至尊完璧 100% 传承）
 - `c=blackmarket&m=index|buy|lock|refresh`：西域神秘黑市商人、稀世奇珍锁定保底与货架刷新
@@ -194,8 +194,8 @@
 - `c=jadegamble&m=index|mining|gambling|harvest`：翡翠原石赌石坊、选石开采、一刀切石与满色帝王绿玉石折现
 - `c=treasuremap&m=index|refresh|sale`：摸金校尉古墓寻宝、罗盘寻龙分金升星与皇室地宫秘宝发掘
 - `c=workshop&m=index|get_reward|levelup`：官府军械工坊流水线、精铁破甲箭生产、流水线扩建与军工收益折现银两
-- `c=sanctum&m=index|action|get_reward`：四象圣域神尊决战（青龙/白虎/朱雀/玄武）、九宫格推演与终极大成神礼
-- `c=compete&m=index|action|get_reward`：跨服群雄逐鹿比武大会、排位段位积分与每日论剑俸禄
+- `c=sanctum&m=index|select_map|get_mission_info|action|buy_times|get_mission_report_list|get_report_info|send_to_chat|get_reward`：四象圣域（按旧版移植，主公 140 级开放）：`SanctumMission` 的 5 个圣域 × 5 层 × 10 关，守军取 `SanctumMonster` 并带旧版战报，首通攻略战报，每日 10 次挑战与 20 元宝购买次数，元宝扫荡，以及按 `SanctumReward` 倍率的每日奖励。宝石碎片与宝石掉落按旧版计算并回报，旧版存储未移植，暂不发放
+- `c=compete&m=index|get_reward_list|get_reward|buy_pk_num|action|send_to_chat`：群雄逐鹿（按旧版移植）：限时玩家排名活动（`ActivityTime` 的 `compete`，2016 年已结束，各接口同旧版返回「活动未开启」）；主公 26 级以「最后一名 + 1」入榜、挑战次数 100，挑战名次在前的玩家、胜则互换名次（旧版战报，给对方发信），2 元宝购买次数，挑战结束后按名次领取 `CompeteReward` / `NewcompeteReward` 奖励（前 200 名），未领取的由 `Hanjiang\Cron\CompeteCron` 在活动结束后 10 小时内自动补领。奖励里的坐骑与玉石按旧版回报，旧版存储未移植，暂不发放
 - `c=countrysacrifice&m=index|action`：国家宗庙九鼎太牢祭天大典、全国内阁攻击防御光环与声望庇护
 - `c=expostulation&m=index|adopt`：群臣治国诤言进谏（富国策/精兵策/安民策）、御笔朱批与治国功绩政绩折现银两
 - `c=banquet&m=index|create_team|action`：群英夜宴大摆筵席（主公家宴/诸侯豪宴/万寿盛宴）、宾主尽欢与巨额军令体力赠予
@@ -203,7 +203,7 @@
 - `c=dice&m=index|shake_dice`：逍遥神骰行大运、至尊豹子大顺子摇骰与金银暴击瓜分
 - `c=sacredtree&m=index|watering`：聚宝通天摇钱神树、灵泉灌溉浇水成长与金叶玉果元宝银饷掉落收割
 - `c=flop&m=index|turnover`：九宫翻牌夺宝、金边卡牌翻转揭秘与至尊元宝大奖
-- `c=challenge&m=index|action`：英雄试炼擂台巅峰单挑、挑战守擂名将（马超/赵云/关羽）夺取擂主荣耀
+- `c=challenge&m=action`：切磋（按旧版移植）：与任意玩家免费 PK（演武榜同一套 `battle_pk`），返回旧版战报并给对方发信
 - `c=elite&m=index|get_member_info|join_team|get_country_info|get_server|action|buy_number|sendinvite`：多人副本 / 团队副本（按旧版移植）：`EliteCity` 的 83 个军团（主线打通该军团最后一关后开启），守军取 `EliteMission` → `EliteMonster`，按旧版三路团战（`BattleRush`，即旧版 `battle_rush`）结算，首杀 / 再打的经验与道具奖励，VIP 8 元宝「至尊组队」加成，每日 10 次挑战与元宝购买次数（`Price.elite`），12:00–14:00、19:00–21:00 开放。旧版 `index` / `get_member_info` / `join_team` / `get_country_info` / `action` 由独立的实时组队服务器调用，该服务器不在旧版代码包里；新版在 WebSocket 网关上按客户端协议重建为 `EliteRoom`（见下条），`action` 只供内部调用：HTTP 返回 `{status: 0, info: []}`，开战只走 WebSocket 的 `startfight`
 - 多人副本实时组队（WebSocket，`Hanjiang\WebSocket\EliteRoom`）：旧版客户端 `elitepop.js` 经 `socket.io.min.js` 适配层（上行 `{action, data}`、下行 `{type, data}`，每 20 秒发一次应用层 `ping`）连 `c=elite&m=get_server` 返回的地址（`socket_server_url`，留空则用 `HJ_CONFIG.wsUrl`）。事件：`login`（与 HTTP 同一套 Redis token；`loginstatus` 1 / 0 / -1 / -2 / -3）、`eliteindex`、`teamlist`（只推给正在查看该军团的玩家）、`createTeam`、`jointeam`（最多 3 人，国家队伍只限同国）、`exitteam`、`fireteam`、`firemember`、`changeorder`、`teaminvited`、`startfight`（先给全队 `readyfight`，再把 `EliteHandler::fight` 的结果作为 `enterfight` 推给每个队员）。队伍状态存 Redis，改动都在同一把全局锁内，多个 WebSocket 进程可共享；连接关闭或心跳超时即离开队伍（队长离开则解散）。客户端看不出旧版做法的部分见 `docs/LEGACY_GAP.md`
 - `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`：点将台；`index` / `get_general_info` / `go_battle` / `go_rest` 按旧版 `muster.php` 移植（出征名单 `general.goout`，最多 8 人；休息时从所有阵法撤下、`confrim` 确认后终止训练、卸下全部装备与坐骑、至少保留一名出征将领）；`sale_general` 仍是新版自定的遣散
@@ -219,11 +219,11 @@
 - `c=generaltask&m=index|action|get_report`：武将派遣远征试炼、古栈道南蛮巡狩与凯旋战利品将魂上缴
 - `c=general_book&m=index|levelup`：三国英雄名将谱图鉴、点亮桃园结义/五虎上将/五子良将/东吴都督羁绊
 - `c=copies&m=index|get_monster_list|get_monster_info|pk|get_mopup_price|mop_up|buy_times|get_report_list|get_report_info|send_to_chat`（客户端带 `d=newequip`）：平乱副本（按旧版移植，主公 110 级开放）：`CopiesInfo` 的 3 个副本 × 3 个难度 × 10 只怪（守军：怪物行的 position1~9 → `CopiesInfo` 行）并带旧版战报，`CopiesReward` 的首杀 / 掉落奖励（声望、装备、`MaterialsTemp` 锻造材料，存入 `own_materials`），首杀攻略战报，每只怪每天 5 次免费攻打与按 VIP 限次的元宝购买（`CopiesVipBuyTimes` / `CopiesBuyTimesGold`），1 / 5 / 10 次扫荡
-- `c=island&m=index|pk`：东海金银岛秘境探险（蓬莱仙境/瀛洲金岛/方丈古境）、护岛神兽对决与海外龙脉珍宝
-- `c=herothrone&m=index|action`：英雄王座巅峰争霸（青铜铁血/白银霸烈/至尊第一王座）、九宫格攻擂推演与霸主加冕
+- `c=island&m=index|get_mission|pk|get_report_list|get_report_info|send_to_chat`：金银岛（按旧版移植，主公 36 级开放）：`Island` 按主公等级每 10 级一组 5 名守护者，守军取 `IslandMonster` 并带旧版战报，每日胜场越多军令消耗越高，必得银两、按概率掉元宝，首胜攻略战报；每天进入时回到本等级组第一关
+- `c=herothrone&m=index|go_back|start|action|buy_times|end_battle`：英雄王座（按旧版移植，主公 101 级开放）：`HerothroneMission` 的 300 层连闯，守军取 `HerothroneMonster` 并带旧版战报，过关奖励与每 10 层宝箱，每日 2 次免费挑战与按 VIP 限次的 1000 元宝购买，VIP 10 起战败后可花元宝继续。跨服排行（uc 服务器）未移植，排行列表为空
 - `c=beatengod&m=index|beaten|get_box_reward`：真武战神金光试炼、敲击金身赐福掉落与战神宝箱领奖
 - `c=war&m=index|entry|point_shop`：魏蜀吴皇城跨服封神国战大厅、出征报名参战与军功功勋商城兑换
-- `c=countrymine&m=index|caikuang|rob|get_reward|give_up`：三国国家边境矿山开采、敌国矿车掠夺对决与国库收益收缴
+- `c=countrymine&m=index|get_countrymine_info|caikuang|rob|get_reward|give_up|send_to_chat`：国家矿脉（按旧版移植，主公 91 级且加入国家）：10 页矿区，矿类型取 `CountryMineRatio`，每日 3 次开采、3 次抢夺，每次占领 15 分钟，抢夺其他国家玩家的矿（旧版 PVP 战报、信件与国家战报记录），收获 / 抢夺随机触发 `CountryMineEvent` 事件（紫宝石、元宝、玉石倍数）。玉石按旧版计算并回报，`member.jade` 未移植，暂不发放
 - `c=countryboss&m=index|powerup|battle|reward`：国家 BOSS 蚩尤（按旧版移植）：每周五 20:30–20:45，国家（玩家军团）40 级、主公 50 级开放，每个国家各打各的 BOSS；BOSS 取 `WorldBoss` 行 2，血量 20 亿 × 1.03^往周击杀次数（击杀记录 `country_boss_log`），血量原子扣减，打死算胜利；60 秒复活 CD（20 元宝），银币（等级 × 1000）/ 元宝（20）鼓舞；按国家内伤害前 50 名领 `CountryBossReward` 的宝石（每 10 次击杀 × 1.1，最后一击 × 1.5）与装备碎片
 - `c=hitegg&m=index|hit_egg`：金蛋纳福大暴击（吉祥金蛋/富贵银蛋/至尊彩蛋）、挥锤破蛋与元宝爆出
 - `c=levelgift&m=index|get_reward`：主公等级成长里程碑礼包（5/10/20/30/40/50级）与成长基金一键领奖
@@ -231,7 +231,7 @@
 - `c=country_taxes_shop&m=index|buy`：国家税金集市商城、税金资产核算与银两突飞卡军令限额兑换
 - `c=equip_forge&m=index|fabrication|resolve`：天工神兵铸造工坊、神装开炉淬火打造与闲置装备熔炼提取精铁
 - `c=totallogin&m=index|action`：全服开服累登狂欢大礼（1~14天全梯度封赏）、豪华银票元宝礼包一键申领
-- `c=epic&m=index|force`：三国历史天命战纪史诗战役（白马之战/火烧乌巢/华容道劫曹）、九宫格推演决战领赏
+- `c=epic&m=index|select_epic|refresh|force|buy_lock_times|buy_refresh_times`：天下史诗拼图（按旧版移植，没有战斗，主公 150 级开放）：选择史诗后按 `EpicChip` 权重刷新 5 个位置（可锁定），拼成得声望（`Epic.reward`）或花元宝强行领取；每日刷新 / 锁定次数按 VIP 重置，可用元宝购买
 - `c=activationcode&m=index|get_reward`：全服至尊特权激活码/CDKey兑换系统（VIP666/VIP888/SG888）、海量元宝银两秒级兑付与防重领取
 - `c=exercise&m=index|open_gift`：全军整军经武大演习、整军礼包拆开与行军令军饷犒赏
 - `c=information&m=index|get_info|get_own_achievement`：主公全军总战力透视总览、名将总汇统计与个人成就勋章荣耀
@@ -291,27 +291,27 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] 将魂星路 (`tower`) 按旧版移植：旧版关卡与守军、战报、首杀、扫荡、购买次数与每日原魂奖励
 - [x] 平乱副本 (`copies`) 按旧版移植：旧版怪物、战报、首杀与掉落奖励、锻造材料存储（`own_materials`）、扫荡与购买次数
 - [x] 多人副本 (`elite`) 按旧版移植：军团、旧版团战（`battle_rush`）对 `EliteMonster`、首杀与掉落奖励、至尊组队、购买次数与每日重置，以及按 `elitepop.js` 协议重建的实时组队房间
-- [x] 过关斩将斩杀六大名将 (`pass_general`)、主线任务动态里程碑 (`mainquest`)
+- [x] 过关斩将活动（`pass_general`，按旧版移植）、主线任务动态里程碑 (`mainquest`)
 - [x] 原版经典深度养成与宏观格局重现：玩家自建国家（军团）系统 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
 - [x] 全面打通前端全量高频日常交互系统：每日签到福利 (`dailysign`)、VIP 特权俸禄与晋级礼包 (`vip`)、系统信箱与飞鸽传书 (`message`)、好友社交系统 (`friend`)、银矿占领挂机采矿 (`mine`)
-- [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、天命观星突破 (`heaven`)、世界 BOSS 刑天 (`worldboss`)
-- [x] 军团攻城掠地城池战 (`siege`)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)
+- [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、通天塔 (`heaven`)、世界 BOSS 刑天 (`worldboss`)
+- [x] 国战都城争夺 (`siege`，按旧版移植)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)
 - [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
 - [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充返利与天命转盘 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
 - [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)
-- [x] 战神殿与朝堂宏图系统打通：四象圣域神尊决战 (`sanctum`)、跨服群雄论剑 (`compete`)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)
+- [x] 战神殿与朝堂宏图系统打通：四象圣域 (`sanctum`)、群雄逐鹿排名活动 (`compete`，按旧版移植)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)
 - [x] 休闲社交与交互狂欢系统全面贯通：群英夜宴大摆豪门宴席 (`banquet`)、青梅煮酒论英雄 (`drink`)、逍遥神骰行大运 (`dice`)、聚宝摇钱神树浇水摇金 (`sacredtree`)
-- [x] 巅峰试炼与点将全线闭环：九宫金边翻牌夺宝 (`flop`)、英雄试炼擂台决战 (`challenge`)、点将台退役遣散 (`muster`)
+- [x] 巅峰试炼与点将全线闭环：九宫金边翻牌夺宝 (`flop`)、玩家切磋 (`challenge`，按旧版移植)、点将台退役遣散 (`muster`)
 - [x] 商业经贸与天赋神力体系贯通：四海通商行商经商 (`business`)、金银宝盆博彩 (`gambling`)、每日军务悬赏令 (`task`)、武将天赋神力树 (`talent`)
 - [x] 终极养成进阶体系全线贯通：神将品质飞升 (`advanced`)、装备精炼词条 (`refine`)、武将七星突破 (`star`)、国家战争学院科技 (`war_college`)
 - [x] 英雄图谱与战役平乱全线就绪：幸运大转盘 (`lottery`)、武将远征试炼 (`generaltask`)、名将谱羁绊点亮 (`general_book`)
-- [x] 跨服争霸与海外秘境全线贯通：东海金银岛秘境 (`island`)、英雄王座巅峰争霸 (`herothrone`)、真武战神金身试炼 (`beatengod`)、皇城跨服封神国战 (`war`)
+- [x] 跨服争霸与海外秘境全线贯通：金银岛 (`island`)、英雄王座 (`herothrone`)、真武战神金身试炼 (`beatengod`)、皇城跨服封神国战 (`war`)
 - [x] 协议一致性与媒体高保真：标准 HTTP 206 Partial Content 字节切片音频流、Web Audio 捕获级全兼容唤醒、名将原型资产严格对齐 (`HERO_CONFIGS`)、主公经验条分母归一化与战败零收益铁律
 
-- [x] 边境阵营战场与等级里程碑：国家边境矿山争夺 (`countrymine`)、国家 BOSS 蚩尤 (`countryboss`)、金蛋纳福大暴击 (`hitegg`)、主公等级成长基金礼包 (`levelgift`)
-- [x] 官营特产与神装天铸体系全线贯通：国家特产商城 (`countryshop`)、天工神装铸造熔炼 (`equip_forge`)、开服十四日累登狂欢 (`totallogin`)、天命战纪史诗副本 (`epic`)
+- [x] 边境阵营战场与等级里程碑：国家矿脉 (`countrymine`，按旧版移植)、国家 BOSS 蚩尤 (`countryboss`)、金蛋纳福大暴击 (`hitegg`)、主公等级成长基金礼包 (`levelgift`)
+- [x] 官营特产与神装天铸体系全线贯通：国家特产商城 (`countryshop`)、天工神装铸造熔炼 (`equip_forge`)、开服十四日累登狂欢 (`totallogin`)、天下史诗拼图 (`epic`，按旧版移植)
 - [x] 运营激活与战力成就基石就绪：至尊CDKey激活码兑换 (`activationcode`)、整军经武演武礼包 (`exercise`)、主公全军总战力透视 (`information`)、结义邀请拉新分红 (`invitation`)
-- [x] 核心业务轻量薄模型 (`src/Model/`) 落地：引入 `SoftDeletes` 自动软删除过滤、强类型属性转换与内聚领域方法（`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`）
+- [x] 核心业务轻量薄模型 (`src/Model/`) 落地：引入 `SoftDeletes` 自动软删除过滤、强类型属性转换与内聚领域方法（`Member`, `General`, `Equipment`, `GeneralSoul`）
 - [x] 高并发防连击与防重入机制：基于 Redis 的核心资产操作原子防刷中间件 `ThrottleMiddleware`
 - [x] PHPUnit Unit + Feature 测试套件（123 个测试，6837 个断言）
 

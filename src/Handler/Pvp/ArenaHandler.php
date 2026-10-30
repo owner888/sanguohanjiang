@@ -621,10 +621,11 @@ final class ArenaHandler
      * 旧版先按左侧 check_user_team 设 status，再被右侧的结果覆盖：只有右侧（被挑战方）-1（没有阵法）/ -3（武将信息错误）
      * 时不战斗（arena 控制器不检查 status，按失败结算、battle 只有双方信息）；任一侧 -2（阵法里没有武将）或左侧 -1 / -3
      * 都按空队伍继续战斗（空队伍直接判负）。
+     * 切磋（ChallengeHandler）同样调用本方法。
      *
      * @return array{status: int, info?: array<string, mixed>}
      */
-    private static function battlePk(int $uid, int $touid): array
+    public static function battlePk(int $uid, int $touid): array
     {
         $left = TeamBuilder::forMember($uid);
         $right = TeamBuilder::forMember($touid, defense: true, self: $touid === $uid);
