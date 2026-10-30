@@ -2,7 +2,7 @@
 
 对比基线：前端 `public/static/js` 中写死的 `c`/`m` 调用 vs 新版 `src/Handler` 的 `public static` 方法 vs 旧版 CodeIgniter `wwwroot/s1`、`wwwroot/uc` 控制器。动态拼接的调用未覆盖。
 
-- 前端调用：653；已实现：321；缺失：332（旧版有 310，旧版也无 22）
+- 前端调用：653；已实现：328；缺失：325（旧版有 315，旧版也无 10）
 - 「旧版位置」为相对旧服务端 `HJServer/wwwroot/` 的路径；「—」表示旧版 s1/uc 中没有，需按前端字段反推（部分可能在 `battle`/`war` 服）。
 - 标记 🆕 的控制器在新版中整个 Handler 都不存在。
 
@@ -140,18 +140,6 @@
 | `c=christmasbuy&m=play_introduce` | `s1/application/controllers/christmasbuy.php:883` | `static/js/view/christmasbuypop.js:741` |
 | `c=christmasbuy&m=rebate_reward` | `s1/application/controllers/christmasbuy.php:759` | `static/js/view/christmasbuypop.js:604` |
 | `c=christmasbuy&m=rebate_reward_index` | `s1/application/controllers/christmasbuy.php:681` | `static/js/view/christmasbuypop.js:547` |
-
-### copies（7）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=copies&m=buy_times` | — | `static/js/view/pacifypop.js:486` |
-| `c=copies&m=get_monster_info` | — | `static/js/view/pacifypop.js:330` |
-| `c=copies&m=get_monster_list` | — | `static/js/view/pacifypop.js:141` |
-| `c=copies&m=get_mopup_price` | — | `static/js/view/pacifypop.js:636` |
-| `c=copies&m=get_report_info` | — | `static/js/view/miscpop.js:5750` |
-| `c=copies&m=get_report_list` | — | `static/js/view/pacifypop.js:869` |
-| `c=copies&m=send_to_chat` | — | `static/js/view/miscpop.js:5995` |
 
 ### expostulation（7）
 
@@ -303,11 +291,11 @@
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=equip_forge&m=get_equip_attr` | — | `static/js/view/miscpop.js:6858` |
-| `c=equip_forge&m=get_fabrication_info` | — | `static/js/view/forgepop.js:686` |
-| `c=equip_forge&m=get_suit_attr` | — | `static/js/view/forgepop.js:965` |
-| `c=equip_forge&m=resolve_index` | — | `static/js/view/resolvepop.js:38` |
-| `c=equip_forge&m=sell` | — | `static/js/view/forgepop.js:622` |
+| `c=equip_forge&m=get_equip_attr` | `s1/application/controllers/newequip/equip_forge.php:1725` | `static/js/view/miscpop.js:6858` |
+| `c=equip_forge&m=get_fabrication_info` | `s1/application/controllers/newequip/equip_forge.php:264` | `static/js/view/forgepop.js:686` |
+| `c=equip_forge&m=get_suit_attr` | `s1/application/controllers/newequip/equip_forge.php:1680` | `static/js/view/forgepop.js:965` |
+| `c=equip_forge&m=resolve_index` | `s1/application/controllers/newequip/equip_forge.php:1074` | `static/js/view/resolvepop.js:38` |
+| `c=equip_forge&m=sell` | `s1/application/controllers/newequip/equip_forge.php:557` | `static/js/view/forgepop.js:622` |
 
 ### gmmail 🆕（5）
 
@@ -831,6 +819,7 @@
 | `c=lottery&m=action` | 依赖未移植：旧版按 `Lottery` 分组概率抽奖；新版写死转盘的装备格「青钢名剑」在 MasterData 中不存在，抽中不发装备 |
 | `c=arena&m=shop_exchange` | 依赖未移植：旧版扣积分后发放；re_type 6 玉石、9 宝石碎片、14~16 精炼石类、17~25 装备精华、26 坐骑、27 将魂、28 宝石的玩家存储新版没有，这些商品返回 -3 不扣积分（`ArenaExchange` 里有 6 / 9 / 26 / 27 / 28 共 15 件） |
 | `c=arena`（`ArenaHandler`） | 依赖未移植：聊天室战报（`action` 夺得第 1 名广播、`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、信件战报 `pm_report`（信件存 Redis `user_messages`，`info.report` 为其 id）、主线任务 8 / 9、日常任务 10、`edifice` 首次打开记录、神树 `tree`（恒 0）、消费统计 `stat_model`；酒馆获得日志 `add_pub_log` |
+| `c=copies`（`CopiesHandler`） | 依赖未移植：聊天室战报（`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、装备碎片奖励（类型 2，`CopiesReward` 里没有）、元宝 / 军令 / 声望流水（`gold_log` / `act_log` / `reputation_log`）、日常任务 5、翻牌活动计数 |
 | `c=equip_forge&m=fabrication` | 依赖未移植：旧版打造走 newequip 体系；只有图纸 1 能对上模板（Equip 22 青龙偃月刀），图纸 2、3 不可锻造 |
 | `c=map&m=action` 关卡掉落 | 已按旧版 `Mission` 发 gettype 1（装备）/ 3 / 4；依赖未移植：2 装备碎片、5 / 6 天赋卷轴（及碎片）不发放；`times` 刷图未移植（按单次攻击） |
 | `c=map&m=get_newresult` | 已按旧版 `Map` 表发 rewardtype 1（装备）；2 天赋卷轴 / 3 声望 / 4 坐骑依赖未移植，返回 -4 |
@@ -850,13 +839,13 @@
 | 组队加成（`TeamBuilder::forMember`） | 依赖未移植，按 0 计：宝石 `gem_power`、坐骑（主战 100% / 备战 30% 及模板特殊属性）、锻造套装、将魂、主公天赋（91 级）、名将成就（81 级）、美人（60 级）、星魄（80 级）、国家学院（国家 30 级）、名将进阶（100 级）、神树 |
 | 推演加成（`BattleEngine`） | 依赖未移植，旧版对应分支不移植：将魂（暴击率 / 闪避 / 识破 / 暴击伤害 / 抗晕 / 生命）、名将成就 / 美人 / 星魄 / 国家学院（暴击率 / 闪避 / 识破 / 暴击伤害）、锻造套装（`suitbuff` 吸血 / 回气 / 偷气 / 清气 / 反伤，最终增伤 / 免伤、暴击伤害、血量伤害倍增、抗晕）、名将进阶（天赋攻防系数、血量）；`leftbuff` / `rightbuff` 的 `tree`（神树）恒为 0、`mount`（坐骑）恒为 `[]` |
 | 技能 effect 30 / 31、攻击类型 16 | 旧版 `battle_model.php` 没有对应分支，按旧版照搬：655 袖里乾坤（type 16）没有受击位，656 飞花溅玉、668 地狱人间、669 逆命王轮只按 `ratio` 计伤害；技能描述里的偷气 / 眩晕 / 吸血 / 伤害上限等在这份旧版源码中没有实现 |
-| 守军 | 只有 `c=map&m=action` 按旧版取 `Mission` → `Monster`、`c=tower&m=pk` 按旧版取 `SoulMission` → `SoulMonster`。`elite`、`challenge`、`copies`、`epic`、`pass_general`、`sanctum`、`compete`、`countryboss`、`countrymine`、`heaven`、`herothrone`、`island`、`siege`、`worldboss` 的守军数值是新版自定的（`TeamBuilder::unportedUnit`：类型 / 天赋 / 技能 / 武力 / 智力按 0；旧版 `process_hurt` 对没有天赋的防御方不计防御）；`worldboss` / `countryboss` 的鼓舞系数也是新版自定的；旧版对应怪物表见 `TeamBuilder::MONSTER_*` |
-| 上述玩法的响应 | 新版自定的结构（顶层 `win` / 奖励 / `message`），按 `assess >= 1` 判胜负，不带战报。客户端按旧版控制器读 `res.battle`（`xGame.loadBattle`）与 `res.info.win` 等：`challenge`（`miscpop.js`）、`compete`（`zhulupop.js`）、`copies`（`pacifypop.js`）、`countryboss` / `worldboss`（`miscpop.js`）、`countrymine`（`countrymineworld.js`）、`heaven`（`heavenworld.js`）、`herothrone`（`herothroneworld.js`）、`island`（`miscpop.js` 的 `c=island&m=pk`）、`sanctum`（`sanctumworld.js`）、`siege`（`countrybattleworld.js`，另读 `battle.battle_ready`）；`pass_general`（`breakthroughworld.js`）读 `is_succ` / `pass_id` 等非战斗字段；`epic&m=force`（`epicpop.js`）读 `member` / `add`，旧版不是战斗；`elite&m=action` 前端没有调用 |
+| 守军 | 只有 `c=map&m=action` 按旧版取 `Mission` → `Monster`、`c=tower&m=pk` 按旧版取 `SoulMission` → `SoulMonster`、`c=copies&m=pk` 按旧版取 `CopiesInfo`（怪物行的 position1~9 → `CopiesInfo` 的行）。`elite`、`challenge`、`epic`、`pass_general`、`sanctum`、`compete`、`countryboss`、`countrymine`、`heaven`、`herothrone`、`island`、`siege`、`worldboss` 的守军数值是新版自定的（`TeamBuilder::unportedUnit`：类型 / 天赋 / 技能 / 武力 / 智力按 0；旧版 `process_hurt` 对没有天赋的防御方不计防御）；`worldboss` / `countryboss` 的鼓舞系数也是新版自定的；旧版对应怪物表见 `TeamBuilder::MONSTER_*` |
+| 上述玩法的响应 | 新版自定的结构（顶层 `win` / 奖励 / `message`），按 `assess >= 1` 判胜负，不带战报。客户端按旧版控制器读 `res.battle`（`xGame.loadBattle`）与 `res.info.win` 等：`challenge`（`miscpop.js`）、`compete`（`zhulupop.js`）、`countryboss` / `worldboss`（`miscpop.js`）、`countrymine`（`countrymineworld.js`）、`heaven`（`heavenworld.js`）、`herothrone`（`herothroneworld.js`）、`island`（`miscpop.js` 的 `c=island&m=pk`）、`sanctum`（`sanctumworld.js`）、`siege`（`countrybattleworld.js`，另读 `battle.battle_ready`）；`pass_general`（`breakthroughworld.js`）读 `is_succ` / `pass_id` 等非战斗字段；`epic&m=force`（`epicpop.js`）读 `member` / `add`，旧版不是战斗；`elite&m=action` 前端没有调用 |
 | `c=map&m=mission` / `get_mission_list`，`c=map&m=action` 经验 | 据点名称、等级、经验仍取新版自定的 `MapHandler::getEnemyConfig`，与战斗中的旧版 `Mission` 守军不一致；`get_mission_by_id` 的场景 / 关卡开启校验、攻击 CD、强攻元宝未移植 |
 
 ## 数据结构缺口
 
-旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 31 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
+旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 36 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
 
 ### 已建表的缺失字段
 
@@ -878,7 +867,6 @@
 | 领域 | 旧表 |
 |---|---|
 | 军团城池 / 国战 | `country_city_report`、`country_fight_notice`（军团本体与 `member_country` 等 8 张表已补；`country_city`、`country_mission` 等配置已在 MasterData） |
-| 锻造材料 | `own_materials`、`own_materials_log`（模板 `materials_temp` 已在 MasterData） |
 | 将魂 | `own_soul`、`own_soul_mergelog`（将魂星路的掉落、背包已满判断依赖它们与 `member.soulpack` / `souluse`） |
 | 其他玩家资产 | `own_stone`、`own_achievement(_log)`、`own_addition`、`own_star_addition` |
 | 邮件 / 私信 | `pm`、`pm_report`、`notice` |

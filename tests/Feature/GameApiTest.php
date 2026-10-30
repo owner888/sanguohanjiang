@@ -3493,25 +3493,529 @@ final class GameApiTest extends TestCase
         $this->assertSame('桃园结义', $up['combo_name']);
     }
 
-    public function testCopiesSystem(): void
+    /**
+     * c=copies 请求：去掉响应信封补的 message（以及信封补的 msg = ok；旧版 api_return 只输出控制器给的字段）
+     *
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private function copiesRequest(string $method, array $params = []): array
     {
-        $this->withStrongFormation(function (): void {
-            // 1. 查看平乱副本
-            $res = $this->request('copies', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertNotEmpty($res['list']);
+        $res = $this->request('copies', $method, $params + ['d' => 'newequip']);
+        if (($res['msg'] ?? null) === 'ok' && ($res['message'] ?? null) === 'ok') {
+            unset($res['msg']);
+        }
+        unset($res['message']);
+        return $res;
+    }
 
-            // 2. 挑战十常侍之乱 (copy: 1)
-            $battle = $this->request('copies', 'pk', ['id' => 1]);
-            $this->assertSame(1, $battle['status']);
-            $this->assertSame(1, $battle['win']);
-            $this->assertGreaterThan(0, $battle['silver']);
+    /**
+     * @return array{uid: int, auth: array<string, mixed>}
+     */
+    private function copiesPlayer(int $level = 110): array
+    {
+        $p = $this->newGuestPlayer();
+        // 新账号注册即 VIP1；副本测试从 VIP0（每只怪每天可买 1 次）开始
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => $level, 'vip' => 0]);
+        return $p;
+    }
 
-            // 3. 一键平乱扫荡
-            $sweep = $this->request('copies', 'mop_up');
-            $this->assertSame(1, $sweep['status']);
-            $this->assertGreaterThan(0, $sweep['silver']);
-        });
+    /**
+     * @return array<string, mixed>
+     */
+    private function copiesBeat(int $uid, int $copiesId, int $diffId, int $monsterId): array
+    {
+        return DB::table('copies_beat')->where('uid', $uid)->where('copies_id', $copiesId)
+            ->where('diff_id', $diffId)->where('monster_id', $monsterId)->first();
+    }
+
+    /**
+     * @param array<string, int> $data
+     */
+    private function copiesSetBeat(int $uid, int $copiesId, int $diffId, array $monsterIds, array $data): void
+    {
+        DB::table('copies_beat')->where('uid', $uid)->where('copies_id', $copiesId)
+            ->where('diff_id', $diffId)->whereIn('monster_id', $monsterIds)->update($data);
+    }
+
+    /**
+     * 旧版 copies_model->get_price_by_times：从第 start + 1 次起连续 times 次的价格之和
+     */
+    private function copiesPrice(int $start, int $times): int
+    {
+        $list = [];
+        foreach (\Hanjiang\MasterData\CopiesBuyTimesGold::ROWS as $row) {
+            $list[$row['times']] = $row['gold'];
+        }
+        $sub = 0;
+        for ($i = 0; $i < $times; $i++) {
+            $start = min(100, $start + 1);
+            $sub += $list[$start];
+        }
+        return $sub;
+    }
+
+    /**
+     * 第一个让 mt_rand(0, 100) 依次落在 $wants（true 掉落：rate >= roll）的种子
+     *
+     * @param list<bool> $wants
+     */
+    private function copiesSeed(float $rate, array $wants): int
+    {
+        for ($seed = 1; $seed < 100000; $seed++) {
+            mt_srand($seed);
+            $ok = true;
+            foreach ($wants as $want) {
+                if (($rate >= mt_rand(0, 100)) !== $want) {
+                    $ok = false;
+                    break;
+                }
+            }
+            if ($ok) {
+                return $seed;
+            }
+        }
+        $this->fail('no seed');
+    }
+
+    /**
+     * 材料奖励项（旧版 get_reward：materials_temp 整行 + rate_info / type / value）
+     *
+     * @return array<string, mixed>
+     */
+    private function copiesMaterialReward(int $materialsId, int $num, ?string $rateInfo): array
+    {
+        $row = \Hanjiang\Model\OwnMaterials::template($materialsId);
+        $this->assertNotNull($row);
+        if ($rateInfo !== null) {
+            $row['rate_info'] = $rateInfo;
+        }
+        $row['type'] = 3;
+        $row['value'] = $num;
+        return $row;
+    }
+
+    public function testCopiesIndexAndMonsterList(): void
+    {
+        // 旧版 110 级开启（语言包写 65 级，照代码）
+        $low = $this->copiesPlayer(109);
+        foreach (['index', 'get_monster_list', 'get_monster_info', 'pk', 'get_mopup_price', 'mop_up', 'get_report_list', 'get_report_info', 'send_to_chat', 'buy_times'] as $m) {
+            $res = $this->copiesRequest($m, $low['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 1, 'times' => 1, 'report' => 1]);
+            $this->assertSame(-1, $res['status'], $m);
+            $this->assertSame('副本65级开启。', $res['msg'], $m);
+        }
+
+        $p = $this->copiesPlayer();
+        $uid = $p['uid'];
+        $member = DB::table('member')->where('uid', $uid)->first();
+        $this->assertSame(['status' => 1, 'list' => [
+            ['id' => 1, 'name' => '天公张角', 'succ' => 0],
+            ['id' => 2, 'name' => '魔王董卓', 'succ' => 0],
+            ['id' => 3, 'name' => '战神吕布', 'succ' => 0],
+        ]], $this->copiesRequest('index', $p['auth']));
+        $this->assertSame(0, DB::table('copies_beat')->where('uid', $uid)->count(), 'index 不建档');
+
+        $this->assertSame(['status' => -2, 'msg' => '传参错误。'], $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 0]));
+        $this->assertSame(['status' => -3, 'msg' => '获取副本难度信息失败。'], $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 4]));
+
+        // 首次打开副本：每只怪建一行（免费 5 次，VIP0 可购买 1 次）
+        $list = $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $this->assertSame(['status', 'list', 'info'], array_keys($list));
+        $this->assertSame(['act' => (int)$member['act'], 'gold' => (int)$member['gold']], $list['info']);
+        $this->assertSame([1, 2, 3], array_column($list['list'], 'diff_id'));
+        $this->assertSame([1, 0, 0], array_column($list['list'], 'status'));
+        $row1 = \Hanjiang\MasterData\CopiesInfo::ROWS[1];
+        $this->assertSame([
+            'copies_id' => 1, 'diff_id' => 1, 'monster_id' => 1, 'name' => $row1['name'], 'pass_type' => $row1['pass_type'],
+            'killed' => 0, 'openstatus' => 1, 'x' => $row1['x'], 'y' => $row1['y'],
+        ], $list['list'][0]['list'][0]);
+        $this->assertSame([1, 0, 0, 0, 0, 0, 0, 0, 0, 0], array_column($list['list'][0]['list'], 'openstatus'));
+        $this->assertCount(10, $list['list'][1]['list']);
+        $beats = DB::table('copies_beat')->where('uid', $uid)->get();
+        $this->assertCount(30, $beats);
+        foreach ($beats as $b) {
+            $this->assertSame([0, 1, 0, 5, 1], [(int)$b['vip'], (int)$b['copies_id'], (int)$b['status'], (int)$b['free_times'], (int)$b['vip_times']]);
+            $this->assertEqualsWithDelta(time(), (int)$b['dateline'], 5);
+        }
+
+        // 简单难度前 3 只已击败：第 4 只开启；普通难度仍未解锁
+        $this->copiesSetBeat($uid, 1, 1, [1, 2, 3], ['status' => 1]);
+        $list = $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $this->assertSame([1, 1, 1, 0, 0, 0, 0, 0, 0, 0], array_column($list['list'][0]['list'], 'killed'));
+        $this->assertSame([1, 1, 1, 1, 0, 0, 0, 0, 0, 0], array_column($list['list'][0]['list'], 'openstatus'));
+        // 简单难度最后一只击败后普通难度解锁
+        $this->copiesSetBeat($uid, 1, 1, range(4, 10), ['status' => 1]);
+        $list = $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $this->assertSame([1, 1, 0], array_column($list['list'], 'status'));
+        $this->assertSame([1, 0, 0, 0, 0, 0, 0, 0, 0, 0], array_column($list['list'][1]['list'], 'openstatus'));
+        $this->assertSame(0, $this->copiesRequest('index', $p['auth'])['list'][0]['succ']);
+        // 三个难度的最后一只都击败：首页显示通关
+        $this->copiesSetBeat($uid, 1, 2, [10], ['status' => 1]);
+        $this->copiesSetBeat($uid, 1, 3, [10], ['status' => 1]);
+        $this->assertSame([1, 0, 0], array_column($this->copiesRequest('index', $p['auth'])['list'], 'succ'));
+    }
+
+    public function testCopiesMonsterInfo(): void
+    {
+        $p = $this->copiesPlayer();
+        $uid = $p['uid'];
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+
+        $this->assertSame(['status' => -2, 'msg' => '传参错误。'], $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 1]));
+        $this->assertSame(['status' => -3, 'msg' => '当前副本难度尚未解锁'], $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 2, 'monster_id' => 1]));
+        // 旧版代码：-4 获取怪物信息失败（提示 diff_error），-5 当前怪物尚未解锁
+        $this->assertSame(['status' => -4, 'msg' => '当前副本难度尚未解锁'], $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 99]));
+        $this->assertSame(['status' => -5, 'msg' => '当前怪物尚未解锁'], $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 2]));
+
+        // 未首杀：首杀声望；首杀奖励类型 0 时没有 first_reward；掉落只展示不发放
+        $info = $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 1]);
+        $row1 = \Hanjiang\MasterData\CopiesInfo::ROWS[1];
+        $reward1 = \Hanjiang\MasterData\CopiesReward::ROWS[1];
+        $this->assertSame(['status' => 1, 'info' => [
+            'mop_up' => 0,
+            'reputation' => $reward1['first_reputation'],
+            'reward' => [$this->copiesMaterialReward($reward1['value4'], $reward1['num4'], '小概率')],
+            'first_kill' => 1,
+            'free_times' => 5,
+            'vip_times' => 1,
+            'name' => $row1['name'],
+            'image' => $row1['image'],
+            'monster_level' => $row1['level'],
+            'pass_type' => $row1['pass_type'],
+            'price' => 0,
+        ]], $info);
+        $this->assertSame(0, DB::table('own_materials')->where('uid', $uid)->count());
+
+        // 已首杀：正常声望，first_reward 为空数组；免费次数用完时给出下一次购买价格
+        DB::table('copies_beat_log')->insert(['uid' => $uid, 'nickname' => 'x', 'level' => 110, 'copies_id' => 1, 'diff_id' => 1, 'monster_id' => 1, 'status' => 1, 'dateline' => time()]);
+        $this->copiesSetBeat($uid, 1, 1, [1], ['status' => 1, 'free_times' => 0]);
+        $info = $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 1])['info'];
+        $this->assertSame(['mop_up', 'reputation', 'first_reward', 'reward', 'first_kill', 'free_times', 'vip_times', 'name', 'image', 'monster_level', 'pass_type', 'price'], array_keys($info));
+        $this->assertSame([1, $reward1['reputation'], [], 0, 0, 1], [$info['mop_up'], $info['reputation'], $info['first_reward'], $info['first_kill'], $info['free_times'], $info['vip_times']]);
+        $this->assertSame(\Hanjiang\MasterData\CopiesBuyTimesGold::ROWS[1]['gold'], $info['price'], '已购 0 次：第 1 次的价格');
+        $this->copiesSetBeat($uid, 1, 1, [1], ['vip_times' => 0]);
+        $this->assertSame(\Hanjiang\MasterData\CopiesBuyTimesGold::ROWS[2]['gold'], $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 1])['info']['price']);
+
+        // 首杀奖励为装备（普通难度第 10 只：Equip 65）：装备模板整行，type 改为奖励类型，首杀必得
+        $this->copiesSetBeat($uid, 1, 1, range(1, 10), ['status' => 1]);
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $this->copiesSetBeat($uid, 1, 2, range(1, 9), ['status' => 1]);
+        $reward = null;
+        foreach (\Hanjiang\MasterData\CopiesReward::ROWS as $r) {
+            if ([$r['copies_id'], $r['diff_id'], $r['monster_id']] === [1, 2, 10]) {
+                $reward = $r;
+            }
+        }
+        $this->assertSame([1, 65, 1], [$reward['first_type'], $reward['first_value'], $reward['first_num']]);
+        $info = $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 2, 'monster_id' => 10])['info'];
+        $equip = \Hanjiang\MasterData\Equip::ROWS[65];
+        $equip['type'] = 1;
+        $equip['value'] = 1;
+        $equip['rate_info'] = '首杀必得';
+        $this->assertSame($equip, $info['first_reward']);
+        $this->assertSame($reward['first_reputation'], $info['reputation']);
+        $this->assertSame(0, DB::table('equipment')->where('uid', $uid)->count(), '查看不发奖');
+    }
+
+    public function testCopiesPkLoseAndGuards(): void
+    {
+        $p = $this->copiesPlayer();
+        $uid = $p['uid'];
+        $member = DB::table('member')->where('uid', $uid)->first();
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $q = ['id' => 1, 'diff_id' => 1, 'monster_id' => 1];
+
+        // 阵法里没有武将：旧版 battle_mission 按空队伍继续战斗，直接大败；战败只扣军令，不扣次数
+        $this->emptyFormation($uid);
+        $res = $this->copiesRequest('pk', $p['auth'] + $q);
+        $this->assertSame(['status', 'battle', 'reward_info', 'info'], array_keys($res));
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff', 'left_role', 'right_role'], array_keys($res['battle']));
+        $this->assertSame(-3, $res['battle']['assess']);
+        // 守军取该怪物行的 position1~9 → copies_info 的行
+        $row1 = \Hanjiang\MasterData\CopiesInfo::ROWS[1];
+        $positions = [];
+        for ($i = 1; $i <= 9; $i++) {
+            if ($row1['position' . $i] > 0) {
+                $positions[] = (string)$i;
+            }
+        }
+        $this->assertSame($positions, array_map('strval', array_keys($res['battle']['rightteam'])));
+        $this->assertSame((string)$row1['position3'], $res['battle']['rightteam']['3']['heroid']);
+        $this->assertSame(['name' => $member['nickname'], 'level' => 110, 'gender' => (int)$member['gender']], $res['battle']['left_role']);
+        $this->assertSame(['name' => $row1['name'], 'level' => $row1['level']], $res['battle']['right_role']);
+        $this->assertSame([], $res['reward_info']);
+        $this->assertSame(['win' => -3, 'act' => (int)$member['act'] - 1, 'gold' => (int)$member['gold'], 'report' => 0], $res['info']);
+        $this->assertSame((int)$member['act'] - 1, (int)DB::table('member')->where('uid', $uid)->value('act'));
+        $beat = $this->copiesBeat($uid, 1, 1, 1);
+        $this->assertSame([0, 5], [(int)$beat['status'], (int)$beat['free_times']]);
+        $this->assertSame(0, DB::table('copies_beat_log')->where('uid', $uid)->count());
+        $this->assertNull(Redis::get('copies_pk_lock' . $uid), '请求结束解锁');
+
+        // 加锁中
+        Redis::set('copies_pk_lock' . $uid, 1, 30);
+        $this->assertSame(['status' => -8, 'msg' => '操作太快了。'], $this->copiesRequest('pk', $p['auth'] + $q));
+        Redis::del('copies_pk_lock' . $uid);
+
+        // 没有阵法：旧版 battle_mission 返回 -1 → pk -7，不扣军令
+        $act = (int)DB::table('member')->where('uid', $uid)->value('act');
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 0]);
+        $this->assertSame(['status' => -7, 'msg' => '获取战斗信息失败。'], $this->copiesRequest('pk', $p['auth'] + $q));
+        $this->assertSame($act, (int)DB::table('member')->where('uid', $uid)->value('act'));
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 1]);
+
+        $this->assertSame(['status' => -2, 'msg' => '传参错误。'], $this->copiesRequest('pk', $p['auth'] + ['id' => 1, 'diff_id' => 1]));
+        $this->assertSame(['status' => -3, 'msg' => '当前副本难度尚未解锁'], $this->copiesRequest('pk', $p['auth'] + ['id' => 1, 'diff_id' => 2, 'monster_id' => 1]));
+        $this->assertSame(['status' => -4, 'msg' => '获取怪物信息失败。'], $this->copiesRequest('pk', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 99]));
+        $this->assertSame(['status' => -5, 'msg' => '当前怪物尚未解锁'], $this->copiesRequest('pk', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 2]));
+
+        DB::table('member')->where('uid', $uid)->update(['act' => 0]);
+        $this->assertSame(['status' => -7, 'msg' => '军令不足。'], $this->copiesRequest('pk', $p['auth'] + $q));
+        DB::table('member')->where('uid', $uid)->update(['act' => 50]);
+        $this->copiesSetBeat($uid, 1, 1, [1], ['free_times' => 0]);
+        $this->assertSame(['status' => -6, 'msg' => '攻击次数不足。'], $this->copiesRequest('pk', $p['auth'] + $q));
+        $this->assertSame(50, (int)DB::table('member')->where('uid', $uid)->value('act'));
+    }
+
+    public function testCopiesPkWinFirstKillRewardsAndReport(): void
+    {
+        DB::execute('DELETE FROM `zc_sanguo_copies_beat_log`');
+        DB::execute('DELETE FROM `zc_sanguo_copies_report`');
+        $p = $this->copiesPlayer();
+        $uid = $p['uid'];
+        $member = DB::table('member')->where('uid', $uid)->first();
+        $this->towerOverpower($uid);
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $q = ['id' => 1, 'diff_id' => 1, 'monster_id' => 1];
+        $reward1 = \Hanjiang\MasterData\CopiesReward::ROWS[1];
+        $this->assertSame([3, 12, 1, 20.0], [$reward1['type4'], $reward1['value4'], $reward1['num4'], $reward1['rate4']]);
+
+        // 真实战斗：首杀，掉落命中（rate 20 >= rand(0, 100)）
+        mt_srand($this->copiesSeed(20.0, [true]));
+        $res = $this->copiesRequest('pk', $p['auth'] + $q);
+        $this->assertSame(['status', 'battle', 'reward_info', 'info'], array_keys($res));
+        $battle = $res['battle'];
+        $this->assertNotEmpty($battle['leftteam']);
+        $this->assertNotEmpty($battle['process']);
+        $this->assertGreaterThanOrEqual(1, $battle['assess']);
+        $this->assertSame(['heroid', 'name', 'herotype', 'level', 'allblood', 'power', 'image', 'star', 'talent', 'skill', 'quality'], array_keys(reset($battle['rightteam'])));
+        $this->assertSame(['mingzhong', 'jingzhun', 'kangyun', 'tree', 'kcrit', 'mount'], array_keys($battle['leftbuff']));
+        $this->assertSame([
+            'mop_up' => 1,
+            'reputation' => $reward1['first_reputation'],
+            'reward' => [$this->copiesMaterialReward(12, 1, '小概率')],
+            'first_kill' => 1,
+        ], $res['reward_info']);
+        $log = DB::table('copies_beat_log')->where('uid', $uid)->first();
+        $this->assertSame(['win' => $battle['assess'], 'act' => (int)$member['act'] - 1, 'gold' => (int)$member['gold'], 'report' => (int)$log['id']], $res['info']);
+        $this->assertSame([$member['nickname'], 110, 1, 1, 1, $battle['assess']], [$log['nickname'], (int)$log['level'], (int)$log['copies_id'], (int)$log['diff_id'], (int)$log['monster_id'], (int)$log['status']]);
+        $this->assertSame((int)$member['reputation'] + $reward1['first_reputation'], (int)DB::table('member')->where('uid', $uid)->value('reputation'));
+        $beat = $this->copiesBeat($uid, 1, 1, 1);
+        $this->assertSame([1, 4], [(int)$beat['status'], (int)$beat['free_times']]);
+        // 锻造材料入库 + 日志
+        $own = DB::table('own_materials')->where('uid', $uid)->get();
+        $this->assertCount(1, $own);
+        $tpl = \Hanjiang\Model\OwnMaterials::template(12);
+        $this->assertSame([12, $tpl['name'], $tpl['quality'], $tpl['chip'], 1], [(int)$own[0]['materials_id'], $own[0]['name'], (int)$own[0]['quality'], (int)$own[0]['chip'], (int)$own[0]['num']]);
+        $mlog = DB::table('own_materials_log')->where('uid', $uid)->get();
+        $this->assertCount(1, $mlog);
+        $this->assertSame([1, 12, 1, 1, '', ''], [(int)$mlog[0]['type'], (int)$mlog[0]['materials_id'], (int)$mlog[0]['num'], (int)$mlog[0]['now_num'], $mlog[0]['class'], $mlog[0]['method']]);
+
+        // 战报回放：与 pk 返回的 battle 相同（report 列存 base64(gzcompress(json))）
+        $report = $this->copiesRequest('get_report_info', $p['auth'] + ['id' => $res['info']['report']]);
+        $this->assertSame(['status', 'battle', 'info'], array_keys($report));
+        $expected = $battle;
+        $expected['left_role'] = ['name' => $member['nickname'], 'level' => 110];
+        $this->assertEquals($expected, $report['battle']);
+        $this->assertSame(['win' => $battle['assess']], $report['info']);
+        $raw = (string)DB::table('copies_report')->where('id', $res['info']['report'])->value('report');
+        $this->assertSame($battle['assess'], json_decode((string)gzuncompress((string)base64_decode($raw)), true)['assess']);
+        $this->assertSame(['status' => -3, 'msg' => '攻略不存在'], $this->copiesRequest('get_report_info', $p['auth'] + ['id' => 999999]));
+        // 攻略列表：该怪物最近 7 条首杀记录（全服）
+        $list = $this->copiesRequest('get_report_list', $p['auth'] + $q);
+        $this->assertSame(['status' => 1, 'list' => [[
+            'id' => (int)$log['id'], 'uid' => $uid, 'nickname' => $member['nickname'], 'level' => 110,
+            'copies_id' => 1, 'diff_id' => 1, 'monster_id' => 1, 'status' => $battle['assess'], 'dateline' => (int)$log['dateline'],
+        ]]], $list);
+        $this->assertSame(['status' => 1, 'list' => []], $this->copiesRequest('get_report_list', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 2]));
+        $this->assertSame(['status' => -2, 'list' => [], 'msg' => '传参错误。'], $this->copiesRequest('get_report_list', $p['auth'] + ['id' => 1]));
+
+        // 再打一次：正常声望，first_reward 为空数组，不再记战报；掉落未命中
+        $rep = (int)DB::table('member')->where('uid', $uid)->value('reputation');
+        mt_srand($this->copiesSeed(20.0, [false]));
+        $res = $this->copiesRequest('pk', $p['auth'] + $q);
+        $this->assertGreaterThanOrEqual(1, $res['info']['win']);
+        $this->assertSame(['mop_up' => 1, 'reputation' => $reward1['reputation'], 'first_reward' => [], 'reward' => [], 'first_kill' => 0], $res['reward_info']);
+        $this->assertSame(0, $res['info']['report']);
+        $this->assertSame($rep + $reward1['reputation'], (int)DB::table('member')->where('uid', $uid)->value('reputation'));
+        $this->assertSame(1, DB::table('copies_beat_log')->where('uid', $uid)->count());
+        $this->assertSame(3, (int)$this->copiesBeat($uid, 1, 1, 1)['free_times']);
+        // 掉落命中：材料累加
+        mt_srand($this->copiesSeed(20.0, [true]));
+        $res = $this->copiesRequest('pk', $p['auth'] + $q);
+        $this->assertSame([$this->copiesMaterialReward(12, 1, '小概率')], $res['reward_info']['reward']);
+        $this->assertSame(2, (int)DB::table('own_materials')->where('uid', $uid)->value('num'));
+        $this->assertSame([1, 2], array_map('intval', array_column(DB::table('own_materials_log')->where('uid', $uid)->orderBy('id')->get(), 'now_num')));
+
+        // 难度最后一只首次击败：first_succ；首杀奖励装备（Equip 65）入背包
+        $this->copiesSetBeat($uid, 1, 1, range(1, 10), ['status' => 1]);
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $this->copiesSetBeat($uid, 1, 2, range(1, 9), ['status' => 1]);
+        $res = $this->copiesRequest('pk', $p['auth'] + ['id' => 1, 'diff_id' => 2, 'monster_id' => 10]);
+        $this->assertSame(['status', 'first_succ', 'battle', 'reward_info', 'info'], array_keys($res));
+        $this->assertGreaterThanOrEqual(1, $res['info']['win']);
+        $this->assertSame(1, $res['first_succ']);
+        $equip = \Hanjiang\MasterData\Equip::ROWS[65];
+        $equip['type'] = 1;
+        $equip['value'] = 1;
+        $equip['rate_info'] = '首杀必得';
+        $this->assertSame($equip, $res['reward_info']['first_reward']);
+        $this->assertSame([65], array_map('intval', array_column(DB::table('equipment')->where('uid', $uid)->get(), 'equipid')));
+        $this->assertGreaterThan(0, $res['info']['report']);
+        // 再次击败已通关的最后一只不再有 first_succ
+        $res = $this->copiesRequest('pk', $p['auth'] + ['id' => 1, 'diff_id' => 2, 'monster_id' => 10]);
+        $this->assertArrayNotHasKey('first_succ', $res);
+        $this->assertSame(1, DB::table('equipment')->where('uid', $uid)->count());
+    }
+
+    public function testCopiesMopUpPriceAndFlow(): void
+    {
+        $p = $this->copiesPlayer();
+        $uid = $p['uid'];
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $q = ['id' => 1, 'diff_id' => 1, 'monster_id' => 1];
+        DB::table('member')->where('uid', $uid)->update(['act' => 50, 'gold' => 1000]);
+
+        $this->assertSame(['status' => -2, 'msg' => '传参错误。'], $this->copiesRequest('get_mopup_price', $p['auth'] + ['id' => 1]));
+        $this->assertSame(['status' => -3, 'msg' => '获取怪物信息失败。'], $this->copiesRequest('get_mopup_price', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 99]));
+        $this->assertSame(['status' => -5, 'msg' => '无法扫荡'], $this->copiesRequest('get_mopup_price', $p['auth'] + $q));
+        $this->assertSame(['status' => -5, 'msg' => '无法扫荡'], $this->copiesRequest('mop_up', $p['auth'] + $q + ['times' => 1]));
+
+        $this->copiesSetBeat($uid, 1, 1, [1], ['status' => 1]);
+        // 免费 5 次、VIP0 可购买 1 次：1 / 5 次免费，10 次需买 5 次
+        $this->assertSame(['status' => 1, 'info' => ['one_sub' => 0, 'five_sub' => 0, 'ten_sub' => $this->copiesPrice(0, 5)], 'vip_times' => 1], $this->copiesRequest('get_mopup_price', $p['auth'] + $q));
+
+        $this->assertSame(['status' => -3, 'msg' => '传参错误。'], $this->copiesRequest('mop_up', $p['auth'] + ['id' => 1, 'times' => 1]));
+        $this->assertSame(['status' => -4, 'msg' => '次数错误'], $this->copiesRequest('mop_up', $p['auth'] + $q + ['times' => 3]));
+        Redis::set('_mop_up_lock' . $uid, 1, 30);
+        $this->assertSame(['status' => -2, 'msg' => '操作太快了。'], $this->copiesRequest('mop_up', $p['auth'] + $q + ['times' => 1]));
+        Redis::del('_mop_up_lock' . $uid);
+        DB::table('member')->where('uid', $uid)->update(['act' => 4]);
+        $this->assertSame(['status' => -11, 'msg' => '军令不足。'], $this->copiesRequest('mop_up', $p['auth'] + $q + ['times' => 5]));
+        DB::table('member')->where('uid', $uid)->update(['act' => 50]);
+
+        // 扫荡 5 次（免费次数足够）：每次照常掷点发奖，相同材料合并；扣 5 军令、5 次免费次数
+        $wants = [true, false, true, true, false];
+        mt_srand($this->copiesSeed(20.0, $wants));
+        $rep = (int)DB::table('member')->where('uid', $uid)->value('reputation');
+        $res = $this->copiesRequest('mop_up', $p['auth'] + $q + ['times' => 5]);
+        $reward1 = \Hanjiang\MasterData\CopiesReward::ROWS[1];
+        $item = $this->copiesMaterialReward(12, 3, '小概率');
+        $item['type_1'] = 12;
+        $this->assertSame(['status' => 1, 'reputation' => 5 * $reward1['first_reputation'], 'reward' => [$item], 'info' => [
+            'one_sub' => $this->copiesPrice(0, 1), 'five_sub' => $this->copiesPrice(0, 5), 'ten_sub' => $this->copiesPrice(0, 10),
+            'act' => 45, 'gold' => 1000, 'vip_times' => 1, 'free_times' => 0,
+        ]], $res, '没有首杀记录（只改了 status）时每次都按首杀声望');
+        $this->assertSame($rep + 5 * $reward1['first_reputation'], (int)DB::table('member')->where('uid', $uid)->value('reputation'));
+        $this->assertSame(3, (int)DB::table('own_materials')->where('uid', $uid)->value('num'));
+        $this->assertSame(3, DB::table('own_materials_log')->where('uid', $uid)->count());
+        $beat = $this->copiesBeat($uid, 1, 1, 1);
+        $this->assertSame([1, 0, 1], [(int)$beat['status'], (int)$beat['free_times'], (int)$beat['vip_times']]);
+        $this->assertSame(45, (int)DB::table('member')->where('uid', $uid)->value('act'));
+
+        // 免费次数用完：扫荡 5 次需买 5 次，但 VIP0 只剩 1 次可购买 → -4，不扣元宝
+        DB::table('copies_beat_log')->insert(['uid' => $uid, 'nickname' => 'x', 'level' => 110, 'copies_id' => 1, 'diff_id' => 1, 'monster_id' => 1, 'status' => 1, 'dateline' => time()]);
+        $this->assertSame(['status' => -4, 'msg' => '次数不足'], $this->copiesRequest('mop_up', $p['auth'] + $q + ['times' => 5]));
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1]);
+        $this->assertSame(['status' => -10, 'msg' => '元宝不足'], $this->copiesRequest('mop_up', $p['auth'] + $q + ['times' => 1]));
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1000]);
+        // 扫荡 1 次：花元宝买 1 次，可购买次数 -1，免费次数不动
+        mt_srand($this->copiesSeed(20.0, [false]));
+        $res = $this->copiesRequest('mop_up', $p['auth'] + $q + ['times' => 1]);
+        $price = $this->copiesPrice(0, 1);
+        $this->assertSame(['status' => 1, 'reputation' => $reward1['reputation'], 'reward' => [], 'info' => [
+            'one_sub' => $this->copiesPrice(1, 1), 'five_sub' => $this->copiesPrice(1, 5), 'ten_sub' => $this->copiesPrice(1, 10),
+            'act' => 44, 'gold' => 1000 - $price, 'vip_times' => 0, 'free_times' => 0,
+        ]], $res);
+        $this->assertSame(1000 - $price, (int)DB::table('member')->where('uid', $uid)->value('gold'));
+        $beat = $this->copiesBeat($uid, 1, 1, 1);
+        $this->assertSame([0, 0], [(int)$beat['free_times'], (int)$beat['vip_times']]);
+        $this->assertSame(['status' => 1, 'info' => ['one_sub' => $this->copiesPrice(1, 1), 'five_sub' => $this->copiesPrice(1, 5), 'ten_sub' => $this->copiesPrice(1, 10)], 'vip_times' => 0], $this->copiesRequest('get_mopup_price', $p['auth'] + $q));
+    }
+
+    public function testCopiesBuyTimesVipLimits(): void
+    {
+        $p = $this->copiesPlayer();
+        $uid = $p['uid'];
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $q = ['id' => 1, 'diff_id' => 1, 'monster_id' => 1];
+        DB::table('member')->where('uid', $uid)->update(['gold' => 100]);
+        $gold = static fn (int $times): int => \Hanjiang\MasterData\CopiesBuyTimesGold::ROWS[$times]['gold'];
+
+        $this->assertSame(['status' => -2, 'msg' => '传参错误。'], $this->copiesRequest('buy_times', $p['auth'] + ['id' => 1]));
+        $this->assertSame(['status' => -3, 'msg' => '获取过关信息失败。'], $this->copiesRequest('buy_times', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 99]));
+        Redis::set('copies_buy_free_times_lock' . $uid, 1, 30);
+        $this->assertSame(['status' => 2, 'msg' => '操作太快了。'], $this->copiesRequest('buy_times', $p['auth'] + $q));
+        Redis::del('copies_buy_free_times_lock' . $uid);
+
+        // VIP0 每只怪每天可买 1 次：第 1 次价格，返回下一次价格
+        $this->assertSame(['status' => 1, 'price' => $gold(2), 'free_times' => 6, 'vip_times' => 0, 'gold' => 100 - $gold(1)], $this->copiesRequest('buy_times', $p['auth'] + $q));
+        $beat = $this->copiesBeat($uid, 1, 1, 1);
+        $this->assertSame([6, 0], [(int)$beat['free_times'], (int)$beat['vip_times']]);
+        $this->assertSame(100 - $gold(1), (int)DB::table('member')->where('uid', $uid)->value('gold'));
+        $this->assertSame(['status' => -4, 'msg' => '可购买次数不足。'], $this->copiesRequest('buy_times', $p['auth'] + $q));
+
+        // VIP 等级变化：剩余可购买次数改为新等级的次数（VIP4 10 次），已买次数从 0 算起
+        $vip4 = 0;
+        foreach (\Hanjiang\MasterData\CopiesVipBuyTimes::ROWS as $row) {
+            if ($row['vip'] === 4) {
+                $vip4 = $row['times'];
+            }
+        }
+        $this->assertSame(10, $vip4);
+        DB::table('member')->where('uid', $uid)->update(['vip' => 4, 'gold' => 100]);
+        $this->assertSame(['status' => 1, 'price' => $gold(2), 'free_times' => 7, 'vip_times' => 9, 'gold' => 100 - $gold(1)], $this->copiesRequest('buy_times', $p['auth'] + $q));
+        $this->assertSame(['status' => 1, 'price' => $gold(3), 'free_times' => 8, 'vip_times' => 8, 'gold' => 100 - $gold(1) - $gold(2)], $this->copiesRequest('buy_times', $p['auth'] + $q));
+        $beat = $this->copiesBeat($uid, 1, 1, 1);
+        $this->assertSame([4, 8, 8], [(int)$beat['vip'], (int)$beat['free_times'], (int)$beat['vip_times']]);
+        // 别的怪物各自计数
+        $this->assertSame(1, (int)$this->copiesBeat($uid, 1, 1, 2)['vip_times'], '未访问的怪物还没按新 VIP 重置');
+
+        DB::table('member')->where('uid', $uid)->update(['gold' => 0]);
+        $this->assertSame(['status' => -5, 'msg' => '元宝不足'], $this->copiesRequest('buy_times', $p['auth'] + $q));
+        // 没有配置的 VIP 等级：可购买次数 0
+        DB::table('member')->where('uid', $uid)->update(['vip' => 14, 'gold' => 100]);
+        $this->assertSame(['status' => -4, 'msg' => '可购买次数不足。'], $this->copiesRequest('buy_times', $p['auth'] + $q));
+        $this->assertSame(0, (int)$this->copiesBeat($uid, 1, 1, 1)['vip_times']);
+    }
+
+    public function testCopiesDailyResetAndSendToChat(): void
+    {
+        $p = $this->copiesPlayer();
+        $uid = $p['uid'];
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $yesterday = strtotime('-1 day');
+        $this->copiesSetBeat($uid, 1, 1, [1], ['status' => 1, 'free_times' => 0, 'vip_times' => 0, 'dateline' => $yesterday]);
+
+        // 怪物列表不重置（get_all_beat_info 原样返回）
+        $this->copiesRequest('get_monster_list', $p['auth'] + ['id' => 1]);
+        $this->assertSame([0, 0, $yesterday], [(int)$this->copiesBeat($uid, 1, 1, 1)['free_times'], (int)$this->copiesBeat($uid, 1, 1, 1)['vip_times'], (int)$this->copiesBeat($uid, 1, 1, 1)['dateline']]);
+        // 扫荡价格读的也是未重置的记录
+        $this->assertSame(0, $this->copiesRequest('get_mopup_price', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 1])['vip_times']);
+        // 跨天后首次读取该怪物（get_beat_info）：免费次数 5、可购买次数按 VIP 重置，击败状态保留
+        $info = $this->copiesRequest('get_monster_info', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 1])['info'];
+        $this->assertSame([5, 1, 1], [$info['free_times'], $info['vip_times'], $info['mop_up']]);
+        $beat = $this->copiesBeat($uid, 1, 1, 1);
+        $this->assertSame([1, 5, 1], [(int)$beat['status'], (int)$beat['free_times'], (int)$beat['vip_times']]);
+        $this->assertEqualsWithDelta(time(), (int)$beat['dateline'], 5);
+        $this->assertSame(0, \Hanjiang\MasterData\ActivityTime::ROWS[74]['endtime'], 'double_copies 活动未开启：免费次数不翻倍');
+
+        // 战报分享：聊天室未移植，参数与怪物校验照旧版，然后返回 0、不扣元宝
+        $gold = (int)DB::table('member')->where('uid', $uid)->value('gold');
+        $this->assertSame(['status' => -2, 'msg' => '传参错误。'], $this->copiesRequest('send_to_chat', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 1]));
+        $this->assertSame(['status' => -3, 'msg' => '获取怪物信息失败。'], $this->copiesRequest('send_to_chat', $p['auth'] + ['report' => 1, 'id' => 1, 'diff_id' => 1, 'monster_id' => 99]));
+        $this->assertSame(['status' => 0], $this->copiesRequest('send_to_chat', $p['auth'] + ['report' => 1, 'id' => 1, 'diff_id' => 1, 'monster_id' => 1]));
+        $this->assertSame($gold, (int)DB::table('member')->where('uid', $uid)->value('gold'));
     }
 
     public function testIslandSystem(): void
