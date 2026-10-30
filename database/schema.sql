@@ -81,6 +81,7 @@ CREATE TABLE `zc_sanguo_member_field` (
     `gift` INT NOT NULL DEFAULT 0,
     `race` TINYINT NOT NULL DEFAULT 0,
     `race_dateline` INT UNSIGNED NOT NULL DEFAULT 0,
+    `matrixid` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '启用的阵法（zc_sanguo_matrix.mid），0 为没有阵法',
     `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '每日第一次游戏时间（每日计划任务判断依据）',
     `first_recharge` TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '首充返利标识（1 显示首充图标，2 已首充待领奖，0 不显示）',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -118,8 +119,6 @@ CREATE TABLE `zc_sanguo_general` (
     `mid3` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '备战坐骑3',
     `mid4` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '备战坐骑4',
     `goout` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否出征(1 出征中、0 休息中)',
-    `pos` TINYINT NOT NULL DEFAULT 0 COMMENT '九宫格阵位 1~9, 0为未出战',
-    `matrix_id` TINYINT NOT NULL DEFAULT 1 COMMENT '所在阵法',
     `status` TINYINT NOT NULL DEFAULT 1,
     `wuliup` INT NOT NULL DEFAULT 0 COMMENT '武力培养附加值',
     `zhiliup` INT NOT NULL DEFAULT 0 COMMENT '智力培养附加值',
@@ -190,29 +189,27 @@ CREATE TABLE `zc_sanguo_general_soul` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='武将将魂命格表';
 
 -- -------------------------------------------------------------
--- 7. 阵法阵型表 (九宫格 1~9 号站位)
+-- 7. 拥有阵法表 (对齐原版 zc_sanguo_own_matrix：每个阵法一行，启用的阵法记在 member_field.matrixid)
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `zc_sanguo_matrix`;
 CREATE TABLE `zc_sanguo_matrix` (
-    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    `uid` INT UNSIGNED NOT NULL,
-    `mid` TINYINT NOT NULL DEFAULT 1 COMMENT '阵法ID: 1鱼鳞阵 2锋矢阵等',
-    `level` INT NOT NULL DEFAULT 1,
-    `position1` INT NOT NULL DEFAULT 0 COMMENT '1号位武将ID',
-    `position2` INT NOT NULL DEFAULT 0 COMMENT '2号位武将ID',
-    `position3` INT NOT NULL DEFAULT 0 COMMENT '3号位武将ID',
-    `position4` INT NOT NULL DEFAULT 0 COMMENT '4号位武将ID',
-    `position5` INT NOT NULL DEFAULT 0 COMMENT '5号位武将ID',
-    `position6` INT NOT NULL DEFAULT 0 COMMENT '6号位武将ID',
-    `position7` INT NOT NULL DEFAULT 0 COMMENT '7号位武将ID',
-    `position8` INT NOT NULL DEFAULT 0 COMMENT '8号位武将ID',
-    `position9` INT NOT NULL DEFAULT 0 COMMENT '9号位武将ID',
+    `uid` INT UNSIGNED NOT NULL COMMENT '用户id',
+    `mid` TINYINT UNSIGNED NOT NULL COMMENT '阵法模板id（MasterData Matrix）',
+    `position1` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置1武将id（zc_sanguo_general.id）',
+    `position2` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置2武将id',
+    `position3` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置3武将id',
+    `position4` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置4武将id',
+    `position5` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置5武将id',
+    `position6` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置6武将id',
+    `position7` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置7武将id',
+    `position8` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置8武将id',
+    `position9` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '位置9武将id',
+    `level` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '阵法等级',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL,
-    UNIQUE KEY `uk_uid_mid` (`uid`, `mid`),
-    INDEX `idx_uid` (`uid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='九宫格阵法站位表';
+    PRIMARY KEY (`uid`, `mid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='拥有阵法表';
 
 -- -------------------------------------------------------------
 -- 8. 演武演练修习表

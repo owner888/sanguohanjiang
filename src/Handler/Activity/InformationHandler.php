@@ -59,8 +59,8 @@ final class InformationHandler
 
         // 排序规则：出征武将优先，等级降序
         usort($generals, static function (array $a, array $b): int {
-            $aOut = ((int)($a['pos'] ?? 0)) > 0 ? 1 : 0;
-            $bOut = ((int)($b['pos'] ?? 0)) > 0 ? 1 : 0;
+            $aOut = (int)$a['goout'];
+            $bOut = (int)$b['goout'];
             if ($aOut !== $bOut) {
                 return $bOut <=> $aOut;
             }

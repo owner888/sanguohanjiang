@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\City;
 
 use Hanjiang\Model\General;
+use Hanjiang\Model\OwnMatrix;
 use Hanjiang\Model\Member;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
@@ -279,21 +280,9 @@ final class MemberHandler
             // 3. 重新发放旧版初始武将（init_general），不送初始装备
             $genId = General::initGeneral($uid);
 
-            // 初始鱼鳞阵
-            DB::table('matrix')->insert([
-                'uid' => $uid,
-                'mid' => 1,
-                'level' => 1,
-                'position1' => 0,
-                'position2' => $genId,
-                'position3' => 0,
-                'position4' => 0,
-                'position5' => 0,
-                'position6' => 0,
-                'position7' => 0,
-                'position8' => 0,
-                'position9' => 0,
-            ]);
+            // 旧版 init_matrix(1, uid, 2, gid)：初始武将放在 1 号阵法 2 号位，并启用 1 号阵法
+            OwnMatrix::init($uid, OwnMatrix::INITIAL_MID, OwnMatrix::INITIAL_POSITION, $genId);
+            DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update(['matrixid' => OwnMatrix::INITIAL_MID]);
 
             // 4. 清空 Redis 缓存
             Redis::del('player:' . $uid);

@@ -120,14 +120,17 @@ final class GameApiTest extends TestCase
         $this->assertSame(0, (int)$g['exp']);
         $this->assertSame(0, (int)$g['levelupexp'], 'init_general 的 levelupexp 为 0');
         $this->assertSame(1, (int)$g['goout']);
-        $this->assertSame(2, (int)$g['pos']);
-        $this->assertSame(1, (int)$g['matrix_id']);
+        $this->assertArrayNotHasKey('pos', $g, '站位只存在阵法表');
+        $this->assertArrayNotHasKey('matrix_id', $g);
         $this->assertSame(0, (int)$g['wuliup'] + (int)$g['zhiliup'] + (int)$g['tiliup']);
 
         $matrix = DB::table('matrix')->where('uid', self::$uid)->whereNull('deleted_at')->get();
         $this->assertCount(1, $matrix);
         $this->assertSame(1, (int)$matrix[0]['mid']);
+        $this->assertSame(1, (int)$matrix[0]['level']);
         $this->assertSame((int)$g['id'], (int)$matrix[0]['position2']);
+        // 旧版 member_model 注册：默认启用阵法 1
+        $this->assertSame(1, (int)DB::table('member_field')->where('uid', self::$uid)->value('matrixid'));
         foreach ([1, 3, 4, 5, 6, 7, 8, 9] as $p) {
             $this->assertSame(0, (int)$matrix[0]['position' . $p]);
         }
@@ -364,8 +367,14 @@ final class GameApiTest extends TestCase
             $after = DB::table('member')->where('uid', $uid)->first();
             $this->assertSame((int)$before['missionid'], (int)$after['missionid']);
 
-            // 没有阵法：旧版 battle_mission 返回 -1，map 控制器把 assess 记 0（win 0），battle 为空
+            // 启用的阵法行查不到：旧版 empty(get_own_by_id) 不成立，按空站位继续（同上，大败）
             DB::table('matrix')->where('uid', $uid)->update(['deleted_at' => date('Y-m-d H:i:s')]);
+            $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
+            $this->assertSame(-1, $res['info']['win']);
+            $this->assertSame(-3, $res['battle']['assess']);
+
+            // 没有阵法（member_field.matrixid = 0）：旧版 battle_mission 返回 -1，map 控制器把 assess 记 0（win 0），battle 为空
+            DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 0]);
             $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
             $this->assertSame(1, $res['status']);
             $this->assertSame(0, $res['info']['win']);
@@ -424,10 +433,10 @@ final class GameApiTest extends TestCase
 
     public function testGeneralSystem(): void
     {
-        // 旧版 general.php:index 只列出征将领（新版以阵位 pos > 0 为出征），键从 1 开始
+        // 旧版 general.php:index 只列出征将领（goout = 1），键从 1 开始
         $res = $this->request('general', 'index');
         $this->assertSame(1, $res['status']);
-        $goout = DB::table('general')->where('uid', self::$uid)->where('pos', '>', 0)->whereNull('deleted_at')->get();
+        $goout = DB::table('general')->where('uid', self::$uid)->where('goout', 1)->whereNull('deleted_at')->get();
         $this->assertSame(range(1, count($goout)), array_keys($res['list']));
         $this->assertSame(0, $res['tree']);
         $gid = (int)$res['list'][1]['id'];
@@ -470,34 +479,218 @@ final class GameApiTest extends TestCase
 
     public function testMatrixSystem(): void
     {
-        $res = $this->request('matrix', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertSame(1, $res['now_mid']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('generals', $res);
+        $this->withFreshPlayer(function (int $uid): void {
+            $mainId = (int)DB::table('general')->where('uid', $uid)->value('id');
 
-        // 获取阵法详情
-        $info = $this->request('matrix', 'get_info', ['mid' => 1]);
-        $this->assertSame(1, $info['status']);
-        $this->assertSame('鱼鳞阵', $info['info']['name']);
+            // index：1 级主公只拥有 1 号锥形阵（init_matrix），启用的阵法输出整行（关闭位置为 -1）与加成
+            $res = $this->legacyRequest('matrix', 'index');
+            $this->assertSame(['status', 'matrix', 'general'], array_keys($res));
+            $this->assertSame(1, $res['status']);
+            $this->assertSame([1], array_keys($res['matrix']));
+            $open = $res['matrix'][1];
+            $this->assertSame(
+                ['mid', 'position1', 'position2', 'position3', 'position4', 'position5', 'position6', 'position7', 'position8', 'position9', 'level', 'addition', 'open', 'vip', 'sort'],
+                array_keys($open),
+            );
+            // 锥形阵 1 级只开放模板 position1 / position2 = 2、4 号位
+            $this->assertSame([-1, $mainId, -1, 0, -1, -1, -1, -1, -1], array_map(fn (int $i) => $open['position' . $i], range(1, 9)));
+            // 加成：type = addtype 1，percent = 1 级 × 1；next = MatrixLevel[2].price × ratio 1
+            $this->assertSame(['type' => 1, 'percent' => 1, 'next' => \Hanjiang\MasterData\MatrixLevel::ROWS[2]['price']], $open['addition']);
+            $this->assertSame([1, 0, 1], [$open['open'], $open['vip'], $open['sort']]);
+            $this->assertSame([1 => ['id' => $mainId, 'goout' => 1, 'quality' => 1, 'name' => '廖化', 'image' => 1, 'level' => 1]], $res['general']);
 
-        // 阵法升级
-        $levelUp = $this->request('matrix', 'levelup', ['mid' => 1]);
-        $this->assertSame(1, $levelUp['status']);
-        $this->assertSame(2, $levelUp['level']);
-        $this->assertGreaterThan(0, $levelUp['cost_silver']);
-        $this->assertArrayHasKey('info', $levelUp);
-        $this->assertSame(2, $levelUp['info']['level']);
-        $this->assertArrayHasKey('percent', $levelUp['info']);
-        $this->assertArrayHasKey('next', $levelUp['info']);
+            // 主公 10 级、VIP 7：补齐 2 号锋矢阵（主公 10 级）与 9 号壁垒阵（VIP 7），新阵法等级 0；VIP 阵法排在前面
+            DB::table('member')->where('uid', $uid)->update(['level' => 10, 'vip' => 7]);
+            $res = $this->legacyRequest('matrix', 'index');
+            $this->assertSame([1, 2, 9], array_keys($res['matrix']));
+            $this->assertSame(['mid' => 2, 'open' => 0, 'vip' => 0, 'sort' => 3], $res['matrix'][2]);
+            $this->assertSame(['mid' => 9, 'open' => 0, 'vip' => 7, 'sort' => 1], $res['matrix'][9]);
+            $this->assertSame(2, $res['matrix'][1]['sort']);
+            $this->assertSame(0, (int)DB::table('matrix')->where('uid', $uid)->where('mid', 2)->value('level'));
 
-        // 切换阵法至鹤翼阵 (mid: 3)
-        $use = $this->request('matrix', 'use_matrix', ['mid' => 3]);
-        $this->assertSame(1, $use['status']);
-        $this->assertSame(3, $use['now_mid']);
+            // get_info：mid 0 取启用的阵法；未拥有 -1；VIP 阵法输出 vip 等级
+            $info = $this->legacyRequest('matrix', 'get_info', ['mid' => 0]);
+            $this->assertSame(1, $info['status']);
+            $this->assertSame([$uid, 1, -1, $mainId], [$info['matrix']['uid'], $info['matrix']['mid'], $info['matrix']['position1'], $info['matrix']['position2']]);
+            $this->assertSame(-1, $this->legacyRequest('matrix', 'get_info', ['mid' => 5])['status']);
+            $vipInfo = $this->legacyRequest('matrix', 'get_info', ['mid' => 9]);
+            $this->assertSame(7, $vipInfo['matrix']['vip']);
+            // 壁垒阵 0 级：percent 0，next = MatrixLevel[1].price × ratio 2
+            $this->assertSame(['type' => 5, 'percent' => 0, 'next' => \Hanjiang\MasterData\MatrixLevel::ROWS[1]['price'] * 2], $vipInfo['matrix']['addition']);
 
-        // 切换回鱼鳞阵 (mid: 1)
-        $this->request('matrix', 'use_matrix', ['mid' => 1]);
+            // update_matrix 状态码
+            $this->assertSame(-1, $this->legacyRequest('matrix', 'update_matrix', ['list' => '0,0,0', 'mid' => 1])['status']);
+            $this->assertSame(-2, $this->legacyRequest('matrix', 'update_matrix', ['list' => "0,{$mainId},0,0,0,0,0,0,0", 'mid' => 12])['status'], '阵法 id 错误');
+            $this->assertSame(-2, $this->legacyRequest('matrix', 'update_matrix', ['list' => "0,{$mainId},0,0,0,0,0,0,0", 'mid' => 5])['status'], '未拥有');
+            $this->assertSame(-2, $this->legacyRequest('matrix', 'update_matrix', ['list' => "-1,{$mainId},-1,0,-1,-1,-1,-1,-1", 'mid' => 1])['status'], '站位没有变化');
+            $empty = $this->legacyRequest('matrix', 'update_matrix', ['list' => '0,0,0,0,0,0,0,0,0', 'mid' => 1]);
+            $this->assertSame(['status' => 1, 'tip' => 1], $empty, '阵法上没有将领仍然保存，tip = 1');
+            $this->assertSame(1, $this->legacyRequest('matrix', 'update_matrix', ['list' => "0,{$mainId},0,0,0,0,0,0,0", 'mid' => 1])['status']);
+            // 关闭的位置写 0：主公放在 1 号位（锥形阵 1 级关闭）不会上阵
+            $this->assertSame(1, $this->legacyRequest('matrix', 'update_matrix', ['list' => "{$mainId},0,0,0,0,0,0,0,0", 'mid' => 1])['status']);
+            $this->assertSame([0, 0], array_map('intval', array_values(DB::table('matrix')->where('uid', $uid)->where('mid', 1)->select('position1', 'position2')->first())));
+            $this->assertSame(1, $this->legacyRequest('matrix', 'update_matrix', ['list' => "0,{$mainId},0,0,0,0,0,0,0", 'mid' => 1])['status']);
+
+            // levelup：花费 intval(MatrixLevel[新等级].price × ratio) 元宝；阵法等级上限 = 主公等级 / 5
+            $gold = (int)DB::table('member')->where('uid', $uid)->value('gold');
+            $up = $this->legacyRequest('matrix', 'levelup', ['mid' => 1]);
+            $this->assertSame(1, $up['status']);
+            $cost = \Hanjiang\MasterData\MatrixLevel::ROWS[2]['price'] * \Hanjiang\MasterData\Matrix::ROWS[1]['ratio'];
+            $this->assertSame([
+                'gold' => $gold - $cost,
+                'level' => 2,
+                'type' => 1,
+                'position' => 0,
+                'percent' => 2,
+                'next' => \Hanjiang\MasterData\MatrixLevel::ROWS[3]['price'],
+            ], $up['info']);
+            $this->assertSame($gold - $cost, (int)DB::table('member')->where('uid', $uid)->value('gold'));
+            $this->assertSame(2, (int)DB::table('matrix')->where('uid', $uid)->where('mid', 1)->value('level'));
+            // 3 级需要主公 15 级
+            $this->assertSame(['info' => ['matrix_level' => 3, 'master_level' => 15], 'status' => 3], $this->legacyRequest('matrix', 'levelup', ['mid' => 1]));
+            // 升到 3 级开放模板 position3 = 6 号位
+            DB::table('member')->where('uid', $uid)->update(['level' => 15]);
+            $this->assertSame(6, $this->legacyRequest('matrix', 'levelup', ['mid' => 1])['info']['position']);
+            // 壁垒阵 ratio 2：0 → 1 级花 MatrixLevel[1].price × 2；元宝不足 4
+            DB::table('member')->where('uid', $uid)->update(['gold' => 1]);
+            $this->assertSame(4, $this->legacyRequest('matrix', 'levelup', ['mid' => 9])['status']);
+            $this->assertSame(-1, $this->legacyRequest('matrix', 'levelup', ['mid' => 5])['status']);
+            DB::table('matrix')->where('uid', $uid)->where('mid', 1)->update(['level' => 100]);
+            DB::table('member')->where('uid', $uid)->update(['level' => 500]);
+            $this->assertSame(2, $this->legacyRequest('matrix', 'levelup', ['mid' => 1])['status'], '阵法满级');
+        });
+    }
+
+    public function testUseMatrixSwitchesActiveMatrixForBattle(): void
+    {
+        $this->withFreshPlayer(function (int $uid): void {
+            $mainId = (int)DB::table('general')->where('uid', $uid)->value('id');
+            DB::table('member')->where('uid', $uid)->update(['level' => 10]);
+            $this->legacyRequest('matrix', 'index');
+
+            // 参数错误 2；未拥有 -2；阵法上没有将领 3
+            $this->assertSame(2, $this->legacyRequest('matrix', 'use_matrix', ['mid' => 0])['status']);
+            $this->assertSame(-2, $this->legacyRequest('matrix', 'use_matrix', ['mid' => 5])['status']);
+            $this->assertSame(3, $this->legacyRequest('matrix', 'use_matrix', ['mid' => 2])['status']);
+            // 已是启用的阵法：旧版 affected_rows 为 0，启用失败 -1
+            $this->assertSame(-1, $this->legacyRequest('matrix', 'use_matrix', ['mid' => 1])['status']);
+
+            // 2 号锋矢阵 0 级开放模板 position1 / position2 = 1、2 号位：主公放 1 号位后启用
+            $this->assertSame(1, $this->legacyRequest('matrix', 'update_matrix', ['list' => "{$mainId},0,0,0,0,0,0,0,0", 'mid' => 2])['status']);
+            $this->assertSame(['status' => 1], $this->legacyRequest('matrix', 'use_matrix', ['mid' => 2]));
+            $this->assertSame(2, (int)DB::table('member_field')->where('uid', $uid)->value('matrixid'));
+
+            // 战斗读启用的阵法：主公在 1 号位，阵法类型取锋矢阵模板，0 级加成 0
+            $built = \Hanjiang\Battle\TeamBuilder::forMember($uid, pve: true);
+            $this->assertSame(1, $built['status']);
+            $this->assertSame([1], array_keys($built['team']));
+            $this->assertSame(\Hanjiang\MasterData\Matrix::ROWS[2]['addtype'], $built['matrix_type']);
+            $this->assertEqualsWithDelta(0.0, $built['matrix_coe'], 1e-9);
+            $battle = $this->legacyRequest('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
+            $this->assertSame([1], array_keys($battle['battle']['leftteam']));
+
+            $res = $this->legacyRequest('matrix', 'index');
+            $this->assertSame([0, 1], [$res['matrix'][1]['open'], $res['matrix'][2]['open']]);
+            $this->assertSame(['mid' => 1, 'open' => 0, 'vip' => 0, 'sort' => 1], $res['matrix'][1]);
+
+            // 切回 1 号阵：战斗回到 2 号位
+            $this->assertSame(1, $this->legacyRequest('matrix', 'use_matrix', ['mid' => 1])['status']);
+            $this->assertSame([2], array_keys(\Hanjiang\Battle\TeamBuilder::forMember($uid)['team']));
+        });
+    }
+
+    public function testMusterGoBattleAndGoRest(): void
+    {
+        $this->withFreshPlayer(function (int $uid): void {
+            $mainId = (int)DB::table('general')->where('uid', $uid)->value('id');
+            $zhou = (int)General::createFromTemplate($uid, 2);
+            $zhang = (int)General::createFromTemplate($uid, 3);
+
+            // index：按 goout DESC, star DESC, level DESC；list 键从 1 开始，只有旧版 list_field
+            $index = $this->legacyRequest('muster', 'index', ['page' => 1, 'perpage' => 999]);
+            $this->assertSame(['status', 'page', 'list', 'first'], array_keys($index), 'VIP 7 以下不输出 sale_cd');
+            $this->assertSame([1, 2, 3], array_keys($index['list']));
+            $this->assertSame(['id', 'quality', 'name', 'image', 'type', 'goout'], array_keys($index['list'][1]));
+            $this->assertSame([$mainId, 1], [$index['list'][1]['id'], $index['list'][1]['goout']]);
+            $this->assertSame($zhang, $index['list'][2]['id'], '张梁 3 星排在周仓 2 星前');
+            $this->assertSame(
+                ['id', 'quality', 'image', 'type', 'star', 'name', 'turn', 'level', 'wuli', 'zhili', 'tili', 'zhiliup', 'tiliup', 'wuliup', 'skill', 'talent', 'goout'],
+                array_keys($index['first']),
+            );
+            $info = $this->legacyRequest('muster', 'get_general_info', ['gid' => $zhou]);
+            $this->assertSame(['id', 'image', 'quality'], array_slice(array_keys($info['info']), 0, 3));
+            $this->assertSame(0, $info['info']['goout']);
+            $this->assertSame(-1, $this->legacyRequest('muster', 'get_general_info', ['gid' => 999999999])['status']);
+
+            // go_battle：-1 不存在；1 出征；2 已在出征队列；只改 goout，不动阵法
+            $this->assertSame(['status' => -1], $this->legacyRequest('muster', 'go_battle', ['gid' => 999999999]));
+            $this->assertSame(['status' => 1], $this->legacyRequest('muster', 'go_battle', ['gid' => $zhou]));
+            $this->assertSame(['status' => 2], $this->legacyRequest('muster', 'go_battle', ['gid' => $zhou]));
+            $this->assertSame(1, (int)DB::table('general')->where('id', $zhou)->value('goout'));
+            $this->assertSame(0, (int)DB::table('matrix')->where('uid', $uid)->where('mid', 1)->value('position4'));
+
+            // 周仓上 1 号阵 4 号位、2 号阵 2 号位，穿一件装备、骑坐骑、在训练位上
+            DB::table('member')->where('uid', $uid)->update(['level' => 10]);
+            $this->legacyRequest('matrix', 'index');
+            $this->assertSame(1, $this->legacyRequest('matrix', 'update_matrix', ['list' => "0,{$mainId},0,{$zhou},0,0,0,0,0", 'mid' => 1])['status']);
+            $this->assertSame(1, $this->legacyRequest('matrix', 'update_matrix', ['list' => "0,{$zhou},0,0,0,0,0,0,0", 'mid' => 2])['status']);
+            [$eid] = Equipment::addFromTemplate($uid, 1);
+            DB::table('equipment')->where('id', $eid)->update(['generalid' => $zhou]);
+            DB::table('general')->where('id', $zhou)->update(['mid0' => 7]);
+            $this->legacyRequest('practice', 'index');
+            $slot = DB::table('practice')->where('uid', $uid)->where('squence', 1)->first();
+            $end = time() + 3600;
+            DB::table('practice')->where('id', $slot['id'])->update(['generalid' => $zhou, 'type' => 1, 'starttime' => time(), 'endtime' => $end]);
+            DB::table('member_field')->where('uid', $uid)->update(['practicenow' => 1, 'practicetime' => $end]);
+
+            // 训练中：不确认 2；confrim = 1 终止训练后休息
+            $this->assertSame(['status' => 2, 'tip' => 0], $this->legacyRequest('muster', 'go_rest', ['gid' => $zhou]));
+            $this->assertSame(['status' => 1, 'tip' => 0], $this->legacyRequest('muster', 'go_rest', ['gid' => $zhou, 'confrim' => 1]));
+            $this->assertSame(0, (int)DB::table('practice')->where('id', $slot['id'])->value('generalid'));
+            $field = DB::table('member_field')->where('uid', $uid)->first();
+            $this->assertSame([0, 0], [(int)$field['practicenow'], (int)$field['practicetime']]);
+            // 从所有阵法撤下、卸下装备与坐骑、goout = 0
+            $this->assertSame(0, (int)DB::table('matrix')->where('uid', $uid)->where('mid', 1)->value('position4'));
+            $this->assertSame(0, (int)DB::table('matrix')->where('uid', $uid)->where('mid', 2)->value('position2'));
+            $this->assertSame($mainId, (int)DB::table('matrix')->where('uid', $uid)->where('mid', 1)->value('position2'));
+            $this->assertSame(0, (int)DB::table('equipment')->where('id', $eid)->value('generalid'));
+            $row = DB::table('general')->where('id', $zhou)->first();
+            $this->assertSame([0, 0], [(int)$row['goout'], (int)$row['mid0']]);
+
+            // 只剩 1 人出征：最后一个将领 4（先于其他检查）
+            $this->assertSame(['status' => 4, 'tip' => 0], $this->legacyRequest('muster', 'go_rest', ['gid' => $mainId]));
+            $this->assertSame(['status' => 4, 'tip' => 0], $this->legacyRequest('muster', 'go_rest', ['gid' => $zhou]));
+
+            // 主公是启用阵法上唯一的将领：照样撤下，tip = 1；已休息 3
+            $this->assertSame(1, $this->legacyRequest('muster', 'go_battle', ['gid' => $zhang])['status']);
+            $this->assertSame(['status' => 1, 'tip' => 1], $this->legacyRequest('muster', 'go_rest', ['gid' => $mainId]));
+            $this->assertSame(0, (int)DB::table('matrix')->where('uid', $uid)->where('mid', 1)->value('position2'));
+            $this->assertSame(1, $this->legacyRequest('muster', 'go_battle', ['gid' => $zhou])['status']);
+            $this->assertSame(['status' => 3, 'tip' => 0], $this->legacyRequest('muster', 'go_rest', ['gid' => $mainId]));
+            $this->assertSame(['status' => -3, 'tip' => 0], $this->legacyRequest('muster', 'go_rest', ['gid' => 999999999]));
+
+            // 出征名单上限 8 人（battle_count >= 8 先于其他检查）
+            foreach ([4, 5, 6, 7, 8, 9] as $tpl) {
+                $gid = (int)General::createFromTemplate($uid, $tpl);
+                $this->assertSame(['status' => 1], $this->legacyRequest('muster', 'go_battle', ['gid' => $gid]));
+            }
+            $this->assertSame(8, (int)DB::table('general')->where('uid', $uid)->where('goout', 1)->count());
+            $this->assertSame(['status' => 3], $this->legacyRequest('muster', 'go_battle', ['gid' => $mainId]));
+            $this->assertSame(['status' => 3], $this->legacyRequest('muster', 'go_battle', ['gid' => $zhou]), '已出征也先返回队列已满');
+        });
+    }
+
+    /**
+     * 请求并去掉 ResponseEnvelopeMiddleware 补的 message / msg，便于与旧版返回整体比对
+     *
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private function legacyRequest(string $controller, string $method, array $params = []): array
+    {
+        $res = $this->request($controller, $method, $params);
+        unset($res['message'], $res['msg']);
+        return $res;
     }
 
     public function testPackSystem(): void
@@ -891,15 +1084,18 @@ final class GameApiTest extends TestCase
 
         // 2. 验证防重复上阵拦截
         $duplicateFormation = "{$zfId},{$mainId},{$zfId},0,0,0,0,0,0";
-        $conflict = $this->request('matrix', 'update_matrix', ['list' => $duplicateFormation]);
+        $conflict = $this->request('matrix', 'update_matrix', ['list' => $duplicateFormation, 'mid' => 1]);
         $this->assertSame(-4, $conflict['status']);
 
-        // 3. 将张飞布阵到 1 号位 (前排上)，主公在 2 号位 (前排中)
-        $setZf = $this->request('matrix', 'update_matrix', ['pos' => 1, 'gid' => $zfId]);
-        $this->assertSame(1, $setZf['status']);
-        $this->assertSame($zfId, $setZf['positions'][1]);
+        // 3. 张飞未出征（旧版 add_general goout = 0）不能上阵；出征后布到 4 号位（1 号锥形阵 1 级只开放 2、4 号位），主公在 2 号位
+        $formation = "0,{$mainId},0,{$zfId},0,0,0,0,0";
+        $this->assertSame(3, $this->request('matrix', 'update_matrix', ['list' => $formation, 'mid' => 1])['status']);
+        $this->assertSame(1, $this->request('muster', 'go_battle', ['gid' => $zfId])['status']);
+        $setZf = $this->request('matrix', 'update_matrix', ['list' => $formation, 'mid' => 1]);
+        $this->assertSame(['status' => 1, 'tip' => 0], array_intersect_key($setZf, ['status' => 0, 'tip' => 0]));
+        $this->assertSame($zfId, (int)DB::table('matrix')->where('uid', self::$uid)->where('mid', 1)->value('position4'));
 
-        // 4. 验证武将表出征状态已实时同步
+        // 4. 出征名单（general.index）里有两位武将
         $updatedGenerals = $this->request('general', 'index');
         $activeCount = 0;
         foreach ($updatedGenerals['list'] as $g) {
@@ -907,25 +1103,25 @@ final class GameApiTest extends TestCase
                 $activeCount++;
             }
         }
-        $this->assertGreaterThanOrEqual(2, $activeCount, '当前应至少有两位武将处于出战状态');
+        $this->assertGreaterThanOrEqual(2, $activeCount, '当前应至少有两位武将处于出征状态');
 
-        // 5. 发起推图战斗，验证多武将协同作战与阵法加成生效
+        // 5. 发起推图战斗，我方按启用的阵法组队
         $battle = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
         $this->assertSame(1, $battle['status']);
         $this->assertSame(1, $battle['info']['win']);
         $this->assertArrayHasKey('battle', $battle);
 
-        // 验证我方阵容中同时包含了 1 号位 (张飞) 和 2 号位 (主公)
         $leftTeam = $battle['battle']['leftteam'];
-        $this->assertArrayHasKey(1, $leftTeam, '战场上必须存在 1 号位英雄 (张飞)');
         $this->assertArrayHasKey(2, $leftTeam, '战场上必须存在 2 号位英雄 (主公)');
-        $this->assertSame('张飞', $leftTeam[1]['name']);
+        $this->assertArrayHasKey(4, $leftTeam, '战场上必须存在 4 号位英雄 (张飞)');
+        $this->assertSame('张飞', $leftTeam[4]['name']);
 
-        // 验证战斗动作日志中有不同英雄的出手记录
         $process = $battle['battle']['process'];
         $this->assertNotEmpty($process);
-        $attackors = array_column($process, 'attackor');
-        $this->assertContains(1, $attackors, '张飞在战斗过程中应当有实际出手动作');
+        $leftAttackors = array_column(array_filter($process, fn (array $p): bool => $p['launch'] === 'left'), 'attackor');
+        $this->assertNotEmpty($leftAttackors);
+        $this->assertSame([], array_diff($leftAttackors, [2, 4]), '我方出手只来自阵法上的 2、4 号位');
+        $this->assertSame((string)$zfId, $leftTeam[4]['heroid']);
     }
 
     public function testChatSystem(): void
@@ -2384,7 +2580,7 @@ final class GameApiTest extends TestCase
         // 挑选一个未出征的后备武将进行退役
         $freeGid = 0;
         foreach ($res['list'] as $g) {
-            if ($g['pos'] === 0 && $g['id'] > 1) {
+            if ($g['goout'] === 0 && $g['id'] > 1) {
                 $freeGid = (int)$g['id'];
                 break;
             }
@@ -2953,7 +3149,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, (int)$row['level']);
         $this->assertSame(80, (int)$row['levelupexp']);
         $this->assertSame(0, (int)$row['goout']);
-        $this->assertSame(0, (int)$row['pos']);
         $this->assertSame(0, (int)$row['turn']);
         $this->assertSame(1, (int)$row['quality']);
 

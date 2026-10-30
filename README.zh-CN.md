@@ -102,7 +102,7 @@
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
-   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。
+   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。`20261031_matrix_legacy.sql` 把每个玩家一行的 `matrix` 表转成旧版每个阵法一行，按原阵法行写入 `member_field.matrixid`，按原 `pos` / 阵法站位重建 `general.goout`，然后删除 `general.pos` / `general.matrix_id`。
 
 4. 启动服务：
    ```bash
@@ -152,7 +152,7 @@
 - `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发（我方按旧版阵法 / 装备公式组队，守军取旧版 `Mission` → `Monster`）；胜利后按旧版 `Mission` 概率掉落（`getrate` / `gettype` / `getvalue`）结算发放
 - `c=map&m=get_newreward_index|get_newreward|get_newresult`：战役势力据点关卡宝箱、整势力通关大礼奖励领取与防重校验
 - `c=general&m=index|get_info|equip|unequip`：将领界面，按旧版 `general.php` 移植（只列出征将领、旧版 `info_field`、装备显示能力含精炼 / 强化成就加成、旧版血量公式、旧版装配校验与状态码）
-- `c=matrix&m=index`：九宫格战位阵法管理与上阵站位调换
+- `c=matrix&m=index|get_info|update_matrix|use_matrix|levelup`：阵法，按旧版 `matrix.php` 移植（每个拥有的阵法一行，启用的阵法记在 `member_field.matrixid`，只有出征将领能上阵，开放位置 / 加成 / 元宝升级价格取 MasterData `Matrix` / `MatrixLevel`）
 - `c=pack&m=index|sale`：背包，按旧版 `pack.php` 移植（只列未穿戴、碎片 / 卷轴售价、VIP 11 强化返还、强化 10 级以上装备每日限售）
 - `c=strengthen&m=index|strengthen_info|strengthen_start|clear_cd`：铁匠铺，按旧版 `strengthen.php` 移植（`EquipLevel` 花费与成功率、VIP 5 暴击 +2 级、写回等级 / 强化能力 / 售价；旧版强化从不累加冷却）
 - `c=tavern&m=index`：酒馆将领招募与会客商人
@@ -201,7 +201,7 @@
 - `c=flop&m=index|turnover`：九宫翻牌夺宝、金边卡牌翻转揭秘与至尊元宝大奖
 - `c=challenge&m=index|action`：英雄试炼擂台巅峰单挑、挑战守擂名将（马超/赵云/关羽）夺取擂主荣耀
 - `c=elite&m=index|action|get_server`：多人精英副本战役（精英大兴山/宛城/虎牢关）、原生 WebSocket 组队通信与战利品结算
-- `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`：点将台大营名册、出征派遣、下阵休息、将领详情与闲置武将退役遣散（软删除管理）
+- `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`：点将台；`index` / `get_general_info` / `go_battle` / `go_rest` 按旧版 `muster.php` 移植（出征名单 `general.goout`，最多 8 人；休息时从所有阵法撤下、`confrim` 确认后终止训练、卸下全部装备与坐骑、至少保留一名出征将领）；`sale_general` 仍是新版自定的遣散
 - `c=business&m=index|go_business|buy|refresh`：四海通商行商经商（洛阳/成都/建业/襄阳）、商市行情采购与暴利返航折现
 - `c=gambling&m=index|buy|cut|sell`：金银宝盆博彩、原石抛光雕琢与聚宝盆估价翻倍典当
 - `c=task&m=index|accept_task|get_reward|refresh`：每日军务悬赏令看板、接取平定剿匪、交付领赏与揭榜刷新
@@ -263,7 +263,7 @@
 - [x] 酒馆真实银两招募武将系统 (`tavern`)，名将池持久化入库与防重招募校验
 - [x] 校场武将挂机训练系统 (`practice`)，挂机时长经验自动结算与突飞猛进即时升级
 - [x] 深度联动纯内存九宫格战斗推演，上阵武将与装备强化数值无缝作用于战场战力
-- [x] 九宫格战位阵法布阵系统 (`matrix`)，支持换位、防重上阵拦截、八大阵法升级与切换
+- [x] 旧版阵法存储 (`matrix`)：每个阵法一行、启用阵法切换、防重上阵拦截、元宝升级；战斗读启用的阵法
 - [x] 多武将同屏协同出征作战，真实九宫格站位多目标推演与战报回放
 - [x] 演武榜竞技场真实 PVP 系统 (`arena`)，支持天梯名次互换、每日俸禄领取与纯内存镜像对决推演
 - [x] 主城征收与强征系统 (`city`)，支持丰收暴击银两倍数与元宝强征加倍收益

@@ -75,10 +75,10 @@ final class PracticeHandler
             ];
         }
 
-        // 优先出征武将 (pos > 0)，按等级降序、转生降序排序
+        // 优先出征武将 (goout = 1)，按等级降序、转生降序排序
         usort($generals, static function (array $a, array $b): int {
-            $aOut = ((int)($a['pos'] ?? 0)) > 0 ? 1 : 0;
-            $bOut = ((int)($b['pos'] ?? 0)) > 0 ? 1 : 0;
+            $aOut = (int)$a['goout'];
+            $bOut = (int)$b['goout'];
             if ($aOut !== $bOut) {
                 return $bOut <=> $aOut;
             }
@@ -382,6 +382,74 @@ final class PracticeHandler
             'earned_exp' => max(1, $earnedExp),
             'message' => '训练已终止',
         ];
+    }
+
+    /**
+     * 将领所在的训练位（移植旧版 practice_model::check_practice）
+     *
+     * @return int 训练位 id，0 为不在训练
+     */
+    public static function checkPractice(int $uid, int $gid): int
+    {
+        return (int)(DB::table('practice')
+            ->where('uid', $uid)
+            ->where('generalid', $gid)
+            ->whereNull('deleted_at')
+            ->value('id') ?? 0);
+    }
+
+    /**
+     * 终止训练（移植旧版 practice_model::practice_stop，供 c=muster&m=go_rest 使用）
+     *
+     * 清空训练位；训练位结束时间等于 member_field.practicetime 时改为其余训练中位置的最早结束时间（没有则 0），
+     * practicenow > 0 时减 1。旧版这里算出的经验只放在返回值里、不发给将领（go_rest 也不发），这里同样不发。
+     * c=practice&m=practice_stop 仍是新版实现，与本方法无关。
+     *
+     * @return int 1 成功；-5 更新扩展表失败；-4 获取训练位等级失败；-3 没有武将；-2 获取训练信息失败；-1 更新训练位失败
+     */
+    public static function legacyStop(int $uid, int $pid, int $practicetime, int $practicenow): int
+    {
+        $info = DB::table('practice')->where('uid', $uid)->where('id', $pid)->whereNull('deleted_at')->first();
+        if ($info === null) {
+            return -2;
+        }
+        if ((int)$info['generalid'] === 0) {
+            return -3;
+        }
+        $end = (int)$info['endtime'];
+        if (!isset(self::LEVEL_INFO[(int)$info['level']])) {
+            return -4;
+        }
+
+        $affected = DB::table('practice')->where('uid', $uid)->where('id', $pid)->whereNull('deleted_at')->update([
+            'type' => 0,
+            'generalid' => 0,
+            'starttime' => 0,
+            'endtime' => 0,
+        ]);
+        if ($affected <= 0) {
+            return -1;
+        }
+
+        $result = [];
+        if ($end === $practicetime) {
+            $endarr = array_map(
+                static fn (array $row): int => (int)$row['endtime'],
+                DB::table('practice')->where('uid', $uid)->where('generalid', '>', 0)->whereNull('deleted_at')->get(),
+            );
+            $result['practicetime'] = $endarr === [] ? 0 : min($endarr);
+        }
+        if ($practicenow > 0) {
+            $result['practicenow'] = $practicenow - 1;
+        }
+        // 旧版 $result 为空时 CI 不执行 UPDATE，affected_rows 仍是上一条训练位更新的结果（> 0），视为成功
+        if ($result !== []
+            && DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update($result) === 0) {
+            return -5;
+        }
+
+        Redis::del('player:' . $uid);
+        return 1;
     }
 
     /**

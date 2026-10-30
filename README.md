@@ -102,7 +102,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
-   Upgrading an existing database instead: apply the files in `database/migrations/` that are newer than your schema, in filename order (each file header says what it does). `20261031_general_equip_legacy_cols.sql` assumes general/equipment rows are test data: it truncates both tables and re-issues every player the legacy starting general.
+   Upgrading an existing database instead: apply the files in `database/migrations/` that are newer than your schema, in filename order (each file header says what it does). `20261031_general_equip_legacy_cols.sql` assumes general/equipment rows are test data: it truncates both tables and re-issues every player the legacy starting general. `20261031_matrix_legacy.sql` converts the one-row-per-player `matrix` table to legacy per-formation rows, fills `member_field.matrixid` from the old row, rebuilds `general.goout` from the old `pos` / formation slots, then drops `general.pos` / `general.matrix_id`.
 
 4. Start server:
    ```bash
@@ -152,7 +152,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation (player team from the legacy formation / equipment formulas, defenders from the legacy `Mission` → `Monster` tables); on victory the legacy `Mission` probabilistic drop (`getrate` / `gettype` / `getvalue`) is rolled and granted
 - `c=map&m=get_newreward_index|get_newreward|get_newresult`: Campaign node milestone chests & chapter clear grand reward claims
 - `c=general&m=index|get_info|equip|unequip`: Hero panel ported from the legacy `general.php` (deployed heroes only, legacy `info_field`, equipment display power with refine / enhancement-achievement bonuses, legacy HP formula, legacy equip validations and status codes)
-- `c=matrix&m=index`: 9-grid tactical battle formation & hero slot updates
+- `c=matrix&m=index|get_info|update_matrix|use_matrix|levelup`: Formations ported from the legacy `matrix.php` (one row per owned formation, active formation in `member_field.matrixid`, only dispatched heroes can be placed, open slots / bonus / gold upgrade cost from MasterData `Matrix` / `MatrixLevel`)
 - `c=pack&m=index|sale`: Bag ported from the legacy `pack.php` (unequipped items only, chip / scroll pricing, VIP 11 refund, daily sale limit for items enhanced to level 10+)
 - `c=strengthen&m=index|strengthen_info|strengthen_start|clear_cd`: Blacksmith ported from the legacy `strengthen.php` (`EquipLevel` cost and success rate, VIP 5 critical +2 levels, writes level / powerup / sale price; legacy servers never applied an enhancement cooldown)
 - `c=tavern&m=index`: General recruitment tavern & guest trade
@@ -201,7 +201,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=flop&m=index|turnover`: Nine-grid card flips, card turnovers, and golden jackpot awards
 - `c=challenge&m=index|action`: Hero trial arenas, master duels (Ma Chao, Zhao Yun, Guan Yu), and arena honors
 - `c=elite&m=index|action|get_server`: Multi-hero elite campaigns, native WebSocket real-time teaming, and battle spoils
-- `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`: Warlord muster platform, expedition dispatches, resting states, hero intelligence, and severance pay claims
+- `c=muster&m=index|get_general_info|go_battle|go_rest|sale_general`: Muster platform; `index` / `get_general_info` / `go_battle` / `go_rest` ported from the legacy `muster.php` (dispatch roster `general.goout`, at most 8 heroes; resting removes the hero from every formation, stops training on `confrim`, unequips all items and mounts, keeps at least one hero dispatched); `sale_general` is still the new-version severance
 - `c=business&m=index|go_business|buy|refresh`: Four Seas commerce, merchant fleet caravans (Luoyang, Chengdu, Jianye), and trade profits
 - `c=gambling&m=index|buy|cut|sell`: Treasure bowl gambling, rough stone cuts, and pawnshop silver liquidations
 - `c=task&m=index|accept_task|get_reward|refresh`: Daily military bounty boards, 5-star quest refreshes, and reward claims
@@ -263,7 +263,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Tavern warlord recruitment (`tavern`) with persistent silver deductions & anti-duplicate checks
 - [x] Martial practice grounds (`practice`) with idle time exp accumulation & rapid leap leveling
 - [x] Full combat integration linking dynamic hero stats and equipment bonuses into 9-grid simulation
-- [x] Tactical 9-grid formation lineup management (`matrix`), hero slot changes, anti-duplicate validation, and matrix upgrades
+- [x] Legacy formation storage (`matrix`): per-formation rows, active formation switching, anti-duplicate validation, and gold upgrades; battles use the active formation
 - [x] Multi-hero cooperative combat simulation with live battle report replay and positioning strategy
 - [x] Military Arena PVP system (`arena`) with rank swapping, daily俸禄 salary claims, and deterministic mirror battle simulation
 - [x] Main city infrastructure & imposition/levy system (`city`) with critical harvest multipliers and gold forced taxation

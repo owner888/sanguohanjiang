@@ -11,13 +11,13 @@ use Hanjiang\MasterData\GeneraltaskMonster;
 use Hanjiang\MasterData\HeavenMonster;
 use Hanjiang\MasterData\HerothroneMonster;
 use Hanjiang\MasterData\IslandMonster;
-use Hanjiang\MasterData\Matrix;
 use Hanjiang\MasterData\Monster;
 use Hanjiang\MasterData\RefineAchieve;
 use Hanjiang\MasterData\SanctumMonster;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\SoulMonster;
 use Hanjiang\MasterData\Talent;
+use Hanjiang\Model\OwnMatrix;
 use OmniPHP\Database\DB;
 use RuntimeException;
 
@@ -60,9 +60,8 @@ final class TeamBuilder
      * 失败时 team 为空数组（旧版同）。旧版 battle_mission / battle_pk 等对 -2 按空队伍继续战斗（空队伍直接判 -3 大败），
      * 对 -1 / -3 返回错误，由调用方按各自旧版控制器处理。
      *
-     * 阵法读新版 matrix 表（新版每个玩家只有一行，mid 为当前阵法、level 为该行等级）；
-     * 旧版是 own_matrix 每个阵法一行、member_field.matrixid 指当前阵法、各阵法各自有等级。
-     * 依赖未移植：多阵法存储（阵法真相源后续阶段迁移）。
+     * 阵法同旧版：读 member_field.matrixid 指向的拥有阵法（Model\OwnMatrix）。matrixid 为 0 返回 -1；
+     * 启用的阵法行查不到时旧版 empty() 判断不成立，继续按空站位、等级 0 处理（最终 -2）。
      *
      * @param bool $defense 防守方（旧版 $defense，只决定阵法记录到左 / 右侧；这里两侧同样返回 matrix_type / matrix_coe）
      * @param bool $pve     旧版 $this->_pve：PVE 战斗阵法加成系数上限 0.5
@@ -78,15 +77,16 @@ final class TeamBuilder
         // 星魄 star_model->get_star_addition（80 级）、国家学院 warcollege_model->get_warcollege_addition（国家 30 级）、
         // 神树 sacredtree_model->get_tree_by_uid（活动开启时）
 
-        // 阵法：旧版 member_field.matrixid 为 0 或 own_matrix 查不到都返回 -1
-        $matrixRow = DB::table('matrix')->where('uid', $uid)->whereNull('deleted_at')->first();
-        if ($matrixRow === null) {
+        // 阵法：旧版 member_field.matrixid 为 0 返回 -1
+        $matrixid = OwnMatrix::activeId($uid);
+        if ($matrixid === 0) {
             $return['status'] = -1;
             return $return;
         }
+        $matrixInfo = OwnMatrix::own($uid, $matrixid);
         $matrix = [];
         for ($i = 1; $i <= 9; $i++) {
-            $gid = (int)$matrixRow['position' . $i];
+            $gid = $matrixInfo['position' . $i] ?? 0;
             if ($gid > 0) {
                 $matrix[$i] = $gid;
             }
@@ -94,9 +94,9 @@ final class TeamBuilder
 
         // 阵法类型与加成（matrix_model->get_rule_by_id：percent = 阵法等级 × intval(Matrix.addition)，coe = percent × 0.01）
         // 旧版阵法模板不存在时 get_rule_by_id 不返回 addition，type 取到 null、coe 为 0；这里同样按 0
-        $matrixTpl = Matrix::ROWS[(int)$matrixRow['mid']] ?? null;
-        $matrixType = $matrixTpl !== null ? (int)$matrixTpl['addtype'] : 0;
-        $matrixCoe = $matrixTpl !== null ? ((int)$matrixRow['level'] * (int)$matrixTpl['addition']) * 0.01 : 0.0;
+        $rule = OwnMatrix::rule($matrixid, $matrixInfo['level'] ?? 0);
+        $matrixType = $rule !== null ? $rule['addition']['type'] : 0;
+        $matrixCoe = $rule !== null ? $rule['addition']['percent'] * 0.01 : 0.0;
         // PVE 阵法加成上限控制（攻守两侧同）
         if ($pve && $matrixCoe > 0.5) {
             $matrixCoe = 0.5;

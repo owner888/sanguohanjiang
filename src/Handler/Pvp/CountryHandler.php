@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\Activity\MessageHandler;
-use Hanjiang\Handler\Campaign\MatrixHandler;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
 use Hanjiang\MasterData\CountryDonate;
@@ -15,6 +14,7 @@ use Hanjiang\MasterData\CountryJob;
 use Hanjiang\MasterData\CountryLearn;
 use Hanjiang\MasterData\CountryLevel;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\OwnMatrix;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -2250,8 +2250,8 @@ final class CountryHandler
         }
 
         // 上阵武将加经验
-        $matrix = MatrixHandler::getOrInitMatrix($uid);
-        if ($matrix === []) {
+        $matrix = OwnMatrix::own($uid, OwnMatrix::activeId($uid));
+        if ($matrix === null) {
             // 获取阵法信息失败
             $return['status'] = -5;
             return $return;
@@ -2259,8 +2259,8 @@ final class CountryHandler
 
         $gidArr = [];
         for ($i = 1; $i <= 9; $i++) {
-            if ((int)($matrix['position' . $i] ?? 0) > 0) {
-                $gidArr[] = (int)$matrix['position' . $i];
+            if ($matrix['position' . $i] > 0) {
+                $gidArr[] = $matrix['position' . $i];
             }
         }
 
@@ -3062,6 +3062,7 @@ final class CountryHandler
          * -1 更新拥有将领表失败
          *  0 失败
          *  1 成功
+         *  2 不在出征队列中
          *  3 等级已达主公等级上限
          *  4 需要转生
          */
@@ -3078,7 +3079,12 @@ final class CountryHandler
         $level = (int)$general['level'];
         $exp = (int)$general['exp'];
         $levelupexp = self::generalLevelupExp($level);
-        // 依赖未移植：出征状态 goout（上阵武将即取自当前阵法站位）
+
+        if ((int)$general['goout'] === 0) {
+            // 不在出征队列中 2
+            $return['status'] = 2;
+            return $return;
+        }
 
         // 等级限制(不超过主公)
         if ($level > $heroLevel) {

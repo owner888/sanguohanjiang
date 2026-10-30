@@ -26,8 +26,6 @@ class General extends Model
         'generalid' => 'int',
         'level' => 'int',
         'exp' => 'int',
-        'pos' => 'int',
-        'matrix_id' => 'int',
         'status' => 'int',
         'wuliup' => 'int',
         'zhiliup' => 'int',
@@ -59,18 +57,12 @@ class General extends Model
     public const int INITIAL_GENERALID = 1;
 
     /**
-     * 初始武将所在阵法与站位（旧版 controllers/login.php：init_matrix(1, uid, 2, gid)）
-     */
-    public const int INITIAL_MATRIX_ID = 1;
-    public const int INITIAL_POS = 2;
-
-    /**
      * 玩家获得武将的唯一入口（移植旧版 models/general_model.php:add_general）
      *
      * - 模板字段（名称、形象、职业、三围、天赋、技能、星级）从 MasterData General 复制成实列；
      * - $type = 1 为 1 级，其他为 30 级（旧版同）；levelupexp 固定为 1 级所需经验（旧版同，即使 30 级）；
      * - 名将图鉴有该将时写入 addtype / addvalue；
-     * - 不出征、不上阵（goout = 0、pos = 0）。
+     * - 不出征（goout = 0），不在任何阵法上。
      * 依赖未移植：获得武将气泡（member_field.ongeneral）、主公 80 级以上的名将成就加成重算、主线任务 19。
      *
      * @return int|null 新武将 id；模板不存在（旧版 -1）或已拥有同模板武将（旧版 -3）时返回 null
@@ -110,7 +102,7 @@ class General extends Model
      * 新账号初始武将（移植旧版 models/general_model.php:init_general）
      *
      * 与 add_general 的差别照旧版保留：levelupexp = 0、goout = 1、不查图鉴、不查重。
-     * 站位按旧版 init_matrix 放在 1 号阵法 2 号位；阵法表 position2 由调用方写入。
+     * 阵法由调用方按旧版 init_matrix 写入（OwnMatrix::init：1 号阵法 2 号位）。
      *
      * @return int 新武将 id
      */
@@ -123,8 +115,6 @@ class General extends Model
             'exp' => 0,
             'levelupexp' => 0,
             'goout' => 1,
-            'pos' => self::INITIAL_POS,
-            'matrix_id' => self::INITIAL_MATRIX_ID,
         ]);
     }
 

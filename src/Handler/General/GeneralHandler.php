@@ -17,7 +17,7 @@ use OmniPHP\Database\DB;
  * 将领界面（移植旧版 controllers/general.php 的客户端接口 index / get_info / equip / unequip）
  *
  * 旧版 own_general.eid1~eid4 新版不存储，由 equipment.generalid + LegacyStats::itemSite 派生；
- * 旧版 own_general.goout 新版以阵位 pos > 0 为准（MusterHandler / MatrixHandler 只维护 pos）。
+ * 出征名单为 general.goout（同旧版 own_general.goout，由 c=muster 的 go_battle / go_rest 维护）。
  *
  * 依赖未移植（界面血量 / 三围加成，均按 0 计入 LegacyStats::infoHp 与 wuliup/zhiliup/tiliup）：
  * 兵符宝石 gem_model->get_gem_by_eid、主公天赋 _hero_talent_hp（主公 91 级以上）、名将进阶 _get_advanced_info（100 级）、
@@ -95,7 +95,7 @@ final class GeneralHandler
 
         // check_battle：不存在或未出征都返回 2
         $row = self::ownGeneral($uid, $gid);
-        if ($row === null || (int)$row['pos'] <= 0) {
+        if ($row === null || (int)$row['goout'] === 0) {
             $return['status'] = 2;
             return $return;
         }
@@ -209,7 +209,7 @@ final class GeneralHandler
      */
     public static function battleList(int $uid): array
     {
-        $rows = DB::table('general')->where('uid', $uid)->where('pos', '>', 0)->whereNull('deleted_at')->get();
+        $rows = DB::table('general')->where('uid', $uid)->where('goout', 1)->whereNull('deleted_at')->get();
         if ($rows === []) {
             return [];
         }
@@ -516,7 +516,7 @@ final class GeneralHandler
     }
 
     /**
-     * 新版 general 行 → 旧版 own_general 字段（eid1~eid4 由装备派生，goout 由阵位派生，disable 恒 0）
+     * 新版 general 行 → 旧版 own_general 字段（eid1~eid4 由装备派生，disable 恒 0）
      *
      * @param array<string, mixed> $row
      * @param array<int, int> $eids 装配位置 1~4 => 装备 id（0 为空）
@@ -554,7 +554,7 @@ final class GeneralHandler
             'mid4' => (int)$row['mid4'],
             'addtype' => (int)$row['addtype'],
             'addvalue' => (int)$row['addvalue'],
-            'goout' => (int)$row['pos'] > 0 ? 1 : 0,
+            'goout' => (int)$row['goout'],
             'turn' => (int)$row['turn'],
             'disable' => 0,
             'quality' => (int)$row['quality'],

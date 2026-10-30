@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Auth;
 
 use Hanjiang\Model\General;
+use Hanjiang\Model\OwnMatrix;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 
@@ -169,25 +170,14 @@ final class RegisterHandler
             'gift' => 0,
             'race' => 0,
             'race_dateline' => 0,
+            // 旧版 member_model 注册：默认启用阵法 1
+            'matrixid' => OwnMatrix::INITIAL_MID,
         ]);
 
         // 初始武将：旧版 controllers/login.php 注册时 init_general(1, uid)，不送初始装备
         $genId = General::initGeneral($uid);
 
         // 初始化默认阵法：旧版 init_matrix(1, uid, 2, gid)，初始武将放在 1 号阵法 2 号位
-        DB::table('matrix')->insert([
-            'uid' => $uid,
-            'mid' => 1,
-            'level' => 1,
-            'position1' => 0,
-            'position2' => $genId,
-            'position3' => 0,
-            'position4' => 0,
-            'position5' => 0,
-            'position6' => 0,
-            'position7' => 0,
-            'position8' => 0,
-            'position9' => 0,
-        ]);
+        OwnMatrix::init($uid, OwnMatrix::INITIAL_MID, OwnMatrix::INITIAL_POSITION, $genId);
     }
 }

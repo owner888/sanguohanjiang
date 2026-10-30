@@ -858,6 +858,10 @@
 | `c=map&m=get_newresult` | 已按旧版 `Map` 表发 rewardtype 1（装备）；2 天赋卷轴 / 3 声望 / 4 坐骑依赖未移植，返回 -4 |
 | `General::createFromTemplate` | 依赖未移植：获得武将气泡（`ongeneral`）、主公 80 级以上名将成就加成重算、主线任务 19 |
 | `Equipment::addFromTemplate` | 依赖未移植：碎片分支（旧版 `add_item` `$type = 1`、`itemchip_log`） |
+| `c=matrix`（`MatrixHandler`） | 依赖未移植：主线任务 5（阵法升级）/ 6（同时上阵 5 将）、消费统计 `stat_model->matrixlevelup` |
+| `c=muster&m=index` / `go_rest` | 依赖未移植：获得武将气泡 `member_field.ongeneral`、武将折旧 CD `member_field.general_sale`（`sale_cd` 按 0）、坐骑表 `own_mount.gid` 清零（新版坐骑在 Redis `user_mounts`） |
+| `c=muster&m=sale_general` | 待按旧版重写。新版自定的遣散（按等级发银两、软删除）；旧版为 VIP 7 起的武将折旧（名将榜售价 × VIP 系数、7 天 CD、终止训练、下阵、卸装备 / 将魂 / 坐骑、重算名将成就） |
+| `c=practice&m=practice_stop` | 待按旧版重写。新版自定的结算（按训练位倍率发经验）；`c=muster&m=go_rest` 终止训练已用旧版 `practice_stop`（`PracticeHandler::legacyStop`） |
 
 ## 战斗
 
@@ -867,10 +871,8 @@
 |---|---|
 | 推演（`BattleEngine`） | 伤害公式、出手顺序、怒气、暴击、技能、天赋攻防系数、阵法 coe、命中 / 闪避 / 抗晕、`process` 帧格式、`leftbuff` / `rightbuff` 都是新版自定的；`Hero::fromUnit` 临时把旧版字段换算成引擎用的 hp / atk / def / speed |
 | 组队加成（`TeamBuilder::forMember`） | 依赖未移植，按 0 计：宝石 `gem_power`、坐骑（主战 100% / 备战 30% 及模板特殊属性）、锻造套装、将魂、主公天赋（91 级）、名将成就（81 级）、美人（60 级）、星魄（80 级）、国家学院（国家 30 级）、名将进阶（100 级）、神树 |
-| 阵法存储 | 新版 `matrix` 每个玩家一行（`mid` 当前阵法、`level` 该行等级）；旧版 `own_matrix` 每个阵法一行、各自有等级，当前阵法记在 `member_field.matrixid` |
 | 守军 | 只有 `c=map&m=action` 按旧版取 `Mission` → `Monster`。`elite`、`challenge`、`copies`、`epic`、`pass_general`、`sanctum`、`tower`、`compete`、`countryboss`、`countrymine`、`heaven`、`herothrone`、`island`、`siege`、`worldboss`、`arena`（预设 NPC）的守军数值是新版自定的（`Hero::unported`）；旧版对应怪物表见 `TeamBuilder::MONSTER_*` |
 | `c=map&m=mission` / `get_mission_list`，`c=map&m=action` 经验 | 据点名称、等级、经验仍取新版自定的 `MapHandler::getEnemyConfig`，与战斗中的旧版 `Mission` 守军不一致；`get_mission_by_id` 的场景 / 关卡开启校验、攻击 CD、强攻元宝未移植 |
-| `c=muster&m=go_battle` / `go_rest` | 只改 `general.pos`，不改 `matrix` 站位；战斗按 `matrix` 站位组队（同旧版 `own_matrix`） |
 
 ## 数据结构缺口
 
@@ -883,7 +885,7 @@
 | `member` ← `member` | `jade`、`gem`、`gemuse`、`refinestone`、`colorstone`、`bloodstone`、`souluse`、`soulpack`、`newpm`、`newmail`、`status`、`statustime`、`rebate_firstpay`、`jointime`、`dateline`、`actdateline`、`levelupexp`、`missionworld`、`firstworld`、`server_reward`、`ndgift`、`channel`、`regchannel`、`guest`、`version`、`appversion`、`crontime`、`gift`、`bind91`、`bind360` |
 | `general` ← `own_general` | `disable`（`eid1`~`eid4` 不存储，由 `equipment.generalid` + 旧版 `get_item_site` 派生；其余旧字段已补，获得时从模板复制） |
 | `equipment` ← `own_equip` | `glevel`、`disable`、`dateline`（`gid` 即 `generalid`；其余旧字段已补，同一武将同一装配位置由 `uk_general_site` 约束） |
-| `member_field` ← `member_field` | `levyall`、`levystatus`、`exercisetimes`、`imposetimes`、`baijintimes`、`zhizuntimes`、`qiangstatus`、`qiangdateline`、`shopdateline`、`matrixid`、`actnumber`、`actdateline`、`vip_reward`、`devicetoken`、`soultimes`、`onmine`、`onworkshop`、`oncountrymine`、`ongeneral`、`trends_times`、`newyeardinner`、`free_inherit`、`rebate_dateline`、`rebate_version`、`general_sale`、`advanced_time`、`close_invitation`、`clickreward`、`inherit_dateline`、`stone1_times`~`stone3_times`、`login_day`、`login_dateline`、`levelgift`、`first_recharge_an`、`heaventimes`、`treasure_free`、`macaddr`、`start_time` |
+| `member_field` ← `member_field` | `levyall`、`levystatus`、`exercisetimes`、`imposetimes`、`baijintimes`、`zhizuntimes`、`qiangstatus`、`qiangdateline`、`shopdateline`、`actnumber`、`actdateline`、`vip_reward`、`devicetoken`、`soultimes`、`onmine`、`onworkshop`、`oncountrymine`、`ongeneral`、`trends_times`、`newyeardinner`、`free_inherit`、`rebate_dateline`、`rebate_version`、`general_sale`、`advanced_time`、`close_invitation`、`clickreward`、`inherit_dateline`、`stone1_times`~`stone3_times`、`login_day`、`login_dateline`、`levelgift`、`first_recharge_an`、`heaventimes`、`treasure_free`、`macaddr`、`start_time` |
 | `general_soul` ← `own_general_soul` | 字段改名 `site1-8` → `slot1-8`（客户端若读 `site*` 需双写） |
 | `practice` ← `own_practice` | 字段改名 `gid` → `generalid` |
 | `arena` ← `arena` | `win`、`total_rank` |

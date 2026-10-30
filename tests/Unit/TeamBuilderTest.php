@@ -59,7 +59,6 @@ final class TeamBuilderTest extends TestCase
                 'turn' => 0,
                 'quality' => 1,
                 'goout' => 1,
-                'matrix_id' => 1,
             ]);
         }
 
@@ -88,6 +87,8 @@ final class TeamBuilderTest extends TestCase
             ]);
         }
 
+        // 旧版 member_field.matrixid = 1：战斗读启用的 1 号阵法
+        DB::table('member_field')->insert(['uid' => self::UID, 'matrixid' => 1]);
         DB::table('matrix')->insert([
             'uid' => self::UID,
             'mid' => 1,
@@ -237,7 +238,15 @@ final class TeamBuilderTest extends TestCase
         $this->assertSame(-2, $empty['status']);
         $this->assertSame([], $empty['team']);
 
+        // 启用的阵法行查不到：旧版 empty(get_own_by_id) 不成立，按空站位、等级 0 继续 → -2，类型仍取模板
         DB::table('matrix')->where('uid', self::UID)->update(['deleted_at' => date('Y-m-d H:i:s')]);
+        $missing = TeamBuilder::forMember(self::UID);
+        $this->assertSame(-2, $missing['status']);
+        $this->assertSame(1, $missing['matrix_type']);
+        $this->assertEqualsWithDelta(0.0, $missing['matrix_coe'], 1e-9);
+
+        // member_field.matrixid = 0：没有阵法信息 -1
+        DB::table('member_field')->where('uid', self::UID)->update(['matrixid' => 0]);
         $this->assertSame(-1, TeamBuilder::forMember(self::UID)['status']);
     }
 
@@ -282,7 +291,7 @@ final class TeamBuilderTest extends TestCase
 
     private function cleanup(): void
     {
-        foreach (['general', 'equipment', 'matrix'] as $table) {
+        foreach (['general', 'equipment', 'matrix', 'member_field'] as $table) {
             DB::table($table)->where('uid', self::UID)->delete();
         }
     }
