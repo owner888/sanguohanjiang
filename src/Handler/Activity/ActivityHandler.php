@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Model\BossClock;
+use Hanjiang\Model\WorldBoss;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -29,7 +31,7 @@ final class ActivityHandler
         $todayStr = date('Ymd');
         $loginedPopo = (is_array($signData) && ($signData['last_date'] ?? '') === $todayStr) ? 0 : 1;
 
-        // 计算多人副本与世界BOSS的真实活动时段状态 (1:进行中, 2:时间未到, 3:今日已结束)
+        // 计算多人副本的真实活动时段状态 (1:进行中, 2:时间未到, 3:今日已结束)
         $isAlwaysOpen = (bool)(getenv('DEV_ACTIVITY_ALL_OPEN') ?: false);
 
         $eliteStart1 = '12:00';
@@ -38,26 +40,12 @@ final class ActivityHandler
         $eliteEnd2   = '21:00';
         $eliteStatus = $isAlwaysOpen ? 1 : self::calculateTimeStatus($eliteStart1, $eliteEnd1, $eliteStart2, $eliteEnd2);
 
-        $bossStart1 = '12:30';
-        $bossEnd1   = '13:00';
-        $bossStart2 = '20:30';
-        $bossEnd2   = '21:00';
-        $bossStatus = $isAlwaysOpen ? 1 : self::calculateTimeStatus($bossStart1, $bossEnd1, $bossStart2, $bossEnd2);
-        $bossPopo   = 0;
-
         $activities = [
             'lottery' => ['status' => 1, 'starttime' => '', 'endtime' => '', 'openlevel' => 0],
             'treasure' => ['status' => 1, 'starttime' => '', 'endtime' => '', 'openlevel' => 36],
             'drink' => ['status' => 1, 'starttime' => '', 'endtime' => '', 'openlevel' => 0],
-            'boss' => [
-                'status' => $bossStatus,
-                'starttime' => $bossStart1,
-                'endtime' => $bossEnd1,
-                'starttime2' => $bossStart2,
-                'endtime2' => $bossEnd2,
-                'openlevel' => 46,
-                'popo' => $bossPopo,
-            ],
+            // 世界 BOSS（旧版 activity.php:worldboss_init）
+            'boss' => WorldBoss::activityInit($uid, BossClock::now()),
             'dailytask' => ['status' => 1, 'starttime' => '', 'endtime' => '', 'openlevel' => 41],
             'invitation' => ['status' => 1, 'starttime' => '', 'endtime' => '', 'openlevel' => 50],
             'dailytrade' => ['status' => 1, 'starttime' => '', 'endtime' => '', 'openlevel' => 61],

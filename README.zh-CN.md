@@ -161,7 +161,7 @@
 - `c=strengthen&m=index|strengthen_info|strengthen_start|clear_cd`：铁匠铺，按旧版 `strengthen.php` 移植（`EquipLevel` 花费与成功率、VIP 5 暴击 +2 级、写回等级 / 强化能力 / 售价；旧版强化从不累加冷却）
 - `c=tavern&m=index`：酒馆将领招募与会客商人
 - `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`：校场武将挂机演武训练、突飞猛进与扫荡、8大训练位进阶解锁及武将转生
-- `c=activity&m=index`：每日精彩活动列表总览、开放时段区间判定与签到/Boss红点气泡
+- `c=activity&m=index`：每日精彩活动列表总览、开放时段区间判定与签到红点气泡；世界 BOSS 项按旧版 `worldboss_init`（12:00–12:15、20:00–20:15，有未领奖励时亮红点）
 - `c=chat&m=read|send`：世界与国家频道实时消息流
 - `c=mainquest&m=index`：主线任务进度与里程碑领奖
 - `c=shop&m=index`：商城道具（旧版 `Shop` 表：兵符，装备 7、9–15、53–56）与军令体力购买
@@ -183,7 +183,7 @@
 - `c=mount&m=index|fit_on|take_down|levelup`：三国神品名驹坐骑（赤兔/的卢/绝影/爪黄飞电）、战马乘骑与进阶驯化
 - `c=gem&m=index|adron|pick_off|merge_gem`：神装宝石孔位镶嵌、宝石安全拆卸与4合1宝石熔炼进阶升级
 - `c=heaven&m=index|pk|mop_up`：天命观星二十八星宿点亮、星盘守护神决战与一键观星扫荡
-- `c=worldboss&m=index|powerup|battle|reward`：全服世界 BOSS 极·魔王董卓集结讨伐战、士气鼓舞伤害加成、全服伤害榜与功勋宝箱领奖
+- `c=worldboss&m=index|powerup|battle|reward`：世界 BOSS 刑天（按旧版移植，主公 46 级开放）：每天 12:00–12:15、20:00–20:15 两场、每人每天只能参加一场；BOSS 取 `WorldBoss` 行 1，血条按剩余时间减少，打法走旧版 `battle_worldboss`（带战报）；60 秒复活 CD（10 元宝立即复活），银币（等级 × 500）/ 元宝（10）鼓舞每次 +10%、上限 200%；结束后按个人累计伤害排名领演武榜积分（`WorldBossIntreward`，最后一击 × 1.5）。状态存 Redis（旧版键名，原子累计），未领的奖励由每日 00:30 的计划任务（`Hanjiang\Cron\WorldBossCron`，旧版 `cron_acttask::worldboss`）代领并清空。主城 `c=member&m=index` 的 `openboss` / `openbossreward` 同旧版
 - `c=siege&m=index|battle_prepare|action|get_reward`：攻城掠地天下名城占领（洛阳/长安/建业/成都/襄阳/濮阳）、城池决战与每日封邑岁贡分红
 - `c=gvg&m=index|betting|sync_info`：军团跨服 GVG 巅峰争霸赛对阵树、冠军押注竞猜与胜利分红结算
 - `c=general_inherit&m=index|preview|go_inherit`：武将功法传承、经验与洗髓三围属性无损转移（普通传承 80% 与至尊完璧 100% 传承）
@@ -224,7 +224,7 @@
 - `c=beatengod&m=index|beaten|get_box_reward`：真武战神金光试炼、敲击金身赐福掉落与战神宝箱领奖
 - `c=war&m=index|entry|point_shop`：魏蜀吴皇城跨服封神国战大厅、出征报名参战与军功功勋商城兑换
 - `c=countrymine&m=index|caikuang|rob|get_reward|give_up`：三国国家边境矿山开采、敌国矿车掠夺对决与国库收益收缴
-- `c=countryboss&m=index|powerup|battle|reward`：魏蜀吴国家守护神兽祭坛（真金神龙/踏云麒麟/九羽火凤）、全军鼓舞与神兽试炼宝箱
+- `c=countryboss&m=index|powerup|battle|reward`：国家 BOSS 蚩尤（按旧版移植）：每周五 20:30–20:45，国家（玩家军团）40 级、主公 50 级开放，每个国家各打各的 BOSS；BOSS 取 `WorldBoss` 行 2，血量 20 亿 × 1.03^往周击杀次数（击杀记录 `country_boss_log`），血量原子扣减，打死算胜利；60 秒复活 CD（20 元宝），银币（等级 × 1000）/ 元宝（20）鼓舞；按国家内伤害前 50 名领 `CountryBossReward` 的宝石（每 10 次击杀 × 1.1，最后一击 × 1.5）与装备碎片
 - `c=hitegg&m=index|hit_egg`：金蛋纳福大暴击（吉祥金蛋/富贵银蛋/至尊彩蛋）、挥锤破蛋与元宝爆出
 - `c=levelgift&m=index|get_reward`：主公等级成长里程碑礼包（5/10/20/30/40/50级）与成长基金一键领奖
 - `c=countryshop&m=index|buy`：魏蜀吴国家特产商城、官营国税军资与红色绝品神装图纸兑换
@@ -294,7 +294,7 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] 过关斩将斩杀六大名将 (`pass_general`)、主线任务动态里程碑 (`mainquest`)
 - [x] 原版经典深度养成与宏观格局重现：玩家自建国家（军团）系统 (`country`)、将魂星盘命格突破 (`soul`)、武将三围永久洗髓培养 (`cultivate`)
 - [x] 全面打通前端全量高频日常交互系统：每日签到福利 (`dailysign`)、VIP 特权俸禄与晋级礼包 (`vip`)、系统信箱与飞鸽传书 (`message`)、好友社交系统 (`friend`)、银矿占领挂机采矿 (`mine`)
-- [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、天命观星突破 (`heaven`)、全服世界 BOSS 董卓战 (`worldboss`)
+- [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、天命观星突破 (`heaven`)、世界 BOSS 刑天 (`worldboss`)
 - [x] 军团攻城掠地城池战 (`siege`)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)
 - [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
 - [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充返利与天命转盘 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
@@ -308,7 +308,7 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] 跨服争霸与海外秘境全线贯通：东海金银岛秘境 (`island`)、英雄王座巅峰争霸 (`herothrone`)、真武战神金身试炼 (`beatengod`)、皇城跨服封神国战 (`war`)
 - [x] 协议一致性与媒体高保真：标准 HTTP 206 Partial Content 字节切片音频流、Web Audio 捕获级全兼容唤醒、名将原型资产严格对齐 (`HERO_CONFIGS`)、主公经验条分母归一化与战败零收益铁律
 
-- [x] 边境阵营战场与等级里程碑：国家边境矿山争夺 (`countrymine`)、国家神兽守护神祭坛 (`countryboss`)、金蛋纳福大暴击 (`hitegg`)、主公等级成长基金礼包 (`levelgift`)
+- [x] 边境阵营战场与等级里程碑：国家边境矿山争夺 (`countrymine`)、国家 BOSS 蚩尤 (`countryboss`)、金蛋纳福大暴击 (`hitegg`)、主公等级成长基金礼包 (`levelgift`)
 - [x] 官营特产与神装天铸体系全线贯通：国家特产商城 (`countryshop`)、天工神装铸造熔炼 (`equip_forge`)、开服十四日累登狂欢 (`totallogin`)、天命战纪史诗副本 (`epic`)
 - [x] 运营激活与战力成就基石就绪：至尊CDKey激活码兑换 (`activationcode`)、整军经武演武礼包 (`exercise`)、主公全军总战力透视 (`information`)、结义邀请拉新分红 (`invitation`)
 - [x] 核心业务轻量薄模型 (`src/Model/`) 落地：引入 `SoftDeletes` 自动软删除过滤、强类型属性转换与内聚领域方法（`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`）

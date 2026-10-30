@@ -167,6 +167,26 @@ final class BattleEngineTest extends TestCase
         $this->assertSame([['pos' => 2, 'blood' => 40, 'power' => 0, 'self' => 0, 'faint' => 0]], $pen['hurt']);
     }
 
+    public function testBossInspireCoefficientMultipliesDamage(): void
+    {
+        // battle_worldboss：刑天站 5 号位（world_boss 行 + 写死数值：武力 0、防御 0、天赋 / 技能 1）
+        $boss = TeamBuilder::forBoss(\Hanjiang\MasterData\WorldBoss::ROWS[1] + [
+            'blood' => 9000000000000, 'allblood' => 9000000000000, 'wuli' => 0, 'zhili' => 0, 'type' => 1,
+            'attack' => 1000000000, 'pdefense' => 0, 'mdefense' => 0, 'talentid' => 1, 'skillid' => 1,
+        ]);
+        $this->assertSame([5], array_keys($boss));
+        $this->assertSame([0, 0, 0, 0], [$boss[5]['power'], $boss[5]['round'], $boss[5]['defense1'], $boss[5]['defense2']]);
+
+        // 平庸猛将攻击 300 打防御 0：1 × (300 × 1.0 × 鼓舞系数 - 0)；boss 战抗闪避 150，不触发闪避
+        $atk = self::unit(['type' => 1, 'wuli' => 0, 'attack' => 300, 'talentid' => 1]);
+        foreach ([[1, 1, 300], [1, 1.5, 450], [2, 2, 600]] as [$bossBattle, $coe, $expected]) {
+            $engine = new BattleEngine(attackCoe: $coe, bossBattle: $bossBattle, rng: new Randomizer(new ScriptedRandomEngine([99, 99])));
+            $out = $engine->battle([2 => $atk], $boss);
+            $this->assertSame($expected, $out['process'][0]['hurt'][0]['blood']);
+            $this->assertSame('刑天', $out['rightteam'][5]['name']);
+        }
+    }
+
     public function testEmptyTeamsShortCircuit(): void
     {
         $engine = new BattleEngine();

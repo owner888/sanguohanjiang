@@ -2600,30 +2600,320 @@ final class GameApiTest extends TestCase
         });
     }
 
-    public function testWorldBossSystem(): void
+    /**
+     * 世界 / 国家 BOSS 测试的共同准备：清空两类 BOSS 的 Redis 键，固定 BossClock
+     */
+    private function bossAt(string $datetime): int
     {
-        // 1. 查看世界 BOSS
-        $res = $this->request('worldboss', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertSame('极·魔王董卓', $res['boss_name']);
-        $this->assertSame(1, $res['is_alive']);
+        $ts = (int)strtotime($datetime);
+        \Hanjiang\Model\BossClock::freeze($ts);
+        return $ts;
+    }
 
-        // 2. 鼓舞士气
-        $buff = $this->request('worldboss', 'powerup');
-        $this->assertSame(1, $buff['status']);
-        $this->assertSame(20, $buff['buff_percent']);
+    private function bossReset(): void
+    {
+        \Hanjiang\Model\BossClock::freeze(null);
+        \Hanjiang\Model\WorldBoss::deleteByPattern('worldboss_*');
+        \Hanjiang\Model\WorldBoss::deleteByPattern('countryboss_*');
+        \Hanjiang\Model\WorldBoss::deleteByPattern('log_*_countryboss_*');
+    }
 
-        // 3. 发起讨伐战斗
-        $battle = $this->request('worldboss', 'battle');
-        $this->assertSame(1, $battle['status']);
-        $this->assertGreaterThan(0, $battle['damage_dealt']);
-        $this->assertGreaterThan(0, $battle['reward_silver']);
+    /**
+     * @return array{uid: int, auth: array<string, mixed>}
+     */
+    private function bossPlayer(int $level, int $country = 0): array
+    {
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => $level, 'country' => $country, 'nickname' => 'boss' . $p['uid']]);
+        Redis::del('player:' . $p['uid']);
+        return $p;
+    }
 
-        // 4. 领取世界 BOSS 功勋宝箱
-        $reward = $this->request('worldboss', 'reward');
-        $this->assertSame(1, $reward['status']);
-        $this->assertGreaterThan(0, $reward['silver']);
-        $this->assertGreaterThan(0, $reward['gold']);
+    /**
+     * @param array<string, mixed> $auth
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private function bossRequest(string $c, string $m, array $auth, array $params = []): array
+    {
+        $res = $this->request($c, $m, array_merge($auth, $params));
+        unset($res['message'], $res['msg']);
+        return $res;
+    }
+
+    /**
+     * 战报里左方对 BOSS 的伤害（旧版控制器：左方出手记录里 self = 0 的 hurt.blood 之和）
+     *
+     * @param array<string, mixed> $battle
+     */
+    private function bossHitOf(array $battle): int
+    {
+        $hit = 0;
+        foreach ($battle['process'] as $value) {
+            if ($value['launch'] === 'left') {
+                foreach ($value['hurt'] as $v) {
+                    if (isset($v['self']) && $v['self'] == 0) {
+                        $hit += $v['blood'];
+                    }
+                }
+            }
+        }
+        return $hit;
+    }
+
+    public function testWorldBossWindowFollowsLegacySchedule(): void
+    {
+        $this->bossReset();
+        try {
+            $low = $this->bossPlayer(45);
+            $p = $this->bossPlayer(46);
+
+            // 46 级开放
+            $this->bossAt('2026-10-30 12:05:00');
+            $this->assertSame(6, $this->bossRequest('worldboss', 'index', $low['auth'])['status']);
+
+            // 12:00 前未开启，战斗返回 5
+            $this->bossAt('2026-10-30 11:59:59');
+            $this->assertSame(3, $this->bossRequest('worldboss', 'index', $p['auth'])['status']);
+            $this->assertSame(['status' => 5, 'info' => [], 'battle' => []], $this->bossRequest('worldboss', 'battle', $p['auth']));
+
+            // 12:00 开战：准备数据
+            $this->bossAt('2026-10-30 12:00:00');
+            $res = $this->bossRequest('worldboss', 'index', $p['auth']);
+            $this->assertSame([
+                'status' => 2,
+                'countdown' => 900,
+                'powerup' => 100,
+                'bossinfo' => ['name' => '刑天', 'blood' => '100.00', 'image' => 'worldboss1'],
+                'reward' => [],
+                'top' => [],
+                'cd' => 0,
+                'upcost' => ['gold' => 10, 'silver' => 46 * 500],
+                'cdcost' => 10,
+                'my' => ['rank' => 0, 'hit' => 0],
+            ], $res);
+
+            // 12:15 结束（900 秒整算结束），未参加：20:15 之前算「未开启」
+            $this->bossAt('2026-10-30 12:15:00');
+            $this->assertSame(3, $this->bossRequest('worldboss', 'index', $p['auth'])['status']);
+            $this->assertSame(5, $this->bossRequest('worldboss', 'battle', $p['auth'])['status']);
+
+            // 20:00 场：没参加过 12:00 场的玩家切到 20:00 场
+            $this->bossAt('2026-10-30 20:14:00');
+            $res = $this->bossRequest('worldboss', 'index', $p['auth']);
+            $this->assertSame(2, $res['status']);
+            $this->assertSame(60, $res['countdown']);
+
+            // 20:16 以后：活动已结束
+            $this->bossAt('2026-10-30 20:16:00');
+            $this->assertSame(4, $this->bossRequest('worldboss', 'index', $p['auth'])['status']);
+
+            // 活动列表的 boss 项（activity.php:worldboss_init）与主城开启标识（member.php:worldboss_init）
+            $this->bossAt('2026-10-30 12:05:00');
+            $act = $this->bossRequest('activity', 'index', $p['auth']);
+            $this->assertSame(['status' => 1, 'starttime' => '12:00', 'endtime' => '12:15', 'openlevel' => 46, 'starttime2' => '20:00', 'endtime2' => '20:15', 'popo' => 0], $act['list']['boss']);
+            $member = $this->bossRequest('member', 'index', $p['auth']);
+            $this->assertSame([1, 0], [$member['openboss'], $member['openbossreward']]);
+            $this->assertSame(0, $this->bossRequest('member', 'index', $low['auth'])['openboss']);
+            $this->bossAt('2026-10-30 12:16:00');
+            $this->assertSame(0, $this->bossRequest('member', 'index', $p['auth'])['openboss']);
+        } finally {
+            $this->bossReset();
+        }
+    }
+
+    public function testWorldBossBattleRecordsHitRankAndCd(): void
+    {
+        $this->bossReset();
+        try {
+            $p = $this->bossPlayer(60);
+            $uid = $p['uid'];
+            $this->bossAt('2026-10-30 12:00:10');
+            $gold = $this->towerMember($uid, 'gold');
+
+            $res = $this->bossRequest('worldboss', 'battle', $p['auth']);
+            $this->assertSame(1, $res['status']);
+            $battle = $res['battle'];
+            $this->assertSame($battle['assess'], $res['info']['win']);
+            $this->assertSame(['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff'], array_keys($battle));
+            // 守方：刑天固定 5 号位，血条按百分比、herotype 0（旧版控制器改写）
+            $this->assertSame([5], array_keys($battle['rightteam']));
+            $boss = $battle['rightteam'][5];
+            $this->assertSame(['刑天', 'worldboss1', '100.00', 0], [$boss['name'], $boss['image'], $boss['allblood'], $boss['herotype']]);
+            $this->assertSame('1', $boss['heroid']);
+            $this->assertSame(100, $battle['rightresult'][5]['allblood']);
+            $this->assertMatchesRegularExpression('/^\d+\.\d{2}$/', $battle['rightresult'][5]['blood']);
+            $hit = $this->bossHitOf($battle);
+            $this->assertGreaterThan(0, $hit);
+            $this->assertSame($hit, \Hanjiang\Model\WorldBoss::myHit(0, $uid));
+
+            // 1 秒战斗锁：cd 61
+            $this->assertSame(['status' => 2, 'info' => ['cd' => 61], 'battle' => []], $this->bossRequest('worldboss', 'battle', $p['auth']));
+            Redis::del('worldboss_hit_lock_' . $uid);
+            // 复活 CD：距上次攻击 30 秒 → 还要 60 - 30 + 1 秒
+            Redis::expire('worldboss_my_hit_' . $uid, \Hanjiang\Model\WorldBoss::REDIS_EXPIRE - 30);
+            $res = $this->bossRequest('worldboss', 'battle', $p['auth']);
+            $this->assertSame(2, $res['status']);
+            $this->assertContains($res['info']['cd'], [30, 31]);
+            $index = $this->bossRequest('worldboss', 'index', $p['auth']);
+            $this->assertContains($index['cd'], [30, 31]);
+            $this->assertSame(['rank' => 1, 'hit' => $hit], $index['my']);
+            $this->assertSame((string)$uid, $index['top'][0]['uid']);
+            $this->assertSame((string)$hit, $index['top'][0]['hit']);
+            $this->assertSame('boss' . $uid, $index['top'][0]['nickname']);
+            $this->assertSame(['uid', 'hit', 'rank', 'level', 'gender', 'nickname'], array_keys($index['top'][0]));
+            // 血条按剩余时间自然减少：890 / 900 ≈ 98.89%
+            $this->assertSame('98.89', $index['bossinfo']['blood']);
+
+            // 立即复活：扣 10 元宝，伤害累加
+            Redis::del('worldboss_hit_lock_' . $uid);
+            $res = $this->bossRequest('worldboss', 'battle', $p['auth'], ['now' => 1]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame($gold - 10, $res['info']['all_gold']);
+            $this->assertSame($gold - 10, $this->towerMember($uid, 'gold'));
+            $this->assertSame($hit + $this->bossHitOf($res['battle']), \Hanjiang\Model\WorldBoss::myHit(0, $uid));
+
+            // 元宝不足
+            Redis::del('worldboss_hit_lock_' . $uid);
+            DB::table('member')->where('uid', $uid)->update(['gold' => 5]);
+            $this->assertSame(3, $this->bossRequest('worldboss', 'battle', $p['auth'], ['now' => 1])['status']);
+            $this->assertSame(5, $this->towerMember($uid, 'gold'));
+
+            // 排行：按累计伤害降序，排名同 index.my.rank
+            $q = $this->bossPlayer(60);
+            \Hanjiang\Model\WorldBoss::updateMyHit(0, $q['uid'], \Hanjiang\Model\WorldBoss::myHit(0, $uid) + 1, 800);
+            $index = $this->bossRequest('worldboss', 'index', $p['auth']);
+            $this->assertSame(2, $index['my']['rank']);
+            $this->assertSame([(string)$q['uid'], (string)$uid], array_column($index['top'], 'uid'));
+            $this->assertSame([1, 2], array_column($index['top'], 'rank'));
+        } finally {
+            $this->bossReset();
+        }
+    }
+
+    public function testWorldBossPowerupCostAndCap(): void
+    {
+        $this->bossReset();
+        try {
+            $p = $this->bossPlayer(50);
+            $uid = $p['uid'];
+            $this->bossAt('2026-10-30 12:01:00');
+            DB::table('member')->where('uid', $uid)->update(['silver' => 100000, 'gold' => 100]);
+
+            // 银币鼓舞：主公等级 × 500
+            $res = $this->bossRequest('worldboss', 'powerup', $p['auth'], ['gold' => 0]);
+            $this->assertSame(['status' => 1, 'powerup' => 110, 'all_silver' => 100000 - 25000], $res);
+            // 元宝鼓舞：10 元宝
+            $res = $this->bossRequest('worldboss', 'powerup', $p['auth'], ['gold' => 1]);
+            $this->assertSame(['status' => 1, 'powerup' => 120, 'all_gold' => 90], $res);
+            $this->assertSame(120, $this->bossRequest('worldboss', 'index', $p['auth'])['powerup']);
+
+            // 银币不足 / 元宝不足：不加成
+            DB::table('member')->where('uid', $uid)->update(['silver' => 100, 'gold' => 5]);
+            $this->assertSame(['status' => 3, 'powerup' => 0], $this->bossRequest('worldboss', 'powerup', $p['auth'], ['gold' => 0]));
+            $this->assertSame(['status' => 2, 'powerup' => 0], $this->bossRequest('worldboss', 'powerup', $p['auth'], ['gold' => 1]));
+            $this->assertSame(120, \Hanjiang\Model\WorldBoss::powerUp(0, $uid));
+
+            // 上限 200：不扣费
+            DB::table('member')->where('uid', $uid)->update(['gold' => 1000]);
+            for ($i = 130; $i <= 200; $i += 10) {
+                $this->assertSame($i, $this->bossRequest('worldboss', 'powerup', $p['auth'], ['gold' => 1])['powerup']);
+            }
+            $this->assertSame(['status' => 4, 'powerup' => 200], $this->bossRequest('worldboss', 'powerup', $p['auth'], ['gold' => 1]));
+            $this->assertSame(1000 - 80, $this->towerMember($uid, 'gold'));
+            // 加成系数 = powerup / 100（战斗双方伤害都乘，见 BattleEngineTest）
+            $this->assertSame(200, $this->bossRequest('worldboss', 'index', $p['auth'])['powerup']);
+        } finally {
+            $this->bossReset();
+        }
+    }
+
+    public function testWorldBossRewardAfterEndAndOncePerDay(): void
+    {
+        $this->bossReset();
+        try {
+            $p = $this->bossPlayer(60);
+            $q = $this->bossPlayer(60);
+            $uid = $p['uid'];
+            $this->bossAt('2026-10-30 12:03:00');
+            $this->assertSame(1, $this->bossRequest('worldboss', 'battle', $p['auth'])['status']);
+            $hit = \Hanjiang\Model\WorldBoss::myHit(0, $uid);
+            // 活动进行中不能领奖
+            $this->assertSame(['status' => 2, 'reward' => []], $this->bossRequest('worldboss', 'reward', $p['auth']));
+            // 进行中 20 点场的玩家不受影响：q 没打，排行只有 p
+            $this->assertSame(['status' => 2, 'reward' => []], $this->bossRequest('worldboss', 'reward', $q['auth']));
+
+            // 结束后：伤害榜 + 奖励（第 1 名 1000 积分，最后一击 × 1.5）
+            $this->bossAt('2026-10-30 12:16:00');
+            $res = $this->bossRequest('worldboss', 'index', $p['auth']);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(['intnum' => 1500, 'lasthit' => 1, 'rank' => 1, 'hit' => $hit], $res['reward']);
+            $this->assertSame([(string)$uid], array_column($res['top'], 'uid'));
+            $this->assertSame(1, $this->bossRequest('member', 'index', $p['auth'])['openbossreward']);
+            $this->assertSame(1, $this->bossRequest('activity', 'index', $p['auth'])['list']['boss']['popo']);
+
+            $before = (int)(DB::table('member_integral')->where('uid', $uid)->value('act_arena_int') ?? 0);
+            $this->assertSame(['status' => 1, 'reward' => ['intnum' => 1500]], $this->bossRequest('worldboss', 'reward', $p['auth']));
+            $this->assertSame($before + 1500, (int)DB::table('member_integral')->where('uid', $uid)->value('act_arena_int'));
+            $log = DB::table('integral_log')->where('uid', $uid)->orderBy('id', 'desc')->first();
+            $this->assertSame([1, 1500, $before + 1500, 'worldboss', 'reward', 'act_arena_int'], [(int)$log['type'], (int)$log['intnum'], (int)$log['balance'], $log['class'], $log['method'], $log['argument']]);
+            // 不能重复领取；之后显示「今日已参加」
+            $this->assertSame(['status' => 2, 'reward' => []], $this->bossRequest('worldboss', 'reward', $p['auth']));
+            $this->assertSame(5, $this->bossRequest('worldboss', 'index', $p['auth'])['status']);
+
+            // 每人每天一场：12:00 场参加过的晚上仍按 12:00 场（已参加），没参加的进 20:00 场
+            $this->bossAt('2026-10-30 20:05:00');
+            $this->assertSame(5, $this->bossRequest('worldboss', 'index', $p['auth'])['status']);
+            $this->assertSame(5, $this->bossRequest('worldboss', 'battle', $p['auth'])['status']);
+            $this->assertSame(0, $this->bossRequest('member', 'index', $p['auth'])['openboss']);
+            $this->assertSame(2, $this->bossRequest('worldboss', 'index', $q['auth'])['status']);
+        } finally {
+            $this->bossReset();
+        }
+    }
+
+    public function testWorldBossCronAutoClaimsAndClears(): void
+    {
+        $this->bossReset();
+        try {
+            $a = $this->bossPlayer(60);
+            $b = $this->bossPlayer(60);
+            $c = $this->bossPlayer(60);
+            // 20:00 场：c 已领奖（伤害记录已删），a 最后一击
+            \Hanjiang\Model\WorldBoss::updateMyHit(1, $c['uid'], 900, 300);
+            \Hanjiang\Model\WorldBoss::updateMyHit(1, $b['uid'], 500, 300);
+            \Hanjiang\Model\WorldBoss::updateMyHit(1, $a['uid'], 800, 200);
+            $this->assertTrue(\Hanjiang\Model\WorldBoss::delMyHit(1, $c['uid']));
+            $intBefore = static fn (int $uid): int => (int)(DB::table('member_integral')->where('uid', $uid)->value('act_arena_int') ?? 0);
+            [$ia, $ib, $ic] = [$intBefore($a['uid']), $intBefore($b['uid']), $intBefore($c['uid'])];
+
+            // 次日 00:30：12:00 场没有排行，取 20:00 场；排名 c 1、a 2、b 3
+            $now = (int)strtotime('2026-10-31 00:30:00');
+            $this->assertSame(2, \Hanjiang\Cron\WorldBossCron::settle($now));
+            $this->assertSame($ia + (int)(900 * 1.5), $intBefore($a['uid']));
+            $this->assertSame($ib + 800, $intBefore($b['uid']));
+            $this->assertSame($ic, $intBefore($c['uid']));
+            $log = DB::table('integral_log')->where('uid', $a['uid'])->orderBy('id', 'desc')->first();
+            $this->assertSame(['cron_acttask', 'worldboss', (int)(900 * 1.5)], [$log['class'], $log['method'], (int)$log['intnum']]);
+            $mail = Redis::getJson('user_messages:' . $b['uid']);
+            $last = end($mail);
+            $this->assertSame([1, '系统通知', '亲爱的玩家！您上次参加世界BOSS获得积分800，系统已经帮您自动领取！'], [$last['type'], $last['fromname'], $last['message']]);
+            // 清空全部世界 BOSS 键
+            $this->assertSame([], Redis::keys('worldboss_*'));
+
+            // 两场都没有排行：不发奖、不清空
+            Redis::set('worldboss_played_' . $a['uid'], 1, 600);
+            $this->assertSame(0, \Hanjiang\Cron\WorldBossCron::settle($now));
+            $this->assertSame(1, Redis::get('worldboss_played_' . $a['uid']));
+
+            // 12:00 场有排行时优先发 12:00 场，然后清空（含 20:00 场）
+            \Hanjiang\Model\WorldBoss::updateMyHit(0, $a['uid'], 10, 100);
+            \Hanjiang\Model\WorldBoss::updateMyHit(1, $b['uid'], 10, 100);
+            $this->assertSame(1, \Hanjiang\Cron\WorldBossCron::settle($now));
+            $this->assertSame(0, \Hanjiang\Model\WorldBoss::myHit(1, $b['uid']));
+        } finally {
+            $this->bossReset();
+        }
     }
 
     public function testProtocolSmartFallbackAndLoggerWarning(): void
@@ -4941,27 +5231,256 @@ final class GameApiTest extends TestCase
         });
     }
 
-    public function testCountryBossSystem(): void
+    /**
+     * 国家（玩家军团）：等级 $level
+     */
+    private function bossCountry(int $level): int
     {
-        // 1. 查看护国神兽
-        $res = $this->request('countryboss', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['boss_name']);
+        return (int)DB::table('country')->insertGetId(['name' => '神' . substr((string)hrtime(true), -6), 'level' => $level, 'member' => 1, 'uid' => 1, 'nickname' => 'k']);
+    }
 
-        // 2. 鼓舞军威
-        $buff = $this->request('countryboss', 'powerup');
-        $this->assertSame(1, $buff['status']);
-        $this->assertGreaterThan(0, $buff['buff']);
+    public function testCountryBossWindowAndOpenConditions(): void
+    {
+        $this->bossReset();
+        try {
+            $country = $this->bossCountry(40);
+            $low = $this->bossCountry(39);
+            $p = $this->bossPlayer(50, $country);
 
-        // 3. 挑战护国神兽
-        $battle = $this->request('countryboss', 'battle');
-        $this->assertSame(1, $battle['status']);
-        $this->assertGreaterThan(0, $battle['damage']);
+            $this->bossAt('2026-10-30 20:31:00');
+            // 主公 50 级
+            $res = $this->bossRequest('countryboss', 'index', $this->bossPlayer(49, $country)['auth']);
+            $this->assertSame([6, 50], [$res['status'], $res['member_level']]);
+            // 国家 40 级；未加入国家（country 0）旧版同样落到 8
+            $res = $this->bossRequest('countryboss', 'index', $this->bossPlayer(50, $low)['auth']);
+            $this->assertSame([8, 40], [$res['status'], $res['country_level']]);
+            $this->assertSame(8, $this->bossRequest('countryboss', 'index', $this->bossPlayer(50)['auth'])['status']);
 
-        // 4. 领取护国神兽宝箱
-        $reward = $this->request('countryboss', 'reward');
-        $this->assertSame(1, $reward['status']);
-        $this->assertGreaterThan(0, $reward['silver']);
+            // 周四：未开启，返回开启时间
+            $this->bossAt('2026-10-29 20:31:00');
+            $res = $this->bossRequest('countryboss', 'index', $p['auth']);
+            $this->assertSame([3, '周五 20:30', [], 0, 100], [$res['status'], $res['starttime'], $res['top'], $res['level'], $res['add']]);
+            $this->assertSame(5, $this->bossRequest('countryboss', 'battle', $p['auth'])['status']);
+
+            // 周五 20:30 ~ 20:45
+            $this->bossAt('2026-10-30 20:29:59');
+            $this->assertSame(3, $this->bossRequest('countryboss', 'index', $p['auth'])['status']);
+            $this->bossAt('2026-10-30 20:30:05');
+            $res = $this->bossRequest('countryboss', 'index', $p['auth']);
+            $this->assertSame([
+                'status' => 2,
+                'countdown' => 895,
+                'powerup' => 100,
+                'bossinfo' => ['name' => '蚩尤', 'blood' => '100.00', 'image' => 'countryboss'],
+                'reward' => [],
+                'top' => [],
+                'cd' => 0,
+                'upcost' => ['gold' => 20, 'silver' => 50 * 1000],
+                'cdcost' => 20,
+                'my' => ['rank' => 0, 'hit' => 0],
+                'level' => 0,
+                'add' => 100,
+            ], $res);
+            $this->bossAt('2026-10-30 20:45:00');
+            $this->assertSame(4, $this->bossRequest('countryboss', 'index', $p['auth'])['status']);
+            $this->assertSame(5, $this->bossRequest('countryboss', 'battle', $p['auth'])['status']);
+        } finally {
+            $this->bossReset();
+        }
+    }
+
+    public function testCountryBossBattleKillRewardAndGuildIsolation(): void
+    {
+        $this->bossReset();
+        try {
+            $country = $this->bossCountry(40);
+            $other = $this->bossCountry(45);
+            $a = $this->bossPlayer(60, $country);
+            $b = $this->bossPlayer(60, $country);
+            $c = $this->bossPlayer(60, $other);
+            $allblood = 2000000000;
+
+            $this->bossAt('2026-10-30 20:31:00');
+            $res = $this->bossRequest('countryboss', 'battle', $a['auth']);
+            $this->assertSame(1, $res['status']);
+            $battle = $res['battle'];
+            $this->assertSame($battle['assess'], $res['info']['win']);
+            $boss = $battle['rightteam'][5];
+            $this->assertSame(['2', '蚩尤', 'countryboss', '0', $allblood, $allblood, 0], [$boss['heroid'], $boss['name'], $boss['image'], $boss['level'], $boss['allblood'], $boss['blood'], $boss['herotype']]);
+            $this->assertSame($allblood, $battle['rightresult'][5]['allblood']);
+            $this->assertSame(['name' => 'boss' . $a['uid'], 'level' => 60, 'gender' => 0], $battle['left_role']);
+            $this->assertSame(['name' => '蚩尤', 'level' => 0, 'type' => 1], $battle['right_role']);
+            $hitA = $this->bossHitOf($battle);
+            $this->assertGreaterThan(0, $hitA);
+            $this->assertSame($hitA, \Hanjiang\Model\CountryBoss::myHit($country, $a['uid']));
+            // 剩余血量 = 总血量 - 伤害
+            $this->assertSame($allblood - $hitA, \Hanjiang\Model\CountryBoss::bossInfo($country, \Hanjiang\Model\BossClock::now())['blood']);
+
+            // 每个国家各自的 BOSS 与排行
+            $res = $this->bossRequest('countryboss', 'index', $c['auth']);
+            $this->assertSame(['100.00', []], [$res['bossinfo']['blood'], $res['top']]);
+            $res = $this->bossRequest('countryboss', 'index', $a['auth']);
+            $this->assertSame([(string)$a['uid']], array_column($res['top'], 'uid'));
+            $this->assertSame(['rank' => 1, 'hit' => $hitA], $res['my']);
+
+            // 复活：有 CD 时扣 20 元宝
+            Redis::del('countryboss_hit_lock_' . $a['uid']);
+            Redis::expire('countryboss_' . $country . '_my_hit_' . $a['uid'], \Hanjiang\Model\CountryBoss::MY_HIT_EXPIRE - 10);
+            $res = $this->bossRequest('countryboss', 'battle', $a['auth']);
+            $this->assertSame(2, $res['status']);
+            $this->assertContains($res['info']['cd'], [50, 51]);
+            Redis::del('countryboss_hit_lock_' . $a['uid']);
+            $gold = $this->towerMember($a['uid'], 'gold');
+            $res = $this->bossRequest('countryboss', 'battle', $a['auth'], ['now' => 1]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame($gold - 20, $res['info']['all_gold']);
+            $hitA += $this->bossHitOf($res['battle']);
+
+            // 活动中、BOSS 未死不能领奖
+            $this->assertSame(-1, $this->bossRequest('countryboss', 'reward', $a['auth'])['status']);
+
+            // 击杀：剩 1 血时 b 出手
+            Redis::hSet('countryboss_' . $country . '_boss_info', 'blood', 1);
+            $res = $this->bossRequest('countryboss', 'battle', $b['auth']);
+            $this->assertSame(1, $res['status']);
+            $this->assertGreaterThanOrEqual(1, $res['info']['win']);
+            $hitB = $this->bossHitOf($res['battle']);
+            $this->assertSame(1, DB::table('country_boss_log')->where('country', $country)->where('ymd', 20261030)->count());
+            // BOSS 已死：不能再打，index 显示领奖（胜利）
+            Redis::del('countryboss_hit_lock_' . $a['uid']);
+            $this->assertSame(4, $this->bossRequest('countryboss', 'battle', $a['auth'])['status']);
+            $res = $this->bossRequest('countryboss', 'index', $a['auth']);
+            $this->assertSame([1, 1], [$res['status'], $res['win']]);
+            $this->assertSame(0, $this->bossRequest('countryboss', 'index', $c['auth'])['level']);
+
+            // 领奖：按国家内排名取胜利奖励，最后一击（b）宝石 × 1.5
+            $rankA = \Hanjiang\Model\CountryBoss::myRank($country, $a['uid']);
+            $rankB = \Hanjiang\Model\CountryBoss::myRank($country, $b['uid']);
+            $this->assertSame([1, 2], [min($rankA, $rankB), max($rankA, $rankB)]);
+            $jade = static fn (int $uid): int => (int)(Redis::getJson('user_trader:' . $uid)['get3'] ?? 0);
+            $jadeB = $jade($b['uid']);
+            $res = $this->bossRequest('countryboss', 'reward', $b['auth']);
+            $row = \Hanjiang\MasterData\CountryBossReward::ROWS[$rankB];
+            $item = \Hanjiang\MasterData\Equip::ROWS[$row['win_item_id']];
+            $this->assertSame([
+                'status' => 1,
+                'reward' => [
+                    'jadetype' => 3,
+                    'jadenum' => (int)ceil($row['win_jade_num'] * 1.5),
+                    'itemid' => $item['id'],
+                    'itemnum' => $row['win_item_num'],
+                    'quality' => $item['quality'],
+                    'itemname' => $item['name'] . '碎片',
+                    'lasthit' => 1,
+                    'hit' => $hitB,
+                    'win' => 1,
+                    'jadename' => '紫宝石',
+                    'rank' => $rankB,
+                ],
+            ], $res);
+            $this->assertSame($jadeB + (int)ceil($row['win_jade_num'] * 1.5), $jade($b['uid']));
+            $this->assertSame(2, $this->bossRequest('countryboss', 'reward', $b['auth'])['status']);
+            $res = $this->bossRequest('countryboss', 'reward', $a['auth']);
+            $this->assertSame([1, 0, $rankA, \Hanjiang\MasterData\CountryBossReward::ROWS[$rankA]['win_jade_num']], [$res['status'], $res['reward']['lasthit'], $res['reward']['rank'], $res['reward']['jadenum']]);
+            // 另一个国家的 BOSS 没死、活动未结束：-1；活动结束后没打过：2
+            $this->assertSame(-1, $this->bossRequest('countryboss', 'reward', $c['auth'])['status']);
+            $this->bossAt('2026-10-30 20:46:00');
+            $this->assertSame(2, $this->bossRequest('countryboss', 'reward', $c['auth'])['status']);
+
+            // 下周五：BOSS 数据已过期重新建档，往周击杀 1 次 → 血量 × 1.03、等级 1
+            $this->bossReset();
+            $this->bossAt('2026-11-06 20:30:30');
+            $res = $this->bossRequest('countryboss', 'index', $a['auth']);
+            $this->assertSame([2, 1, 100], [$res['status'], $res['level'], $res['add']]);
+            $info = \Hanjiang\Model\CountryBoss::bossInfo($country, \Hanjiang\Model\BossClock::now());
+            $this->assertSame([(int)ceil($allblood * 1.03), 1], [$info['allblood'], $info['level']]);
+        } finally {
+            $this->bossReset();
+        }
+    }
+
+    public function testCountryBossPowerupCost(): void
+    {
+        $this->bossReset();
+        try {
+            $p = $this->bossPlayer(55, $this->bossCountry(40));
+            $uid = $p['uid'];
+            DB::table('member')->where('uid', $uid)->update(['silver' => 200000, 'gold' => 30]);
+            $this->bossAt('2026-10-30 20:32:00');
+            $this->assertSame(['status' => 1, 'powerup' => 110, 'all_silver' => 200000 - 55000], $this->bossRequest('countryboss', 'powerup', $p['auth'], ['gold' => 0]));
+            $this->assertSame(['status' => 1, 'powerup' => 120, 'all_gold' => 10], $this->bossRequest('countryboss', 'powerup', $p['auth'], ['gold' => 1]));
+            // 元宝不足：旧版仍返回 all_gold
+            $this->assertSame(['status' => 2, 'powerup' => 0, 'all_gold' => 10], $this->bossRequest('countryboss', 'powerup', $p['auth'], ['gold' => 1]));
+            Redis::set('countryboss_' . $this->towerMember($uid, 'country') . '_power_up_' . $uid, 200, 600);
+            $this->assertSame(['status' => 4, 'powerup' => 200], $this->bossRequest('countryboss', 'powerup', $p['auth'], ['gold' => 0]));
+            $this->assertSame(200000 - 55000, $this->towerMember($uid, 'silver'));
+        } finally {
+            $this->bossReset();
+        }
+    }
+
+    public function testBossStateIsAtomicAcrossProcesses(): void
+    {
+        $this->bossReset();
+        try {
+            $country = $this->bossCountry(40);
+            $p = $this->bossPlayer(60, $country);
+            $uid = $p['uid'];
+            $allblood = \Hanjiang\Model\CountryBoss::bossInfo($country, (int)strtotime('2026-10-30 20:31:00'))['allblood'];
+            \Hanjiang\Model\WorldBoss::bossInfo();
+
+            // 两个进程同时对同一只 BOSS、同一个玩家各记 50 次伤害
+            $procs = [];
+            foreach ([1, 2] as $i) {
+                $procs[] = $this->bossWorker(['hit', $country, $uid, 7, 50]);
+            }
+            foreach ($procs as $proc) {
+                $this->assertStringEndsWith('done', $this->bossWorkerWait($proc));
+            }
+            $this->assertSame(700, \Hanjiang\Model\CountryBoss::myHit($country, $uid));
+            $this->assertSame(1, \Hanjiang\Model\CountryBoss::myRank($country, $uid));
+            $this->assertSame((string)700, \Hanjiang\Model\CountryBoss::topRank($country)[0]['hit']);
+            $this->assertSame($allblood - 700, (int)Redis::hGet('countryboss_' . $country . '_boss_info', 'blood'));
+            $this->assertSame(700, \Hanjiang\Model\WorldBoss::myHit(1, $uid));
+            $this->assertSame('700', \Hanjiang\Model\WorldBoss::rankList(1)[0]['hit']);
+
+            // 两个进程同时领奖：只有一个删到伤害记录（只发一次奖）
+            $procs = [$this->bossWorker(['claim', $uid]), $this->bossWorker(['claim', $uid])];
+            $claimed = array_map(fn ($proc): string => substr($this->bossWorkerWait($proc), -1), $procs);
+            sort($claimed);
+            $this->assertSame(['0', '1'], $claimed);
+            $this->assertSame(0, \Hanjiang\Model\WorldBoss::myHit(1, $uid));
+        } finally {
+            $this->bossReset();
+        }
+    }
+
+    /**
+     * 起一个 tests/Support/boss_worker.php 进程
+     *
+     * @param list<int|string> $args
+     * @return array{0: resource, 1: array<int, resource>}
+     */
+    private function bossWorker(array $args): array
+    {
+        $cmd = array_merge([PHP_BINARY, dirname(__DIR__) . '/Support/boss_worker.php'], array_map('strval', $args));
+        $proc = proc_open($cmd, [1 => ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes);
+        $this->assertIsResource($proc);
+        return [$proc, $pipes];
+    }
+
+    /**
+     * @param array{0: resource, 1: array<int, resource>} $worker
+     */
+    private function bossWorkerWait(array $worker): string
+    {
+        [$proc, $pipes] = $worker;
+        $out = trim((string)stream_get_contents($pipes[1]));
+        $err = trim((string)stream_get_contents($pipes[2]));
+        fclose($pipes[1]);
+        fclose($pipes[2]);
+        $this->assertSame(0, proc_close($proc), $err);
+        return $out;
     }
 
     public function testHiteggSystem(): void

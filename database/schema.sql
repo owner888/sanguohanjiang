@@ -312,7 +312,7 @@ CREATE TABLE `zc_sanguo_member_integral` (
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL,
     UNIQUE KEY `uk_uid` (`uid`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家积分记录表（目前只有演武榜读写 act_arena_int）';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家积分记录表（目前只有演武榜、世界 BOSS 奖励读写 act_arena_int）';
 
 DROP TABLE IF EXISTS `zc_sanguo_integral_log`;
 CREATE TABLE `zc_sanguo_integral_log` (
@@ -783,5 +783,20 @@ CREATE TABLE `zc_sanguo_own_materials_log` (
     `deleted_at` DATETIME DEFAULT NULL,
     INDEX `idx_uid` (`uid`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='打造系统-更新材料log';
+
+-- -------------------------------------------------------------
+-- 国家 BOSS 击杀记录 (对齐原版 zc_sanguo_country_boss_log；世界 / 国家 BOSS 其余状态同旧版存 Redis)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_country_boss_log`;
+CREATE TABLE `zc_sanguo_country_boss_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '自增ID',
+    `country` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '国家id',
+    `ymd` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '击杀日期',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '记录时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_country_ymd` (`country`, `ymd`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国家boss击杀次数记录表';
 
 SET FOREIGN_KEY_CHECKS = 1;

@@ -7,6 +7,7 @@ require_once __DIR__ . '/vendor/autoload.php';
 date_default_timezone_set('Asia/Shanghai');
 
 use Hanjiang\Cron\CountryCron;
+use Hanjiang\Cron\WorldBossCron;
 use Hanjiang\Handler\HandlerRegistry;
 use Hanjiang\Http\Router;
 use Hanjiang\Middleware\AuthMiddleware;
@@ -49,13 +50,24 @@ $httpWorker->onWorkerStart = static function (Worker $worker) use ($dbConfig): v
 
     // 全服每日计划任务只在 #0 号 Worker 上跑，避免多进程重复执行
     if ($worker->id === 0) {
-        $runDaily = static function (): void {
-            CountryCron::clearContribute();
+        // 每天 $hm（时:分）执行一次 $job
+        $daily = static function (string $hm, callable $job): void {
+            $next = strtotime('today ' . $hm);
+            if ($next <= time()) {
+                $next = strtotime('tomorrow ' . $hm);
+            }
+            Timer::add($next - time(), static function () use ($job): void {
+                $job();
+                Timer::add(86400, $job);
+            }, [], false);
         };
-        Timer::add(strtotime('tomorrow') - time(), static function () use ($runDaily): void {
-            $runDaily();
-            Timer::add(86400, $runDaily);
-        }, [], false);
+        $daily('00:00', static function (): void {
+            CountryCron::clearContribute();
+        });
+        // 世界 BOSS：自动发放未领取的奖励并清空世界 BOSS 键（cron_acttask::worldboss）
+        $daily(WorldBossCron::RUN_AT, static function (): void {
+            WorldBossCron::settle(time());
+        });
     }
 };
 

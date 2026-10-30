@@ -27,6 +27,7 @@ use RuntimeException;
  * - forMember     ← init_member_team_info（本体 + 装备 + 阵法 + 模板天赋/技能部分）、_addition_refine
  * - forMonsters   ← init_monster_team_info，以及 battle_mission 里按天赋血量系数放大怪物血量（团战 battle_rush 不放大）
  * - teamReturnArr ← team_return_arr
+ * - forBoss       ← battle_worldboss 的守方组装（世界 BOSS / 国家 BOSS）
  * - unportedUnit  ← 守军尚未按旧版移植的玩法：把新版自定的数值装成与 forMonsters 相同字段的旧版怪物单位
  *
  * 战斗总血量 allblood（_get_general_all_blood）在 BattleEngine::battle 里计算（旧版 battle() 开头）。
@@ -319,6 +320,25 @@ final class TeamBuilder
             $return[$key] = $item;
         }
         return $return;
+    }
+
+    /**
+     * BOSS 守方队伍（移植 battle_model.php:battle_worldboss 的守方部分）
+     *
+     * $bossinfo 为世界 / 国家 BOSS 信息（worldboss_model / countryboss_model->get_boss_info：world_boss 行 + 写死的战斗数值，
+     * blood 为当前剩余血量）。旧版补 power / round = 0、defense1 / defense2 = pdefense / mdefense，固定站 5 号位；
+     * 其余字段原样带入战斗（没有的字段旧版按 null 参与计算）。
+     *
+     * @param array<string, mixed> $bossinfo
+     * @return array<int, array<string, mixed>>
+     */
+    public static function forBoss(array $bossinfo): array
+    {
+        $bossinfo['power'] = 0;
+        $bossinfo['round'] = 0;
+        $bossinfo['defense1'] = $bossinfo['pdefense'];
+        $bossinfo['defense2'] = $bossinfo['mdefense'];
+        return [Position::MidMiddle->value => $bossinfo];
     }
 
     /**

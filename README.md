@@ -161,7 +161,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=strengthen&m=index|strengthen_info|strengthen_start|clear_cd`: Blacksmith ported from the legacy `strengthen.php` (`EquipLevel` cost and success rate, VIP 5 critical +2 levels, writes level / powerup / sale price; legacy servers never applied an enhancement cooldown)
 - `c=tavern&m=index`: General recruitment tavern & guest trade
 - `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`: Martial training grounds, rapid leaps & sweeps, 8-slot unlocks & reincarnation
-- `c=activity&m=index`: Daily special activities overview, schedule windows, and sign-in/boss popo notifications
+- `c=activity&m=index`: Daily special activities overview, schedule windows, and sign-in popo notifications; the world boss entry follows legacy `worldboss_init` (12:00–12:15, 20:00–20:15, popo when a reward is unclaimed)
 - `c=chat&m=read|send`: World and country real-time messaging
 - `c=mainquest&m=index`: Main storyline quest milestones and rewards
 - `c=shop&m=index`: Item mall (legacy `Shop` table: army tallies, equip 7, 9–15, 53–56) & stamina purchasing
@@ -183,7 +183,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=mount&m=index|fit_on|take_down|levelup`: Legendary steeds (Red Hare, Dilu, Jueying), steed riding, and mount stat training
 - `c=gem&m=index|adron|pick_off|merge_gem`: Divine gear gem socketing, unsocketing, and 4-to-1 gem synthesis fusion
 - `c=heaven&m=index|pk|mop_up`: Constellation stargazing, celestial guardian boss battles, and stargazing sweeps
-- `c=worldboss&m=index|powerup|battle|reward`: Server-wide Dong Zhuo World Boss crusade, morale cheers, DPS rankings, and spoils chests
+- `c=worldboss&m=index|powerup|battle|reward`: World boss Xingtian (legacy port, lord level 46+): two sessions a day, 12:00–12:15 and 20:00–20:15, one per player per day; the boss is `WorldBoss` row 1, its health bar drains with the remaining time, and fights use legacy `battle_worldboss` (with battle reports); 60 s revive cooldown (10 gold to revive now), silver (level × 500) / gold (10) cheers of +10% each up to 200%; after the session, arena points by personal total-damage rank (`WorldBossIntreward`, last hit × 1.5). State lives in Redis (legacy key names, atomic accumulation); unclaimed rewards are granted and all keys cleared by the daily 00:30 job (`Hanjiang\Cron\WorldBossCron`, legacy `cron_acttask::worldboss`). `openboss` / `openbossreward` in `c=member&m=index` follow the legacy game
 - `c=siege&m=index|battle_prepare|action|get_reward`: City siege warfare, territory conquest (Luoyang, Chang'an, Puyang), and daily fief tributes
 - `c=gvg&m=index|betting|sync_info`: Guild vs Guild (GVG) cross-server tournament brackets, championship betting, and victory dividends
 - `c=general_inherit&m=index|preview|go_inherit`: Martial inheritance, experience & cultivate stat transfers (Normal 80% & Flawless 100%)
@@ -224,7 +224,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=beatengod&m=index|beaten|get_box_reward`: Golden martial god body beatings, divine crystal drops, and trials chests
 - `c=war&m=index|entry|point_shop`: Three Kingdoms Imperial Capital Cross-Server Holy War, enlistments, and military merit shop
 - `c=countrymine&m=index|caikuang|rob|get_reward|give_up`: Nation border mines (Guan Du, Jian Ge, Chi Bi), convoy plunders, and military revenue harvests
-- `c=countryboss&m=index|powerup|battle|reward`: National divine guardian beast altars (Golden Dragon, Kirin, Fire Phoenix), morale surges, and boss trials
+- `c=countryboss&m=index|powerup|battle|reward`: Country boss Chiyou (legacy port): Fridays 20:30–20:45 for country (player guild) level 40+ and lord level 50+, one boss per country; the boss is `WorldBoss` row 2 with 2 billion × 1.03^(past weekly kills) health (kill log `country_boss_log`), health is decremented atomically and killing it counts as a win; 60 s revive cooldown (20 gold), silver (level × 1000) / gold (20) cheers; the top 50 damage dealers in the country get `CountryBossReward` gems (× 1.1 per 10 kills, last hit × 1.5) and equipment shards
 - `c=hitegg&m=index|hit_egg`: Golden fortune egg smashings, hammer strikes, and silver/gold crit explosions
 - `c=levelgift&m=index|get_reward`: Lord level-up milestone packages (Levels 5, 10, 20, 30, 40, 50) and growth funds
 - `c=countryshop&m=index|buy`: National prestige tax shops, red artifact blueprints, and military provisions
@@ -294,7 +294,7 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] Six-Stage Pass General campaign (`pass_general`) and dynamic storyline quests (`mainquest`)
 - [x] Player-founded nation (guild) system (`country`), soul fate constellation empowerments (`soul`), and warlord marrow cleansing cultivation (`cultivate`)
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
-- [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and server-wide Dong Zhuo World Boss crusade (`worldboss`)
+- [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and world boss Xingtian (`worldboss`)
 - [x] Legion territorial siege warfare (`siege`), GVG cross-server championship tournament betting (`gvg`)
 - [x] Built-in golden flowing marquee banner UI renderer in `ws_client.js` with hardware-accelerated broadcast animations
 - [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge rebate & Fate Wheel (`first_recharge`), and maritime silk road (`overseastrade`)
@@ -308,7 +308,7 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] Epic holy wars & overseas frontiers: Gold & Silver treasure islands (`island`), Hero Throne dominance (`herothrone`), martial god golden body trials (`beatengod`), and Imperial Capital Holy War (`war`)
 - [x] Protocol & media fidelity: HTTP 206 Partial Content byte-range media streaming, Web Audio capture unlock, classic hero asset binding (`HERO_CONFIGS`), levelup exp bar normalization, and defeat zero-yield rule
 
-- [x] Border battlegrounds & growth milestones: Nation border mines (`countrymine`), national beast altars (`countryboss`), golden egg smashings (`hitegg`), and level-up milestone packages (`levelgift`)
+- [x] Border battlegrounds & growth milestones: Nation border mines (`countrymine`), country boss Chiyou (`countryboss`), golden egg smashings (`hitegg`), and level-up milestone packages (`levelgift`)
 - [x] National trade & celestial forges: National prestige stores (`countryshop`), gear fabrications (`equip_forge`), continuous login festivals (`totallogin`), and historical epics (`epic`)
 - [x] Operational giftings & achievement telemetry: Universal CDKeys (`activationcode`), military drills (`exercise`), lord combat overview (`information`), and brotherhood recruitment (`invitation`)
 - [x] Lightweight domain thin models (`src/Model/`) with native `SoftDeletes`, automatic type casting, and encapsulated domain methods (`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`)

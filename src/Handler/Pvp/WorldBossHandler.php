@@ -5,185 +5,409 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Pvp;
 
 use Hanjiang\Handler\City\MemberHandler;
-
-use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Position;
-use Hanjiang\Battle\TeamBuilder;
-use OmniPHP\Cache\Redis;
+use Hanjiang\Model\BossClock;
+use Hanjiang\Model\Member;
+use Hanjiang\Model\WorldBoss;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
+/**
+ * 世界 BOSS 刑天（移植旧版 controllers/worldboss.php，状态见 Model\WorldBoss）
+ *
+ * 每天 12:00~12:15、20:00~20:15 两场（activity_model->_boss_time），每人每天只能参加其中一场：
+ * 12:00 场有伤害记录或领过奖的玩家晚上仍按 12:00 场处理（已结束）。BOSS 血量 9 万亿、血条按剩余时间自然减少，
+ * 打不死；按个人累计伤害排名发演武榜积分（world_boss_intreward），最后一击 × 1.5。
+ * 未领取的奖励由 Cron\WorldBossCron 次日凌晨自动发放并清空全部世界 BOSS 键。
+ *
+ * 客户端调用：index、battle、powerup、reward（bossworld.js / bossbandpop.js / miscpop.js）。
+ * 旧版的 clean（diy=1 清空全部世界 BOSS 键）与 power_up_pay（银币鼓舞价格，控制器内部用）客户端不调用，不对外暴露。
+ * 旧版控制器的 _online 在线检查已注释（恒为 0），对应的 status 2 分支不移植。
+ */
 final class WorldBossHandler
 {
-    public const int TOTAL_HP = 500000;
+    /** 立即复活花费元宝 */
+    private const int RELIVE_COST = 10;
+    /** 复活间隔时间 */
+    private const int RELIVE_TIME = 60;
+    /** 元宝鼓舞花费 */
+    private const int POWERUP_GOLD_COST = 10;
 
     /**
-     * 世界 BOSS 主界面: c=worldboss&m=index
+     * 初始化接口: c=worldboss&m=index
+     *
+     * status	6 主公等级太低
+     *			5 今日已参加过活动
+     *			4 活动已结束
+     *			3 活动未开启
+     *			2 战斗准备
+     *			1 领取奖励
      */
     public static function index(Context $ctx): array
     {
-        $uid = MemberHandler::resolveUid($ctx);
-        $bossHp = (int)(Redis::get('worldboss_hp') ?: self::TOTAL_HP);
-        $myBuff = (int)(Redis::get('worldboss_buff:' . $uid) ?: 0);
-        $myDamage = (int)(Redis::get('worldboss_dmg:' . $uid) ?: 0);
-
-        return [
-            'status' => 1,
-            'boss_name' => '极·魔王董卓',
-            'total_hp' => self::TOTAL_HP,
-            'current_hp' => max(0, $bossHp),
-            'hp_percent' => round(max(0, $bossHp) / self::TOTAL_HP * 100, 1),
-            'is_alive' => ($bossHp > 0) ? 1 : 0,
-            'my_buff_percent' => $myBuff,
-            'my_damage' => $myDamage,
-            'top_ranks' => [
-                ['rank' => 1, 'name' => '常山赵子龙', 'damage' => 125000],
-                ['rank' => 2, 'name' => '诸葛孔明', 'damage' => 98000],
-                ['rank' => 3, 'name' => '关云长', 'damage' => 86000],
-            ],
-            'message' => 'ok',
+        $now = BossClock::now();
+        $return = [
+            'status' => 0,
+            'countdown' => 0,		// 活动倒计时（单位：秒) status=2时有效
+            'powerup' => 100,		// 攻击力加成百分比（单位 %）status=2时有效
+            'bossinfo' => [],		// boss信息数组 status=2时有效
+            'reward' => [],			// 奖励信息 status=1时有效
+            'top' => [],			// top排行 status=1时有效
+            'cd' => 0,				// 复活CD
+            'upcost' => [],			// 鼓舞花费
+            'cdcost' => 0,			// 复活花费
+            'my' => [],				// 玩家伤害排名信息
         ];
+        $member = self::member(MemberHandler::resolveUid($ctx));
+        if ($member === null || (int)$member['level'] < WorldBoss::OPEN_LEVEL) {
+            $return['status'] = 6;
+            return $return;
+        }
+        $uid = (int)$member['uid'];
+        $state = WorldBoss::context($uid, $now);
+        $phase = $state['phase'];
+
+        if ($state['countdown'] === -1) {
+            // 活动未开启
+            $return['status'] = 3;
+        } elseif ($state['countdown'] === 0) {
+            if (WorldBoss::myHit($phase, $uid) === 0) {
+                if ($state['played'] === 1) {
+                    // 已参加过活动
+                    $return['status'] = 5;
+                } elseif (date('Hi', $now) > '2015') {
+                    // 活动已结束
+                    $return['status'] = 4;
+                } else {
+                    // 活动未开启
+                    $return['status'] = 3;
+                }
+            } else {
+                // 参加活动未领取奖励
+                $return['status'] = 1;
+                [$return['top'], $return['reward']] = self::rewardView($phase, $uid);
+            }
+            // 最后一击公告只发一次（final_horn）；依赖未移植：发送公告 chat_model->get_message_str(12, from 最后一击玩家) + send_message_to_all(…, 7)
+            WorldBoss::finalUid($phase);
+        } else {
+            // boss信息
+            $bossInfo = WorldBoss::bossInfo();
+            if ((int)($bossInfo['allblood'] ?? 0) <= 0) {
+                // 活动未结束 boss已经死了（旧版总血量写死 9 万亿，不会出现）
+                if (WorldBoss::myHit($phase, $uid) === 0) {
+                    // 已参加过活动 / 活动已结束
+                    $return['status'] = $state['played'] === 1 ? 5 : 4;
+                } else {
+                    // 参加活动未领取奖励
+                    $return['status'] = 1;
+                    [$return['top'], $return['reward']] = self::rewardView($phase, $uid);
+                }
+                return $return;
+            }
+            // 活动进行中 准备数据
+            $return['status'] = 2;
+            $return['countdown'] = $state['countdown'];
+            // 鼓舞
+            $return['powerup'] = WorldBoss::powerUp($phase, $uid);
+            $bossInfo['blood'] = sprintf('%.2f', $bossInfo['blood'] * 100 / $bossInfo['allblood']);
+            foreach (['name', 'blood', 'image'] as $value) {
+                $return['bossinfo'][$value] = $bossInfo[$value];
+            }
+            $delay = WorldBoss::checkDelay($phase, $uid);
+            $return['cd'] = 0;
+            if ($delay > 0 && self::RELIVE_TIME > $delay) {
+                $return['cd'] = self::RELIVE_TIME - $delay + 1;
+            }
+            $return['cdcost'] = self::RELIVE_COST;
+            $return['upcost']['gold'] = self::POWERUP_GOLD_COST;
+            $return['upcost']['silver'] = self::powerUpPay($member);
+            $return['top'] = self::topRank($phase, 3);
+            $return['my']['rank'] = WorldBoss::myRank($phase, $uid);
+            $return['my']['hit'] = WorldBoss::myHit($phase, $uid);
+        }
+        return $return;
     }
 
     /**
-     * 鼓舞士气: c=worldboss&m=powerup
-     */
-    public static function powerup(Context $ctx): array
-    {
-        $uid = MemberHandler::resolveUid($ctx);
-        $member = DB::table('member')->where('uid', $uid)->first();
-        $costSilver = 5000;
-
-        if ((int)($member['silver'] ?? 0) < $costSilver) {
-            return ['status' => -1, 'message' => "银两不足，鼓舞士气需要 {$costSilver} 银两"];
-        }
-
-        $myBuff = (int)(Redis::get('worldboss_buff:' . $uid) ?: 0);
-        if ($myBuff >= 100) {
-            return ['status' => 0, 'message' => '士气鼓舞已达 100% 满额状态'];
-        }
-
-        $newBuff = min(100, $myBuff + 20);
-        Redis::set('worldboss_buff:' . $uid, (string)$newBuff, 86400);
-
-        $newSilver = (int)$member['silver'] - $costSilver;
-        DB::table('member')->where('uid', $uid)->update(['silver' => $newSilver]);
-        Redis::del('player:' . $uid);
-
-        return [
-            'status' => 1,
-            'buff_percent' => $newBuff,
-            'silver' => $newSilver,
-            'message' => "战意昂扬！士气鼓舞成功，全军伤害提升至 +{$newBuff}%！",
-        ];
-    }
-
-    /**
-     * 发起世界 BOSS 讨伐战: c=worldboss&m=battle
+     * 战斗: c=worldboss&m=battle
+     *
+     * status	5 活动结束
+     *			4 boss已经死了
+     *			3 金币不足
+     *			2 等待复活CD
+     *			1 成功进入战斗
      */
     public static function battle(Context $ctx): array
     {
-        $uid = MemberHandler::resolveUid($ctx);
-        $member = DB::table('member')->where('uid', $uid)->first();
-        $bossHp = (int)(Redis::get('worldboss_hp') ?: self::TOTAL_HP);
-
-        if ($bossHp <= 0) {
-            return ['status' => 0, 'message' => '魔王董卓已被击败，请等待明日刷新！'];
+        $now = BossClock::now();
+        $return = ['status' => 0, 'info' => [], 'battle' => []];
+        $member = self::member(MemberHandler::resolveUid($ctx));
+        if ($member === null) {
+            $return['status'] = 5;
+            return $return;
+        }
+        $uid = (int)$member['uid'];
+        $state = WorldBoss::context($uid, $now);
+        $phase = $state['phase'];
+        if ($state['countdown'] <= 0) {
+            // 活动结束
+            $return['status'] = 5;
+            return $return;
         }
 
-        $myBuff = (int)(Redis::get('worldboss_buff:' . $uid) ?: 0);
-        $buffMultiplier = 1.0 + ($myBuff / 100);
+        $relive = (int)$ctx->input('now', 0);
 
-        // 1. 我方队伍（旧版 worldboss 控制器走 battle_model->battle_worldboss：init_member_team_info，PVE）
-        $left = TeamBuilder::forMember($uid, pve: true);
-        if ($left['status'] === -1 || $left['status'] === -3) {
-            // 旧版 battle_model 返回 -1（没有阵法）/ -3（武将信息错误）；本玩法尚未按旧版控制器移植，直接回传该状态
-            return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
+        // 检查战斗锁 + 战斗处理锁（1 秒）
+        if (!WorldBoss::battleLock($uid)) {
+            $return['status'] = 2;
+            $return['info']['cd'] = 61;
+            return $return;
         }
-        // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
+        // 获取boss信息
+        $bossInfo = WorldBoss::bossInfo();
+        if ((int)($bossInfo['allblood'] ?? 0) <= 0) {
+            // boss已经死了
+            $return['status'] = 4;
+            return $return;
+        }
+        if (WorldBoss::isFinalHorn($phase)) {
+            $return['status'] = 4;
+            return $return;
+        }
 
-        // 2. 世界 BOSS 董卓
-        // 依赖未移植：旧版世界 BOSS 信息取自 world_boss 配置（battle_worldboss 的 $bossinfo），本玩法的数值是新版自定的；站位按旧版 5 号位
-        // 依赖未移植：守军数值仍为新版自定
-        $rightTeam = [Position::MidMiddle->value => TeamBuilder::unportedUnit(9999, '极·魔王董卓', 50000, 450, 200)];
+        if ($relive !== 0) {
+            // 立即复活
+            if (!Member::deductCurrency($uid, gold: self::RELIVE_COST)) {
+                // 金币不足
+                $return['status'] = 3;
+                return $return;
+            }
+            // 依赖未移植：元宝流水 gold_log（member_model->sub_gold）、消费统计 stat_model->worldboss_relive
+            $return['info']['all_gold'] = self::gold($uid);
+        } else {
+            // 正常进入战斗：检查cd
+            $delay = WorldBoss::checkDelay($phase, $uid);
+            if ($delay > 0 && $delay < self::RELIVE_TIME) {
+                // 等待CD进入战斗
+                $return['status'] = 2;
+                $return['info']['cd'] = self::RELIVE_TIME - $delay + 1;
+                return $return;
+            }
+        }
 
-        // 3. 推演（旧版 battle_worldboss：_boss_battle = 1，鼓舞系数 _attack_coe 乘到双方伤害上；本玩法的鼓舞系数是新版自定的）
-        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe'], attackCoe: $buffMultiplier, bossBattle: 1);
-        $battle = $engine->battle($left['team'], $rightTeam);
+        /* 正常战斗处理 */
+        $return['status'] = 1;
+        // 战斗攻击加成系数
+        $attackCoe = WorldBoss::powerUp($phase, $uid) / 100;
+        // 战斗（battle_model->battle_worldboss：_pve = 1，_boss_battle = 1）
+        $info = WorldBoss::battle($uid, $bossInfo, $attackCoe, 1);
 
-        // 本次对 BOSS 造成的伤害（旧版 worldboss 控制器：左方出手记录里 self = 0 的 hurt.blood 之和）
-        $damageDealt = 0;
-        foreach ($battle['process'] as $value) {
+        // 记录伤害
+        $hit = $blood = 0;
+        foreach ($info['process'] ?? [] as $key => $value) {
             if ($value['launch'] === 'left') {
                 foreach ($value['hurt'] as $v) {
-                    if (isset($v['self']) && $v['self'] === 0) {
-                        $damageDealt += $v['blood'];
+                    if (isset($v['self']) && $v['self'] == 0) {
+                        $hit += $v['blood'];
+                        $blood += $v['blood'];
                     }
+                }
+                $percent = sprintf('%.2f', $blood * 100 / $bossInfo['allblood']);
+                if ($percent > 0.01) {
+                    $info['process'][$key]['hurt'][0]['percent'] = $percent;
+                    $blood = 0;
                 }
             }
         }
-        $damageDealt = max(500, $damageDealt);
-
-        $newBossHp = max(0, $bossHp - $damageDealt);
-        Redis::set('worldboss_hp', (string)$newBossHp, 86400);
-
-        $oldDmg = (int)(Redis::get('worldboss_dmg:' . $uid) ?: 0);
-        $newDmg = $oldDmg + $damageDealt;
-        Redis::set('worldboss_dmg:' . $uid, (string)$newDmg, 86400);
-
-        // 奖励银两
-        $rewardSilver = (int)round($damageDealt * 0.5);
-        DB::table('member')->where('uid', $uid)->update([
-            'silver' => (int)($member['silver'] ?? 0) + $rewardSilver,
-        ]);
-        Redis::del('player:' . $uid);
-
-        if ($newBossHp <= 0) {
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "天地同庆！魔王董卓已被各路诸侯全歼！最终致命一击由主公【{$pName}】达成！",
-                'type' => 'system_broadcast',
-            ]);
+        if ($info !== null) {
+            foreach ($info['rightteam'] as $key => $value) {
+                $info['rightteam'][$key]['allblood'] = sprintf('%.2f', $bossInfo['blood'] * 100 / $bossInfo['allblood']);
+                $info['rightteam'][$key]['herotype'] = 0;
+            }
+            foreach ($info['rightresult'] as $key => $value) {
+                $info['rightresult'][$key]['allblood'] = 100;
+                $info['rightresult'][$key]['blood'] = sprintf('%.2f', $value['blood'] * 100 / $bossInfo['allblood']);
+                $info['rightresult'][$key]['herotype'] = 0;
+            }
         }
+        WorldBoss::updateMyHit($phase, $uid, $hit, $state['countdown']);
 
-        return [
-            'status' => 1,
-            'damage_dealt' => $damageDealt,
-            'boss_remain_hp' => $newBossHp,
-            'total_damage' => $newDmg,
-            'reward_silver' => $rewardSilver,
-            'message' => "讨伐激战结束！对魔王董卓造成了 {$damageDealt} 点巨额伤害！获得功勋银两 {$rewardSilver}！",
-        ];
+        // 依赖未移植：主线任务 mainquest_model->task_action(11, 1)（参加一次世界BOSS）
+        // 依赖未移植：日常任务 task_model->task_action(12)（主公 41 级以上）
+
+        $return['battle'] = $info;
+        $return['info']['win'] = $info['assess'] ?? null;
+        return $return;
     }
 
     /**
-     * 领取世界 BOSS 宝箱: c=worldboss&m=reward
+     * 鼓舞: c=worldboss&m=powerup
+     *
+     * status	1 鼓舞成功
+     *			2 金币不足
+     *			3 银币不足
+     *			4 鼓舞达到上限
+     */
+    public static function powerup(Context $ctx): array
+    {
+        $now = BossClock::now();
+        $return = ['status' => 0, 'powerup' => 0];
+        $member = self::member(MemberHandler::resolveUid($ctx));
+        if ($member === null) {
+            return $return;
+        }
+        $uid = (int)$member['uid'];
+        $phase = WorldBoss::context($uid, $now)['phase'];
+        $powerup = WorldBoss::powerUp($phase, $uid);
+        if ($powerup >= WorldBoss::POWER_UP_MAX) {
+            $return['status'] = 4;
+            $return['powerup'] = $powerup;
+            return $return;
+        }
+        $gold = (bool)$ctx->input('gold', 0);
+        $silver = 0;
+        $goldCost = 0;
+        if ($gold) {
+            $goldCost = self::POWERUP_GOLD_COST;
+            if (!Member::deductCurrency($uid, gold: $goldCost)) {
+                // 金币不足
+                $return['status'] = 2;
+            } else {
+                $return['all_gold'] = self::gold($uid);
+                // 依赖未移植：元宝流水 gold_log、消费统计 stat_model->worldboss_powerup
+            }
+        } else {
+            $silver = self::powerUpPay($member);
+            if (!Member::deductCurrency($uid, silver: $silver)) {
+                // 银币不足
+                $return['status'] = 3;
+            } else {
+                $return['all_silver'] = (int)DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('silver');
+            }
+        }
+        if ($return['status'] === 0) {
+            $newPowerup = WorldBoss::incrPowerUp($phase, $uid);
+            if ($newPowerup === null) {
+                // 并发鼓舞已到上限：退回本次花费
+                Member::addCurrency($uid, silver: $gold ? 0 : $silver, gold: $goldCost);
+                unset($return['all_gold'], $return['all_silver']);
+                $return['status'] = 4;
+                $return['powerup'] = WorldBoss::powerUp($phase, $uid);
+                return $return;
+            }
+            // 鼓舞成功
+            $return['status'] = 1;
+            $return['powerup'] = $newPowerup;
+        }
+        return $return;
+    }
+
+    /**
+     * 领取奖励: c=worldboss&m=reward
+     *
+     * status	1 领取成功（演武榜积分）
+     *			2 没有参与活动 或 已经领取奖励
      */
     public static function reward(Context $ctx): array
     {
-        $uid = MemberHandler::resolveUid($ctx);
-        $myDmg = (int)(Redis::get('worldboss_dmg:' . $uid) ?: 0);
-
-        if ($myDmg <= 0) {
-            return ['status' => 0, 'message' => '未参与世界 BOSS 讨伐战，无战利品可领'];
+        $now = BossClock::now();
+        $return = ['status' => 0, 'reward' => []];
+        $member = self::member(MemberHandler::resolveUid($ctx));
+        if ($member === null) {
+            $return['status'] = 2;
+            return $return;
         }
+        $uid = (int)$member['uid'];
+        $state = WorldBoss::context($uid, $now);
+        $phase = $state['phase'];
+        // 活动结束且有伤害记录的情况才能领取奖励
+        if ($state['countdown'] <= 0 && WorldBoss::myHit($phase, $uid) > 0) {
+            $reward = WorldBoss::reward($phase, $uid);
+            // 删除伤害记录，防止重复领取
+            if ($reward['intnum'] > 0 && WorldBoss::delMyHit($phase, $uid)) {
+                // 获得演武榜积分
+                $return['status'] = 1;
+                $return['reward']['intnum'] = $reward['intnum'];
+                WorldBoss::addArenaInt($uid, $reward['intnum'], 'worldboss', 'reward', $now);
+            } else {
+                $return['status'] = 2;
+            }
+        } else {
+            $return['status'] = 2;
+        }
+        return $return;
+    }
 
-        $rewardSilver = 10000;
-        $rewardGold = 50;
+    /**
+     * 伤害榜与奖励（index status 1：活动结束后，或 boss 已死）
+     *
+     * 我不在 TOP 5 时：伤害不小于上榜最小伤害的，显示为「上榜最小伤害 × (100 - 名次) / 100」（旧版同）。
+     *
+     * @return array{0: list<array<string, mixed>>, 1: array<string, mixed>}
+     */
+    private static function rewardView(int $phase, int $uid): array
+    {
+        $top = self::topRank($phase);
+        $find = false;
+        $topHit = 0;
+        $myrank = 0;
+        $myhit = 0;
+        foreach ($top as $value) {
+            if ((int)$value['uid'] === $uid) {
+                $myrank = $value['rank'];
+                $myhit = (int)$value['hit'];
+                $find = true;
+            }
+            if ($topHit === 0 || $topHit > (int)$value['hit']) {
+                $topHit = (int)$value['hit'];
+            }
+        }
+        if (!$find) {
+            $myrank = WorldBoss::myRank($phase, $uid);
+            $myhit = WorldBoss::myHit($phase, $uid);
+            if ($myhit >= $topHit) {
+                $myhit = (int)($topHit * (100 - $myrank) / 100);
+            }
+        }
+        $reward = WorldBoss::reward($phase, $uid);
+        $reward['rank'] = $myrank;
+        $reward['hit'] = $myhit;
+        return [$top, $reward];
+    }
 
-        $member = DB::table('member')->where('uid', $uid)->first();
-        DB::table('member')->where('uid', $uid)->update([
-            'silver' => (int)($member['silver'] ?? 0) + $rewardSilver,
-            'gold' => (int)($member['gold'] ?? 0) + $rewardGold,
-        ]);
-        Redis::del('player:' . $uid);
+    /**
+     * TOP 5 排行，前 $num 名补玩家信息（控制器 get_top_rank）
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function topRank(int $phase, int $num = 5): array
+    {
+        return WorldBoss::withMemberInfo(WorldBoss::rankList($phase, WorldBoss::HIT_TOP_NUM), $num);
+    }
 
-        return [
-            'status' => 1,
-            'silver' => $rewardSilver,
-            'gold' => $rewardGold,
-            'message' => "成功领取世界 BOSS 功勋宝箱！获得银两 {$rewardSilver}、元宝 {$rewardGold}！",
-        ];
+    /**
+     * 银币鼓舞花费（power_up_pay）
+     *
+     * @param array<string, mixed> $member
+     */
+    private static function powerUpPay(array $member): int
+    {
+        return (int)$member['level'] * 500;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function member(int $uid): ?array
+    {
+        if ($uid <= 0) {
+            return null;
+        }
+        return DB::table('member')->select('uid', 'nickname', 'level', 'gender', 'gold', 'silver', 'country')
+            ->where('uid', $uid)->whereNull('deleted_at')->first();
+    }
+
+    private static function gold(int $uid): int
+    {
+        return (int)DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('gold');
     }
 }

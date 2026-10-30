@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\City;
 
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\General;
 use Hanjiang\Model\OwnMatrix;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\WorldBoss;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 use OmniPHP\Cache\Redis;
@@ -41,7 +43,8 @@ final class MemberHandler
         $cached = Redis::getJson($cacheKey);
         if (is_array($cached)) {
             $cached['timestamp'] = time();
-            return $cached;
+            // 世界 BOSS 开启 / 领奖标识随时间变化，不走缓存
+            return array_merge($cached, WorldBoss::memberInit($uid, (int)($cached['level'] ?? 0), BossClock::now()));
         }
 
         // 2. 从 MySQL 数据库读取
@@ -148,6 +151,9 @@ final class MemberHandler
             'first_recharge_an' => 0,
             'new_role_reward' => 0,
             'opennewyearboss' => 0,
+            // 世界 BOSS 开启状态（旧版 member.php:worldboss_init）
+            'openboss' => 0,
+            'openbossreward' => 0,
             'daily_task' => [
                 'status' => 0,
                 'number' => 0,
@@ -177,7 +183,7 @@ final class MemberHandler
         // 存入 Redis 缓存，TTL 1小时
         Redis::setJson($cacheKey, $data, 3600);
 
-        return $data;
+        return array_merge($data, WorldBoss::memberInit($uid, $level, BossClock::now()));
     }
 
     /**
