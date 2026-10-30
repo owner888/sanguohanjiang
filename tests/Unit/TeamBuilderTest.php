@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Tests\Unit;
 
-use Hanjiang\Battle\Hero;
+use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\MasterData\Mission;
 use Hanjiang\MasterData\Monster;
@@ -129,8 +129,6 @@ final class TeamBuilderTest extends TestCase
         $this->assertSame(95, $liao['defense1']);     // 90 + 赤铜甲 5
         $this->assertSame(99, $liao['defense2']);     // 90 + 苍狼披风 9
         $this->assertSame(780, $liao['all_blood']);   // 780 + 无兵符 0
-        // intval(780 × (1 + 71 × 0.002) × 平庸 1.0) = intval(890.76) = 890；ptblood 0 → 890
-        $this->assertSame(890, $liao['allblood']);
         $this->assertSame(81, $liao['wuli']);
         $this->assertSame(36, $liao['zhili']);
         $this->assertSame(71, $liao['tili']);
@@ -143,8 +141,6 @@ final class TeamBuilderTest extends TestCase
         $this->assertSame(179, $zhou['defense1']);    // 90 + 犀牛宝甲 89
         $this->assertSame(99, $zhou['defense2']);     // 90 + 苍狼披风 9
         $this->assertSame(780, $zhou['all_blood']);
-        // intval(780 × (1 + 79 × 0.002) × 悍勇 1.1) = intval(903.24 × 1.1) = intval(993.564) = 993
-        $this->assertSame(993, $zhou['allblood']);
         $this->assertSame(0, $zhou['star']);
 
         $zhang = $built['team'][6];
@@ -153,11 +149,15 @@ final class TeamBuilderTest extends TestCase
         $this->assertSame(90, $zhang['defense1']);
         $this->assertSame(90, $zhang['defense2']);
         $this->assertSame(780, $zhang['all_blood']);
-        // intval(780 × (1 + 93 × 0.002) × 坚强 1.0) = intval(925.08) = 925
-        $this->assertSame(925, $zhang['allblood']);
+        $this->assertArrayNotHasKey('allblood', $zhang, '总血量在 battle() 开头计算');
 
-        // team_return_arr
-        $ret = TeamBuilder::teamReturnArr($built['team']);
+        // battle() 开头的 _get_general_all_blood（对空队伍推演只做初始化）+ team_return_arr
+        $ret = (new BattleEngine())->battle($built['team'], [])['leftteam'];
+        // intval(780 × (1 + 71 × 0.002) × 平庸 1.0) = intval(890.76) = 890；ptblood 0 → 890
+        $this->assertSame(890, $ret[2]['allblood']);
+        // intval(780 × (1 + 93 × 0.002) × 坚强 1.0) = intval(925.08) = 925
+        $this->assertSame(925, $ret[6]['allblood']);
+        // intval(780 × (1 + 79 × 0.002) × 悍勇 1.1) = intval(903.24 × 1.1) = intval(993.564) = 993
         $this->assertSame([
             'heroid' => (string)$this->gid[5],
             'name' => '周仓',
@@ -172,15 +172,6 @@ final class TeamBuilderTest extends TestCase
             'quality' => '1',
         ], $ret[4]);
         $this->assertArrayNotHasKey('blood', $ret[4]);
-
-        // 临时适配层：hp ← allblood、def ← (物防 + 策防) / 2、speed ← 10 - 站位
-        $heroes = TeamBuilder::heroes($built['team'], $built['matrix_type'], $built['matrix_coe']);
-        $this->assertInstanceOf(Hero::class, $heroes[4]);
-        $this->assertSame(993, $heroes[4]->maxHp);
-        $this->assertSame(358, $heroes[4]->attack);
-        $this->assertSame(139, $heroes[4]->defense);  // intdiv(179 + 99, 2)
-        $this->assertSame(6, $heroes[4]->speed);
-        $this->assertSame(1, $heroes[4]->matrixType);
     }
 
     public function testRefineStrengthenAchievementAndRefineAchievement(): void
@@ -194,7 +185,8 @@ final class TeamBuilderTest extends TestCase
             'level' => 0, 'power' => 100, 'powerup' => 100, 'saleprice' => 0, 'hammer' => 1, 'generalid' => $this->gid[5],
         ]);
 
-        $zhou = TeamBuilder::forMember(self::UID)['team'][4];
+        $built = TeamBuilder::forMember(self::UID);
+        $zhou = $built['team'][4];
         // 劈山刀 精炼 2 级（refine_promote percent 25）：round((178 - 18) × 25 / 100) = 40
         //        强化成就取 aid 最大的 2（type1 = 1 与装备类型相同，add_per1 = 10）：round((178 + 40) × 10 / 100) = round(21.8) = 22
         // 精炼成就：4 件装备有精炼，去重后最低精炼等级 1 ≥ refine_achieve 1 级（level 1）：武力 +10、智力 +10、物攻 +500、策攻 +500
@@ -209,7 +201,7 @@ final class TeamBuilderTest extends TestCase
         $this->assertSame(98, $zhou['wuli']);   // 88 + 10
         $this->assertSame(45, $zhou['zhili']);  // 35 + 10
         // intval(880 × (1 + 79 × 0.002) × 1.1) = intval(1019.04 × 1.1) = intval(1120.944) = 1120
-        $this->assertSame(1120, $zhou['allblood']);
+        $this->assertSame(1120, (new BattleEngine())->battle($built['team'], [])['leftteam'][4]['allblood']);
     }
 
     public function testStarAndPveMatrixCap(): void

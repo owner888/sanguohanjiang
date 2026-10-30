@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -84,7 +83,6 @@ final class TowerHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 构建守关敌将
         $bossHp = 1000 + $floor * 250;
@@ -93,21 +91,19 @@ final class TowerHandler
         $bossName = ($floor % 5 === 0) ? '镇塔神将·第' . $floor . '重' : '守塔凶兽·第' . $floor . '层';
 
         // 依赖未移植：旧版 tower 守军取 soul_mission 的 position1~9 → soul_monster（TeamBuilder::MONSTER_SOUL），本玩法的楼层与守军数值是新版自定的，对不上旧版关卡
-        $rightHeroes = [
-            Hero::unported(9000 + $floor, $bossName, Position::FrontMiddle, $bossHp, $bossAtk, $bossDef),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(9000 + $floor, $bossName, $bossHp, $bossAtk, $bossDef)];
 
         // 3. 确定性纯内存九宫格推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         if (!$isWin) {
             return [
                 'status' => 1,
                 'win' => -1,
                 'floor' => $floor,
-                'rounds' => $simResult['rounds'],
                 'message' => '挑战失败，请强化装备、调整阵型后再来挑战！',
             ];
         }
@@ -145,7 +141,6 @@ final class TowerHandler
             'next_floor' => $newFloor,
             'silver' => $rewardSilver,
             'soul' => $rewardSoul,
-            'rounds' => $simResult['rounds'],
             'message' => "试炼塔第 {$floor} 层大获全胜！获得银两 {$rewardSilver}，将魂 {$rewardSoul}！",
         ];
     }

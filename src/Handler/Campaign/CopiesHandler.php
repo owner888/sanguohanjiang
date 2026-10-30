@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -65,18 +64,16 @@ final class CopiesHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 叛军叛将
         // 依赖未移植：旧版新副本守军取 copies_info 的 position1~9 → copies_info（TeamBuilder::MONSTER_COPIES），本玩法的关卡 id 与守军数值是新版自定的，对不上旧版关卡
-        $rightHeroes = [
-            Hero::unported(1500 + $cfg['id'], $cfg['name'], Position::FrontMiddle, $cfg['hp'], $cfg['attack'], $cfg['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(1500 + $cfg['id'], $cfg['name'], $cfg['hp'], $cfg['attack'], $cfg['defense'])];
 
         // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         Redis::set('copies_times:' . $uid, (string)($times - 1), 86400);
 
@@ -84,7 +81,6 @@ final class CopiesHandler
             return [
                 'status' => 1,
                 'win' => -1,
-                'rounds' => $simResult['rounds'],
                 'message' => "平乱受挫，叛军军势甚锐，请整军备武再行出征！",
             ];
         }
@@ -98,7 +94,6 @@ final class CopiesHandler
             'copy_name' => $cfg['name'],
             'silver' => $rewardSilver,
             'drop' => $cfg['drop'],
-            'rounds' => $simResult['rounds'],
             'message' => "平乱大捷！扫灭【{$cfg['name']}】，缴获军饷 {$rewardSilver}、珍稀战利品【{$cfg['drop']}】！",
         ];
     }

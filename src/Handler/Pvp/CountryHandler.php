@@ -1577,9 +1577,7 @@ final class CountryHandler
                 $return['status'] = -3;
                 return $return;
             }
-            unset($battle['status']);
-
-            if ((int)$battle['assess'] >= 1) {
+            if ((int)$battle['info']['assess'] >= 1) {
                 if (self::updateMemberInfo(['job' => $job], $myUid) !== 1) {
                     $return['status'] = -9;
                     return $return;
@@ -1599,8 +1597,8 @@ final class CountryHandler
                 return $return;
             }
 
-            $battleInfo = ['win' => $battle['assess']];
-            $return['battle'] = $battle;
+            $battleInfo = ['win' => $battle['info']['assess']];
+            $return['battle'] = $battle['info'];
             $return['battle']['left_role'] = [
                 'name' => $self['nickname'],
                 'level' => (int)$self['level'],
@@ -3146,14 +3144,13 @@ final class CountryHandler
     }
 
     /**
-     * 玩家对战（移植 battle_model->battle_pk 的组队与状态判断），双方以各自阵法出战
+     * 玩家对战（移植 battle_model->battle_pk），双方以各自阵法出战
      *
      * 旧版 battle_pk 先按左侧 check_user_team 设 status，再被右侧的结果覆盖：
      * 只有右侧（被挑战方）-1（没有阵法）/ -3（武将信息错误）时返回失败；任一侧 -2（阵法里没有武将）或左侧 -1 / -3
      * 都按空队伍继续战斗（空队伍直接判负）。这里照旧版保留该行为。
-     * 依赖未移植：process 战斗过程格式与 leftbuff / rightbuff（P5 移植 battle()），这里返回 BattleEngine 的 logs。
      *
-     * @return array<string, mixed> status 1 成功，否则为旧版 battle_pk 的失败状态
+     * @return array{status: int, info?: array<string, mixed>} status 1 成功（info 为旧版 battle() 的战斗结果），否则为旧版 battle_pk 的失败状态
      */
     private static function battlePk(int $uid, int $touid): array
     {
@@ -3163,20 +3160,11 @@ final class CountryHandler
             return ['status' => $right['status']];
         }
 
-        $leftHeroes = TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']);
-        $rightHeroes = TeamBuilder::heroes($right['team'], $right['matrix_type'], $right['matrix_coe']);
-        $engine = new BattleEngine(array_values($leftHeroes), array_values($rightHeroes));
-        $sim = $engine->simulate();
+        // 攻方阵法记在左侧、守方（init_member_team_info($touid, 1)）记在右侧
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe'], $right['matrix_type'], $right['matrix_coe']);
         return [
             'status' => 1,
-            'leftteam' => TeamBuilder::teamReturnArr($left['team']),
-            'rightteam' => TeamBuilder::teamReturnArr($right['team']),
-            'assess' => $sim['assess'],
-            'leftresult' => TeamBuilder::teamReturnArr($left['team'], true, $leftHeroes),
-            'rightresult' => TeamBuilder::teamReturnArr($right['team'], true, $rightHeroes),
-            'win' => $sim['win'] ? 1 : 0,
-            'rounds' => $sim['rounds'],
-            'logs' => $sim['logs'],
+            'info' => $engine->battle($left['team'], $right['team']),
         ];
     }
 

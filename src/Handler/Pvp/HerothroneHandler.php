@@ -6,7 +6,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -60,24 +59,21 @@ final class HerothroneHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 王座守将
         // 依赖未移植：旧版英雄王座守军取 herothrone_mission 的 position1~9 → herothrone_monster（TeamBuilder::MONSTER_HEROTHRONE），本玩法的关卡 id 与守军数值是新版自定的，对不上旧版关卡
-        $rightHeroes = [
-            Hero::unported(7500 + $cfg['id'], $cfg['defender'], Position::FrontMiddle, $cfg['hp'], $cfg['attack'], $cfg['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(7500 + $cfg['id'], $cfg['defender'], $cfg['hp'], $cfg['attack'], $cfg['defense'])];
 
         // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         if (!$isWin) {
             return [
                 'status' => 1,
                 'win' => -1,
-                'rounds' => $simResult['rounds'],
                 'message' => "登顶冲击失败，惜败于【{$cfg['defender']}】！",
             ];
         }
@@ -102,7 +98,6 @@ final class HerothroneHandler
             'throne_name' => $cfg['name'],
             'silver' => $cfg['silver'],
             'reputation' => $cfg['rep'],
-            'rounds' => $simResult['rounds'],
             'message' => "霸主加冕！成功击败守将，登顶【{$cfg['name']}】！斩获银两 {$cfg['silver']}、声望 {$cfg['rep']}！",
         ];
     }

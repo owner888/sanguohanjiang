@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -95,24 +94,21 @@ final class CountryMineHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 敌国矿山护卫
         // 依赖未移植：旧版抢矿对手是占矿玩家（battle_pk(mine_log.uid)），本玩法的护卫与数值是新版自定的
-        $rightHeroes = [
-            Hero::unported(7700 + $mineId, '敌国护矿校尉', Position::FrontMiddle, 2500, 340, 130),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(7700 + $mineId, '敌国护矿校尉', 2500, 340, 130)];
 
         // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         if (!$isWin) {
             return [
                 'status' => 1,
                 'win' => -1,
-                'rounds' => $simResult['rounds'],
                 'message' => '掠夺战役惜败，敌国防备森严，撤军休整！',
             ];
         }
@@ -130,7 +126,6 @@ final class CountryMineHandler
             'status' => 1,
             'win' => 1,
             'rob_silver' => $robSilver,
-            'rounds' => $simResult['rounds'],
             'message' => "突袭大捷！成功抢夺敌国矿饷 {$robSilver} 银两、功勋声望 +50！",
         ];
     }

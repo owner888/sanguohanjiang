@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -98,26 +97,25 @@ final class CountryBossHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        // 临时适配（P5 删除）：旧版鼓舞系数 _attack_coe 在 process_hurt 里乘到伤害上，当前引擎没有该入口，暂乘到攻击上
-        foreach ($left['team'] as $pos => $unit) {
-            $left['team'][$pos]['attack'] = (int)round($unit['attack'] * $buffMul);
-        }
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 国家守护神兽
         // 依赖未移植：旧版国家 BOSS 信息取自 countryboss 配置（battle_worldboss 的 $bossinfo），本玩法的数值是新版自定的；站位按旧版 5 号位
-        $rightHeroes = [
-            Hero::unported(8800 + $country, '护国圣兽真身', Position::MidMiddle, 30000, 400, 180),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::MidMiddle->value => TeamBuilder::unportedUnit(8800 + $country, '护国圣兽真身', 30000, 400, 180)];
 
-        // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes, maxRounds: 8);
-        $simResult = $engine->simulate();
+        // 3. 推演（旧版 battle_worldboss($bossinfo, $attack_coe, 0, 1)：_boss_battle = 2，鼓舞系数 _attack_coe 乘到双方伤害上；本玩法的鼓舞系数是新版自定的）
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe'], attackCoe: $buffMul, bossBattle: 2);
+        $battle = $engine->battle($left['team'], $rightTeam);
 
+        // 本次对神兽造成的伤害（旧版 countryboss 控制器同 worldboss：左方出手记录里 self = 0 的 hurt.blood 之和）
         $dmg = 0;
-        foreach ($simResult['logs'] as $log) {
-            if ($log['side'] === 'left') {
-                $dmg += (int)$log['damage'];
+        foreach ($battle['process'] as $value) {
+            if ($value['launch'] === 'left') {
+                foreach ($value['hurt'] as $v) {
+                    if (isset($v['self']) && $v['self'] === 0) {
+                        $dmg += $v['blood'];
+                    }
+                }
             }
         }
         $dmg = max(500, $dmg);
@@ -136,7 +134,6 @@ final class CountryBossHandler
             'damage' => $dmg,
             'boss_remain_hp' => $newHp,
             'silver' => $rewardSilver,
-            'rounds' => $simResult['rounds'],
             'message' => "试炼对决结束！对护国神兽造成 {$dmg} 点伤害，荣获军功银饷 {$rewardSilver}！",
         ];
     }

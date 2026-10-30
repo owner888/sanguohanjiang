@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -103,27 +102,25 @@ final class WorldBossHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        // 临时适配（P5 删除）：旧版鼓舞系数 _attack_coe 在 process_hurt 里乘到伤害上，当前引擎没有该入口，暂乘到攻击上
-        foreach ($left['team'] as $pos => $unit) {
-            $left['team'][$pos]['attack'] = (int)round($unit['attack'] * $buffMultiplier);
-        }
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 世界 BOSS 董卓
         // 依赖未移植：旧版世界 BOSS 信息取自 world_boss 配置（battle_worldboss 的 $bossinfo），本玩法的数值是新版自定的；站位按旧版 5 号位
-        $rightHeroes = [
-            Hero::unported(9999, '极·魔王董卓', Position::MidMiddle, 50000, 450, 200),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::MidMiddle->value => TeamBuilder::unportedUnit(9999, '极·魔王董卓', 50000, 450, 200)];
 
-        // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes, maxRounds: 10);
-        $simResult = $engine->simulate();
+        // 3. 推演（旧版 battle_worldboss：_boss_battle = 1，鼓舞系数 _attack_coe 乘到双方伤害上；本玩法的鼓舞系数是新版自定的）
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe'], attackCoe: $buffMultiplier, bossBattle: 1);
+        $battle = $engine->battle($left['team'], $rightTeam);
 
-        // 计算本次对 BOSS 造成的伤害
+        // 本次对 BOSS 造成的伤害（旧版 worldboss 控制器：左方出手记录里 self = 0 的 hurt.blood 之和）
         $damageDealt = 0;
-        foreach ($simResult['logs'] as $log) {
-            if ($log['side'] === 'left') {
-                $damageDealt += (int)$log['damage'];
+        foreach ($battle['process'] as $value) {
+            if ($value['launch'] === 'left') {
+                foreach ($value['hurt'] as $v) {
+                    if (isset($v['self']) && $v['self'] === 0) {
+                        $damageDealt += $v['blood'];
+                    }
+                }
             }
         }
         $damageDealt = max(500, $damageDealt);
@@ -156,7 +153,6 @@ final class WorldBossHandler
             'boss_remain_hp' => $newBossHp,
             'total_damage' => $newDmg,
             'reward_silver' => $rewardSilver,
-            'rounds' => $simResult['rounds'],
             'message' => "讨伐激战结束！对魔王董卓造成了 {$damageDealt} 点巨额伤害！获得功勋银两 {$rewardSilver}！",
         ];
     }

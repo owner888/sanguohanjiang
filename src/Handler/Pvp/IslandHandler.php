@@ -6,7 +6,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -65,18 +64,16 @@ final class IslandHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 护岛神兽
         // 依赖未移植：旧版金银洞守军取 island 关卡的 position1~9 → island_monster（TeamBuilder::MONSTER_ISLAND），本玩法的关卡 id 与守军数值是新版自定的，对不上旧版关卡
-        $rightHeroes = [
-            Hero::unported(6500 + $cfg['id'], $cfg['boss'], Position::FrontMiddle, $cfg['hp'], $cfg['attack'], $cfg['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(6500 + $cfg['id'], $cfg['boss'], $cfg['hp'], $cfg['attack'], $cfg['defense'])];
 
         // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         Redis::set('island_times:' . $uid, (string)($times - 1), 86400);
 
@@ -84,7 +81,6 @@ final class IslandHandler
             return [
                 'status' => 1,
                 'win' => -1,
-                'rounds' => $simResult['rounds'],
                 'message' => "探索海岛遭遇重创，未能击退【{$cfg['boss']}】！",
             ];
         }
@@ -108,7 +104,6 @@ final class IslandHandler
             'island_name' => $cfg['name'],
             'silver' => $rewardSilver,
             'gold' => $rewardGold,
-            'rounds' => $simResult['rounds'],
             'message' => "海外探险大获全胜！征服【{$cfg['name']}】，斩获银两 {$rewardSilver}、元宝 {$rewardGold}！",
         ];
     }

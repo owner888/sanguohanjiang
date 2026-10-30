@@ -6,7 +6,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -73,25 +72,22 @@ final class HeavenHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 构建星宿守护天神
         // 依赖未移植：旧版通天塔守军取 heaven_mission 的 position1~9 → heaven_monster（TeamBuilder::MONSTER_HEAVEN），本玩法的关卡 id 与守军数值是新版自定的，对不上旧版关卡
-        $rightHeroes = [
-            Hero::unported(7000 + $cfg['id'], $cfg['name'], Position::FrontMiddle, $cfg['hp'], $cfg['attack'], $cfg['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(7000 + $cfg['id'], $cfg['name'], $cfg['hp'], $cfg['attack'], $cfg['defense'])];
 
         // 3. 纯内存九宫格推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         if (!$isWin) {
             return [
                 'status' => 1,
                 'win' => -1,
                 'star_id' => $starId,
-                'rounds' => $simResult['rounds'],
                 'message' => "观星挑战【{$cfg['name']}】失败，星宿神力浩瀚，请择日再战！",
             ];
         }
@@ -113,7 +109,6 @@ final class HeavenHandler
             'star_name' => $cfg['name'],
             'silver' => $rewardSilver,
             'next_star' => $nextStar,
-            'rounds' => $simResult['rounds'],
             'message' => "天降吉兆！成功突破星宿【{$cfg['name']}】，获得天命银两 {$rewardSilver}！",
         ];
     }

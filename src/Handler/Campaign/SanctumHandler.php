@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -69,25 +68,22 @@ final class SanctumHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 圣域神尊
         // 依赖未移植：旧版四象圣域守军取 sanctum_mission 的 position1~9 → sanctum_monster（TeamBuilder::MONSTER_SANCTUM），本玩法的关卡 id 与守军数值是新版自定的，对不上旧版关卡
-        $rightHeroes = [
-            Hero::unported(5000 + $cfg['id'], $cfg['boss'], Position::FrontMiddle, (int)$cfg['hp'], (int)$cfg['attack'], (int)$cfg['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(5000 + $cfg['id'], $cfg['boss'], (int)$cfg['hp'], (int)$cfg['attack'], (int)$cfg['defense'])];
 
         // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         if (!$isWin) {
             return [
                 'status' => 1,
                 'win' => -1,
                 'realm_id' => $realmId,
-                'rounds' => $simResult['rounds'],
                 'message' => "挑战【{$cfg['boss']}】失败，圣尊神威浩瀚，请强化阵型再战！",
             ];
         }
@@ -123,7 +119,6 @@ final class SanctumHandler
             'boss_name' => $cfg['boss'],
             'silver' => $rewardSilver,
             'gold' => $rewardGold,
-            'rounds' => $simResult['rounds'],
             'message' => "大捷！成功突破【{$cfg['name']}】，击溃【{$cfg['boss']}】！获得银两 {$rewardSilver}、元宝 {$rewardGold}！",
         ];
     }

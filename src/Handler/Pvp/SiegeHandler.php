@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -90,7 +89,6 @@ final class SiegeHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 构建守城军团守军
         $defLvl = (int)$city['defense_level'];
@@ -99,14 +97,13 @@ final class SiegeHandler
         $enemyDef = 90 + $defLvl * 20;
 
         // 依赖未移植：旧版攻城对手是城主玩家（battle_pk(old_king.uid)）或 battle_rush 多人混战，本玩法的守军与数值是新版自定的
-        $rightHeroes = [
-            Hero::unported(6000 + $cityId, $city['occupier_name'], Position::FrontMiddle, $enemyHp, $enemyAtk, $enemyDef),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(6000 + $cityId, $city['occupier_name'], $enemyHp, $enemyAtk, $enemyDef)];
 
         // 3. 确定性推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         if (!$isWin) {
             return [
@@ -137,7 +134,6 @@ final class SiegeHandler
             'city_id' => $cityId,
             'city_name' => $city['name'],
             'new_occupier' => $nickname,
-            'rounds' => $simResult['rounds'],
             'message' => "破城大捷！成功击溃守军，【{$city['name']}】正式归入主公麾下统治！",
         ];
     }

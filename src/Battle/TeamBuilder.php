@@ -24,11 +24,12 @@ use RuntimeException;
 /**
  * 战斗队伍组装（逐段移植旧版 models/battle_model.php，路径相对旧版 s1/application/）
  *
- * - forMember     ← init_member_team_info（本体 + 装备 + 阵法 + 模板天赋/技能部分）、_addition_refine，
- *                   以及 battle() 开头的 _get_general_all_blood
+ * - forMember     ← init_member_team_info（本体 + 装备 + 阵法 + 模板天赋/技能部分）、_addition_refine
  * - forMonsters   ← init_monster_team_info，以及 battle_mission 里按天赋血量系数放大怪物血量
  * - teamReturnArr ← team_return_arr
- * - heroes        ← 把旧版队伍交给当前 BattleEngine（经 Hero::fromUnit 的临时适配层）
+ * - unportedUnit  ← 守军尚未按旧版移植的玩法：把新版自定的数值装成与 forMonsters 相同字段的旧版怪物单位
+ *
+ * 战斗总血量 allblood（_get_general_all_blood）在 BattleEngine::battle 里计算（旧版 battle() 开头）。
  *
  * 队伍结构同旧版：[站位 1~9 => 单位数组]。
  */
@@ -215,10 +216,6 @@ final class TeamBuilder
             // 依赖未移植：坐骑模板特殊属性（攻击% / 双防% / 抗暴 / 血量% / 抗晕 / 减伤 / 吸血）
             $general['attack'] += 0;
 
-            // 旧版在 battle() 开头计算总血量（_get_general_all_blood）；这里提前算好，P5 移植 battle() 时挪回去
-            $general['allblood'] = self::generalAllBlood($general);
-            $general['blood'] = $general['allblood'];
-
             $team[$pos] = $general;
         }
 
@@ -288,13 +285,12 @@ final class TeamBuilder
      *
      * 旧版直接输出 MySQL 行，库字段是字符串：heroid / name / herotype / level / image / quality 按字符串输出；
      * allblood / power / star / blood 按整数输出。天赋 / 技能名不存在时为 null（旧版同）。
-     * $result 为真时附带战后剩余血量 blood，取自 $heroes（站位 => Hero）的 currentHp。
+     * $result 为真时附带当前血量 blood（BattleEngine 用战后队伍调用：阵亡单位已移出队伍，士气为战后士气）。
      *
      * @param array<int, array<string, mixed>> $team
-     * @param array<int, Hero> $heroes
      * @return array<int, array<string, mixed>>
      */
-    public static function teamReturnArr(array $team, bool $result = false, array $heroes = []): array
+    public static function teamReturnArr(array $team, bool $result = false): array
     {
         $return = [];
         foreach ($team as $key => $value) {
@@ -312,7 +308,7 @@ final class TeamBuilder
                 'quality' => isset($value['quality']) ? (string)$value['quality'] : 1,
             ];
             if ($result) {
-                $item['blood'] = isset($heroes[$key]) ? max(0, $heroes[$key]->currentHp) : (int)$value['blood'];
+                $item['blood'] = (int)$value['blood'];
             }
             $return[$key] = $item;
         }
@@ -320,34 +316,42 @@ final class TeamBuilder
     }
 
     /**
-     * 旧版队伍 → 当前 BattleEngine 的战斗单位（站位 => Hero），换算见 Hero::fromUnit 的临时适配层
+     * 守军尚未按旧版移植的玩法用的单位：字段与 forMonsters 的输出相同，数值是调用方新版自定的
      *
-     * @param array<int, array<string, mixed>> $team
-     * @return array<int, Hero>
-     */
-    public static function heroes(array $team, int $matrixType = 0, float $matrixCoe = 0.0): array
-    {
-        $heroes = [];
-        foreach ($team as $pos => $unit) {
-            $heroes[$pos] = Hero::fromUnit($pos, $unit, $matrixType, $matrixCoe);
-        }
-        return $heroes;
-    }
-
-    /**
-     * 战斗总血量（移植 battle_model.php:_get_general_all_blood）
+     * 依赖未移植：调用方的怪物 / 守军数值。旧版字段除 attack / blood / pdefense / mdefense 外按 0 记
+     * （type 0 按旧版 process_hurt 的非猛将分支比智力、取策攻系数；talentid 0 时旧版 process_hurt 不给防御赋值，防御按 0 计）。
+     * 移植该玩法的怪物表后改用 forMonsters。
      *
-     * @param array<string, mixed> $general
+     * @return array<string, mixed>
      */
-    private static function generalAllBlood(array $general): int
+    public static function unportedUnit(int $id, string $name, int $hp, int $attack, int $defense): array
     {
-        // 旧版天赋不存在时系数取到 null（按 0 参与乘法），这里同样按 0
-        $talentBlood = (float)(Talent::ROWS[(int)$general['talentid']]['blood'] ?? 0);
-        // 依赖未移植：名将进阶血量加成 skill4_value（主公 100 级）
-        $advancedBlood = 0.0;
-        // 依赖未移植：ptblood = 将魂生命(4) + 神树 buff + 套装 / 坐骑血量%
-        $ptblood = 0.0;
-        return LegacyStats::battleAllBlood((float)$general['all_blood'], (int)$general['tili'], $talentBlood, $advancedBlood, $ptblood);
+        return [
+            'id' => $id,
+            'name' => $name,
+            'image' => '',
+            'level' => 0,
+            'blood' => $hp,
+            'wuli' => 0,
+            'zhili' => 0,
+            'type' => 0,
+            'attack' => $attack,
+            'pdefense' => $defense,
+            'mdefense' => $defense,
+            'talentid' => 0,
+            'skillid' => 0,
+            'power' => 0,
+            'mingzhong' => 0,
+            'kangyun' => 0,
+            'quality' => 0,
+            'allblood' => $hp,
+            'round' => 0,
+            'defense1' => $defense,
+            'defense2' => $defense,
+            'dodge' => 0,
+            'penetrate' => 0,
+            'star' => 0,
+        ];
     }
 
     /**

@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Activity;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -82,18 +81,16 @@ final class EliteHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 精英据点守军
         // 依赖未移植：旧版多人副本走 battle_rush + elite_monster（EliteMission / EliteMonster），本玩法的关卡与守军数值是新版自定的
-        $rightHeroes = [
-            Hero::unported(2000 + $cfg['id'], $cfg['name'], Position::FrontMiddle, $cfg['hp'], $cfg['attack'], $cfg['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(2000 + $cfg['id'], $cfg['name'], $cfg['hp'], $cfg['attack'], $cfg['defense'])];
 
         // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         Redis::set('elite_times:' . $uid, (string)($times - 1), 86400);
 
@@ -101,7 +98,6 @@ final class EliteHandler
             return [
                 'status' => 1,
                 'win' => -1,
-                'rounds' => $simResult['rounds'],
                 'message' => "精英战役惜败于【{$cfg['name']}】，请强化装备再来挑战！",
             ];
         }
@@ -115,7 +111,6 @@ final class EliteHandler
             'map_name' => $cfg['name'],
             'silver' => $cfg['silver'],
             'drop' => $cfg['drop'],
-            'rounds' => $simResult['rounds'],
             'message' => "精英战役大捷！击破【{$cfg['name']}】，斩获银两 {$cfg['silver']} 与珍稀战利品【{$cfg['drop']}】！",
         ];
     }

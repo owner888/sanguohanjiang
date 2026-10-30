@@ -58,7 +58,8 @@ public/                  # Static assets & game client (index.html, static/js, c
 src/
 ├── Battle/              # Pure memory deterministic combat simulator
 │   ├── BattleEngine.php # Core simulation ported & typed from battle_model.php
-│   ├── Hero.php         # Immutable/state-controlled combat entity
+│   ├── LegacyStats.php  # Legacy stat formulas (general / equipment / hp)
+│   ├── TeamBuilder.php  # Legacy team building (init_member/monster_team_info)
 │   └── Position.php     # 9-grid tactical position enum (1-9)
 ├── Middleware/          # Middleware pipeline
 │   ├── MiddlewareInterface.php

@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -105,25 +104,22 @@ final class PassGeneralHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 构建守关大将
         // 依赖未移植：旧版 pass_general 无战斗，守关大将与数值是新版自定的
-        $rightHeroes = [
-            Hero::unported(8000 + $bossConfig['id'], $bossConfig['name'], Position::FrontMiddle, (int)$bossConfig['hp'], (int)$bossConfig['attack'], (int)$bossConfig['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(8000 + $bossConfig['id'], $bossConfig['name'], (int)$bossConfig['hp'], (int)$bossConfig['attack'], (int)$bossConfig['defense'])];
 
         // 3. 确定性纯内存九宫格推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         if (!$isWin) {
             return [
                 'status' => 1,
                 'win' => -1,
                 'pass_id' => $targetPass,
-                'rounds' => $simResult['rounds'],
                 'message' => "挑战守将【{$bossConfig['name']}】惜败，请调整武将站位再来挑战！",
             ];
         }
@@ -161,7 +157,6 @@ final class PassGeneralHandler
             'silver' => $rewardSilver,
             'gold' => $rewardGold,
             'box' => $bossConfig['box'],
-            'rounds' => $simResult['rounds'],
             'message' => "成功斩杀守关大将【{$bossConfig['name']}】！开启【{$bossConfig['box']}】，获得银两 {$rewardSilver}" . ($rewardGold > 0 ? "、元宝 {$rewardGold}" : '') . "！",
         ];
     }

@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -68,24 +67,21 @@ final class EpicHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 敌军
         // 依赖未移植：旧版 epic 无战斗，敌军与数值是新版自定的
-        $rightHeroes = [
-            Hero::unported(9500 + $cfg['id'], $cfg['boss'], Position::FrontMiddle, $cfg['hp'], $cfg['attack'], $cfg['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(9500 + $cfg['id'], $cfg['boss'], $cfg['hp'], $cfg['attack'], $cfg['defense'])];
 
         // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         if (!$isWin) {
             return [
                 'status' => 1,
                 'win' => -1,
-                'rounds' => $simResult['rounds'],
                 'message' => "史诗战役【{$cfg['name']}】冲击受挫，请调整阵型战位！",
             ];
         }
@@ -114,7 +110,6 @@ final class EpicHandler
             'epic_name' => $cfg['name'],
             'silver' => $rewardSilver,
             'gold' => $rewardGold,
-            'rounds' => $simResult['rounds'],
             'message' => "史诗战役大捷！成功通关【{$cfg['name']}】，斩获银两 {$rewardSilver}、元宝 {$rewardGold}！",
         ];
     }

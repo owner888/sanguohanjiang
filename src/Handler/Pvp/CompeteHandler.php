@@ -7,7 +7,6 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 
 use Hanjiang\Battle\BattleEngine;
-use Hanjiang\Battle\Hero;
 use Hanjiang\Battle\Position;
 use Hanjiang\Battle\TeamBuilder;
 use OmniPHP\Cache\Redis;
@@ -78,18 +77,16 @@ final class CompeteHandler
             return ['status' => $left['status'], 'message' => '出战阵容信息错误'];
         }
         // -2（阵法里没有武将）旧版按空队伍继续战斗，空队伍直接判负
-        $leftHeroes = array_values(TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']));
 
         // 2. 对手
         // 依赖未移植：旧版比武对手是其他玩家（battle_pk($touid)），本玩法的对手与数值是新版自定的
-        $rightHeroes = [
-            Hero::unported(4000 + $cfg['id'], $cfg['name'], Position::FrontMiddle, $cfg['hp'], $cfg['attack'], $cfg['defense']),
-        ];
+        // 依赖未移植：守军数值仍为新版自定
+        $rightTeam = [Position::FrontMiddle->value => TeamBuilder::unportedUnit(4000 + $cfg['id'], $cfg['name'], $cfg['hp'], $cfg['attack'], $cfg['defense'])];
 
         // 3. 推演
-        $engine = new BattleEngine($leftHeroes, $rightHeroes);
-        $simResult = $engine->simulate();
-        $isWin = $simResult['win'];
+        $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+        $battle = $engine->battle($left['team'], $rightTeam);
+        $isWin = $battle['assess'] >= 1;
 
         // 扣除挑战次数
         Redis::set('compete_times:' . $uid, (string)($times - 1), 86400);
@@ -98,7 +95,6 @@ final class CompeteHandler
             return [
                 'status' => 1,
                 'win' => -1,
-                'rounds' => $simResult['rounds'],
                 'message' => "比武单挑惜败于【{$cfg['name']}】，请重整旗鼓再来挑战！",
             ];
         }
@@ -121,7 +117,6 @@ final class CompeteHandler
             'add_score' => 50,
             'current_score' => $newScore,
             'silver' => $rewardSilver,
-            'rounds' => $simResult['rounds'],
             'message' => "旗开得胜！力斩对手【{$cfg['name']}】，比武积分 +50，获得胜者银两 {$rewardSilver}！",
         ];
     }
