@@ -76,7 +76,7 @@ CREATE TABLE `zc_sanguo_member_field` (
     `practicetime` INT UNSIGNED NOT NULL DEFAULT 0,
     `freeleap` INT NOT NULL DEFAULT 10,
     `leaptimes` INT NOT NULL DEFAULT 0,
-    `rank` INT NOT NULL DEFAULT 1,
+    `rank` INT NOT NULL DEFAULT 0 COMMENT '演武榜排名（zc_sanguo_arena.rank，0 为未入榜）',
     `newresult` INT NOT NULL DEFAULT 0,
     `gift` INT NOT NULL DEFAULT 0,
     `race` TINYINT NOT NULL DEFAULT 0,
@@ -232,23 +232,103 @@ CREATE TABLE `zc_sanguo_practice` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演武场修炼表';
 
 -- -------------------------------------------------------------
--- 9. 竞技场排行榜表
+-- 9. 演武榜 (对齐原版 zc_sanguo_arena / arena_log / arena_paylog / arena_exchange_log / member_integral / integral_log)
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `zc_sanguo_arena`;
 CREATE TABLE `zc_sanguo_arena` (
-    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-    `uid` INT UNSIGNED NOT NULL,
-    `username` VARCHAR(64) NOT NULL DEFAULT '',
-    `rank` INT UNSIGNED NOT NULL DEFAULT 1,
-    `times` INT NOT NULL DEFAULT 15 COMMENT '剩余挑战次数',
-    `dateline` INT UNSIGNED NOT NULL DEFAULT 0,
-    `get_time` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '上次领俸禄时间戳',
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户id',
+    `username` VARCHAR(64) NOT NULL DEFAULT '' COMMENT '用户名（入榜时的昵称）',
+    `win` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '连胜次数',
+    `rank` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '排名',
+    `total_rank` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '历史最高排名',
+    `times` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '剩余次数',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '最后挑战时间（跨天重置剩余次数的依据）',
+    `get_time` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '最后领取奖励时间',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL,
     UNIQUE KEY `uk_uid` (`uid`),
     INDEX `idx_rank` (`rank`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='竞技场排位表';
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='竞技场数据表';
+
+DROP TABLE IF EXISTS `zc_sanguo_arena_log`;
+CREATE TABLE `zc_sanguo_arena_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT 'logid',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户ID',
+    `type` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1攻击2防御',
+    `win` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1胜利2失败',
+    `rank` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '变化后的排名',
+    `userid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '对方用户id',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '挑战时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='竞技场挑战记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_arena_paylog`;
+CREATE TABLE `zc_sanguo_arena_paylog` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '记录id',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '用户id',
+    `times` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '本日购买次数',
+    `total_times` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '总共购买次数',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '最后购买时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='竞技场次数购买记录表';
+
+DROP TABLE IF EXISTS `zc_sanguo_arena_exchange_log`;
+CREATE TABLE `zc_sanguo_arena_exchange_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '自增ID',
+    `pid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '商品ID（MasterData ArenaExchange）',
+    `ptype` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '商品类型：1，每日刷新数量；2，限量；',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '角色UID',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '购买时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='演武榜积分商城商品兑换日志表';
+
+DROP TABLE IF EXISTS `zc_sanguo_member_integral`;
+CREATE TABLE `zc_sanguo_member_integral` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '自增ID',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '角色UID',
+    `act_kemari_int` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '蹴鞠奖券积分',
+    `act_arena_int` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '演武榜积分',
+    `beauty_rose` BIGINT NOT NULL DEFAULT 0 COMMENT '铜雀台玫瑰花数量',
+    `beauty_diamond` BIGINT NOT NULL DEFAULT 0 COMMENT '铜雀台钻石数量',
+    `pass_general_int` INT NOT NULL DEFAULT 0 COMMENT '过关斩将积分',
+    `general` INT NOT NULL DEFAULT 0 COMMENT '将军令',
+    `candy` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '万圣节糖果',
+    `hammer` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '万圣节锤子',
+    `medal` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '万圣节奖章',
+    `god_soul` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '神将魂魄',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家积分记录表（目前只有演武榜读写 act_arena_int）';
+
+DROP TABLE IF EXISTS `zc_sanguo_integral_log`;
+CREATE TABLE `zc_sanguo_integral_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY COMMENT '主键',
+    `uid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '角色UID',
+    `type` INT NOT NULL DEFAULT 0 COMMENT '记录类型：1，增加；2，消耗；',
+    `argument` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '积分字段（zc_sanguo_member_integral 的列名）',
+    `class` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '访问控制器',
+    `method` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '访问方法',
+    `intnum` BIGINT NOT NULL DEFAULT 0 COMMENT '增加/减少积分值',
+    `balance` BIGINT NOT NULL DEFAULT 0 COMMENT '积分变化后的值',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '积分变化时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    INDEX `idx_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='玩家积分日志表';
 
 -- -------------------------------------------------------------
 -- 10. 征战地图关卡表

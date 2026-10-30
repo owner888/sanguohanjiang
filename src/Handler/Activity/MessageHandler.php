@@ -227,10 +227,12 @@ final class MessageHandler
     /**
      * 投递系统类信件（旧版 message_model->send_message 中 type 1/2/7/8 的发件人取系统定义名字，fromuid=1000）
      *
+     * 其余类型（如 4 演武榜）旧版发件人为当前玩家：传 $fromuid / $fromname 为玩家本人。
+     *
      * @param list<int> $touids
      * @return int 信件 id
      */
-    public static function sendSystemMessage(array $touids, int $type, string $fromname, string $message, int $report = 0): int
+    public static function sendSystemMessage(array $touids, int $type, string $fromname, string $message, int $report = 0, int $fromuid = 1000): int
     {
         $now = time();
         $id = (int)(microtime(true) * 1000) % 10000000;
@@ -239,7 +241,7 @@ final class MessageHandler
             $messages = Redis::getJson($key) ?: [];
             $messages[] = [
                 'id' => $id,
-                'fromuid' => 1000,
+                'fromuid' => $fromuid,
                 'touid' => $touid,
                 'fromname' => $fromname,
                 'toname' => '',

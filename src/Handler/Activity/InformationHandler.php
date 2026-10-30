@@ -35,11 +35,8 @@ final class InformationHandler
         }
 
         $field = DB::table('member_field')->where('uid', $targetUid)->whereNull('deleted_at')->first();
+        // 旧版 information.php：演武榜排名取 member_field.rank（未入榜为 0）
         $rank = (int)($field['rank'] ?? 0);
-        if ($rank <= 0) {
-            $arena = DB::table('arena')->where('uid', $targetUid)->first();
-            $rank = (int)($arena['rank'] ?? 1);
-        }
 
         $countryId = (int)($member['country'] ?? 0);
         $countryName = DB::table('country')->where('id', $countryId)->whereNull('deleted_at')->value('name') ?? '';

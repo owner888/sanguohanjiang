@@ -165,7 +165,8 @@ final class RegisterHandler
             'practiceall' => 2,
             'practicenow' => 0,
             'practicetime' => 0,
-            'rank' => 1,
+            // 旧版注册不写演武榜排名（默认 0），升到 26 级入榜时才写
+            'rank' => 0,
             'newresult' => 0,
             'gift' => 0,
             'race' => 0,

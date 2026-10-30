@@ -92,7 +92,7 @@ final class MainquestHandler
             3 => DB::table('equipment')->where('uid', $uid)->where('level', '>=', 2)->count() >= 1,
             4 => DB::table('general')->where('uid', $uid)->where('goout', 1)->whereNull('deleted_at')->count() >= 2,
             5 => (function () use ($uid): bool {
-                $a = DB::table('arena')->where('uid', $uid)->first();
+                $a = DB::table('arena')->where('uid', $uid)->whereNull('deleted_at')->first();
                 return $a !== null && ((int)$a['times'] < 15 || (int)$a['dateline'] > 0);
             })(),
             6 => (function () use ($uid): bool {

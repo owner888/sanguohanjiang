@@ -136,7 +136,7 @@ final class MemberHandler
                     return max(0, (int)($field['practicetime'] ?? 0) - time()); // 剩余倒计时秒数
                 })(),
             ],
-            'rank' => (int)($field['rank'] ?? 1),
+            'rank' => (int)($field['rank'] ?? 0),
             'newresult' => (int)($field['newresult'] ?? 0),
             'gift' => (int)($field['gift'] ?? 0),
             'race' => (int)($field['race'] ?? 0),

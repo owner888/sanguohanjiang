@@ -43,9 +43,8 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │       ├── js/data/ini.js   # Master combat formulas & hero attributes (442KB)
 │       └── js/view/         # Client views (battleworld, cityworld, mapworld)
 ├── src/
-│   ├── Battle/              # Deterministic 9-grid combat engine
-│   │   ├── BattleEngine.php # Core simulation logic (ported from battle_model.php)
-│   │   ├── Hero.php         # Combat unit (legacy fields + temporary adapter for the current engine)
+│   ├── Battle/              # 9-grid combat engine (legacy battle_model port, injectable RNG)
+│   │   ├── BattleEngine.php # Legacy battle() / process / process_effect / process_hurt port; outputs the legacy battle report
 │   │   ├── Position.php     # 9-grid tactical positions (1-9) enum
 │   │   ├── LegacyStats.php  # Legacy general/equipment formulas (pure functions, each cites its legacy source)
 │   │   └── TeamBuilder.php  # Legacy team building (player / monster teams, team_return_arr)
@@ -102,7 +101,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
-   Upgrading an existing database instead: apply the files in `database/migrations/` that are newer than your schema, in filename order (each file header says what it does). `20261031_general_equip_legacy_cols.sql` assumes general/equipment rows are test data: it truncates both tables and re-issues every player the legacy starting general. `20261031_matrix_legacy.sql` converts the one-row-per-player `matrix` table to legacy per-formation rows, fills `member_field.matrixid` from the old row, rebuilds `general.goout` from the old `pos` / formation slots, then drops `general.pos` / `general.matrix_id`.
+   Upgrading an existing database instead: apply the files in `database/migrations/` that are newer than your schema, in filename order (each file header says what it does). `20261031_general_equip_legacy_cols.sql` assumes general/equipment rows are test data: it truncates both tables and re-issues every player the legacy starting general. `20261031_matrix_legacy.sql` converts the one-row-per-player `matrix` table to legacy per-formation rows, fills `member_field.matrixid` from the old row, rebuilds `general.goout` from the old `pos` / formation slots, then drops `general.pos` / `general.matrix_id`. `20261031_arena_legacy.sql` assumes arena data is test-only: it rebuilds the arena tables (old ranks are not kept), adds the points table, and resets every player's `member_field.rank` to 0; players re-enter the ladder the legacy way the next time they open the arena.
 
 4. Start server:
    ```bash
@@ -149,7 +148,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=map&m=get_scene_list`: Campaign scene list (e.g., Daxing Mountain)
 - `c=map&m=get_mission_list`: Enemy nodes and warlord defense lineups
 - `c=map&m=mission`: Pre-battle enemy intelligence and lineup preparation dialog
-- `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation (player team from the legacy formation / equipment formulas, defenders from the legacy `Mission` → `Monster` tables); on victory the legacy `Mission` probabilistic drop (`getrate` / `gettype` / `getvalue`) is rolled and granted
+- `c=map&m=action`: Battle trigger & in-memory 9-grid combat (legacy `battle_model` engine and report format: `process` / `assess` / `leftbuff` / `rightbuff`, plus `left_role` / `right_role`; `info.win` is the legacy `assess`; player team from the legacy formation / equipment formulas, defenders from the legacy `Mission` → `Monster` tables); on victory the legacy `Mission` probabilistic drop (`getrate` / `gettype` / `getvalue`) is rolled and granted
 - `c=map&m=get_newreward_index|get_newreward|get_newresult`: Campaign node milestone chests & chapter clear grand reward claims
 - `c=general&m=index|get_info|equip|unequip`: Hero panel ported from the legacy `general.php` (deployed heroes only, legacy `info_field`, equipment display power with refine / enhancement-achievement bonuses, legacy HP formula, legacy equip validations and status codes)
 - `c=matrix&m=index|get_info|update_matrix|use_matrix|levelup`: Formations ported from the legacy `matrix.php` (one row per owned formation, active formation in `member_field.matrixid`, only dispatched heroes can be placed, open slots / bonus / gold upgrade cost from MasterData `Matrix` / `MatrixLevel`)
@@ -161,7 +160,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=chat&m=read|send`: World and country real-time messaging
 - `c=mainquest&m=index`: Main storyline quest milestones and rewards
 - `c=shop&m=index`: Item mall (legacy `Shop` table: army tallies, equip 7, 9–15, 53–56) & stamina purchasing
-- `c=arena&m=index|action|buy_pk_num|get_reward|clear_cd`: Military ranking arena & PVP duels, rank swaps, challenge purchases, and daily salaries
+- `c=arena&m=index|action|buy_pk_num|get_reward|get_reward_list|clear_cd|send_to_chat|shop_index|shop_exchange`: Military ranking arena (legacy port): players join at lord level 26 as last rank + 1, challenge higher-ranked players and swap ranks on victory (legacy battle report), 15 daily challenges plus gold-bought extras, daily arena points by yesterday's rank, and the points shop from `ArenaExchange`
 - `c=tower&m=index|action|sweep`: Trial Soul Tower climbing, boss encounters, floor sweeps, and soul rewards
 - `c=pass_general&m=index|action|reset`: Six-Stage Pass General campaign, legendary warlord duels, and milestone chests
 - `c=soul&m=index|upgrade`: Soul fate constellation slots, soul point upgrades, and permanent hero battle stat empowerment
@@ -265,7 +264,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Full combat integration linking dynamic hero stats and equipment bonuses into 9-grid simulation
 - [x] Legacy formation storage (`matrix`): per-formation rows, active formation switching, anti-duplicate validation, and gold upgrades; battles use the active formation
 - [x] Multi-hero cooperative combat simulation with live battle report replay and positioning strategy
-- [x] Military Arena PVP system (`arena`) with rank swapping, daily俸禄 salary claims, and deterministic mirror battle simulation
+- [x] Military Arena (`arena`) ported from legacy: player rank challenges and swaps, legacy battle reports, daily rank points and the points shop
 - [x] Main city infrastructure & imposition/levy system (`city`) with critical harvest multipliers and gold forced taxation
 - [x] Native WebSocket full-duplex gateway with live world chat, player authentication, and server-wide marquee broadcast
 - [x] Pure RFC 6455 opcode 0x9/0xA protocol-level ping/pong heartbeat standard aligned with `smart-book` (zero application payload overhead)

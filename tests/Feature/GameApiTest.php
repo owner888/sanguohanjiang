@@ -246,7 +246,8 @@ final class GameApiTest extends TestCase
     {
         $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
         $this->assertSame(1, $res['status']);
-        $this->assertSame(1, $res['info']['win']);
+        // 旧版 info.win 即战斗评级 assess：一击击杀长枪兵，我方满血完胜
+        $this->assertSame(3, $res['info']['win']);
         $this->assertArrayHasKey('battle', $res);
         // 守军取旧版 Mission 1（1-1-1）的 position5 = Monster 1 长枪兵：blood 20 × 平庸 1.0
         $monster = \Hanjiang\MasterData\Monster::ROWS[1];
@@ -264,7 +265,6 @@ final class GameApiTest extends TestCase
             'skill' => '会心一击',
             'quality' => '1',
         ], $res['battle']['rightteam'][5]);
-        $this->assertSame(0, $res['battle']['rightresult'][5]['blood'], '战后结果带剩余血量');
         // 我方取 matrix 站位，字段为旧版 team_return_arr
         $matrix = DB::table('matrix')->where('uid', self::$uid)->whereNull('deleted_at')->first();
         foreach ($res['battle']['leftteam'] as $pos => $unit) {
@@ -273,6 +273,10 @@ final class GameApiTest extends TestCase
         }
         $this->assertSame(3, $res['battle']['assess']);
         $this->assertNotEmpty($res['battle']['process']);
+        // 旧版 battle() 返回结构 + map 控制器附带的双方信息
+        $this->assertSame(['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff', 'left_role', 'right_role'], array_keys($res['battle']));
+        $this->assertSame(['name' => '长枪兵', 'level' => 1, 'type' => 1], $res['battle']['right_role']);
+        $this->assertSame([], $res['battle']['rightresult'], '阵亡单位移出队伍');
 
         // 1-1-5：Mission 5 只有 position5 = Monster 5 邓茂
         $bossRes = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 5]);
@@ -315,7 +319,7 @@ final class GameApiTest extends TestCase
 
             // 1-1-1 长枪兵：MasterData Mission 1 无掉落
             $plain = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
-            $this->assertSame(1, $plain['info']['win']);
+            $this->assertGreaterThanOrEqual(1, $plain['info']['win']);
             $this->assertSame(0, $plain['info']['gettype']);
             $this->assertSame(0, $plain['info']['get_number']);
             $this->assertSame('', $plain['info']['itemname']);
@@ -325,7 +329,7 @@ final class GameApiTest extends TestCase
             // 1-1-2 裴元绍：Mission 2 gettype 1（装备）getvalue 1（赤铜刀）getrate 100
             $before = count(DB::table('equipment')->where('uid', $uid)->where('equipid', 1)->whereNull('deleted_at')->get());
             $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 2]);
-            $this->assertSame(1, $res['info']['win']);
+            $this->assertGreaterThanOrEqual(1, $res['info']['win']);
             $tpl = \Hanjiang\MasterData\Equip::ROWS[1];
             $this->assertSame(1, $res['info']['get_number']);
             $this->assertSame(1, $res['info']['gettype']);
@@ -358,7 +362,7 @@ final class GameApiTest extends TestCase
             DB::table('matrix')->where('uid', $uid)->update($positions);
             $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
             $this->assertSame(1, $res['status']);
-            $this->assertSame(-1, $res['info']['win']);
+            $this->assertSame(-3, $res['info']['win']);
             $this->assertSame([], $res['battle']['leftteam']);
             $this->assertSame([], $res['battle']['process']);
             $this->assertSame(-3, $res['battle']['assess']);
@@ -370,15 +374,16 @@ final class GameApiTest extends TestCase
             // 启用的阵法行查不到：旧版 empty(get_own_by_id) 不成立，按空站位继续（同上，大败）
             DB::table('matrix')->where('uid', $uid)->update(['deleted_at' => date('Y-m-d H:i:s')]);
             $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
-            $this->assertSame(-1, $res['info']['win']);
+            $this->assertSame(-3, $res['info']['win']);
             $this->assertSame(-3, $res['battle']['assess']);
 
-            // 没有阵法（member_field.matrixid = 0）：旧版 battle_mission 返回 -1，map 控制器把 assess 记 0（win 0），battle 为空
+            // 没有阵法（member_field.matrixid = 0）：旧版 battle_mission 返回 -1，map 控制器把 assess 记 0（win 0），battle 只有 assess 与双方信息
             DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 0]);
             $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
             $this->assertSame(1, $res['status']);
             $this->assertSame(0, $res['info']['win']);
-            $this->assertSame(['assess' => 0], $res['battle']);
+            $this->assertSame(['assess', 'left_role', 'right_role'], array_keys($res['battle']));
+            $this->assertSame(0, $res['battle']['assess']);
         });
     }
 
@@ -1108,7 +1113,7 @@ final class GameApiTest extends TestCase
         // 5. 发起推图战斗，我方按启用的阵法组队
         $battle = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
         $this->assertSame(1, $battle['status']);
-        $this->assertSame(1, $battle['info']['win']);
+        $this->assertGreaterThanOrEqual(1, $battle['info']['win']);
         $this->assertArrayHasKey('battle', $battle);
 
         $leftTeam = $battle['battle']['leftteam'];
@@ -1260,56 +1265,362 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $buyAct['status']);
     }
 
-    public function testArenaSystem(): void
+    /**
+     * 演武榜测试用：清空排行榜（各用例自建玩家与名次），返回按顺序入榜的 26 级新玩家
+     *
+     * @return list<array{uid: int, auth: array{token: string, uid: int}}>
+     */
+    private function freshArenaPlayers(int $count): array
     {
-        $this->withStrongFormation(function (): void {
-            $res = $this->request('arena', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertNotEmpty($res['list']);
-            $this->assertGreaterThan(0, $res['left_times']);
-            $oldRank = $res['rank'];
+        foreach (['arena', 'arena_log', 'arena_paylog', 'arena_exchange_log'] as $table) {
+            DB::execute('DELETE FROM `zc_sanguo_' . $table . '`');
+        }
+        Redis::del('arena_topuser');
+        $players = [];
+        for ($i = 0; $i < $count; $i++) {
+            $p = $this->newGuestPlayer();
+            DB::table('member')->where('uid', $p['uid'])->update(['level' => 26]);
+            $res = $this->request('arena', 'index', $p['auth']);
+            $this->assertSame($i + 1, $res['log']['rank'], '按入榜顺序排在最后一名之后');
+            $players[] = $p;
+        }
+        return $players;
+    }
 
-            // 挑战 10002 号天梯对手
-            $battle = $this->request('arena', 'action', ['target_uid' => 10002]);
-            $this->assertSame(1, $battle['status']);
-            $this->assertSame(1, $battle['win']);
-            $this->assertLessThanOrEqual($oldRank, $battle['rank']);
-            $this->assertSame($res['left_times'] - 1, $battle['left_times']);
-            $this->assertGreaterThan(0, $battle['reputation']);
+    private function emptyFormation(int $uid): void
+    {
+        $positions = [];
+        for ($i = 1; $i <= 9; $i++) {
+            $positions['position' . $i] = 0;
+        }
+        DB::table('matrix')->where('uid', $uid)->update($positions);
+    }
 
-            // 领取每日演武排名俸禄
-            $reward = $this->request('arena', 'get_reward');
-            $this->assertSame(1, $reward['status']);
-            $this->assertGreaterThan(0, $reward['silver']);
-            $this->assertGreaterThan(0, $reward['reputation']);
+    /**
+     * @return array<string, mixed>
+     */
+    private function arenaRow(int $uid): array
+    {
+        return DB::table('arena')->where('uid', $uid)->whereNull('deleted_at')->first();
+    }
 
-            // 再次尝试同日领取被拦截
-            $dupReward = $this->request('arena', 'get_reward');
-            $this->assertSame(0, $dupReward['status']);
+    public function testArenaIndexAndLadderEntry(): void
+    {
+        [$a] = $this->freshArenaPlayers(1);
+        $now = time();
 
-            // 购买演武挑战次数测试 (c=arena&m=buy_pk_num)
-            $price = $this->request('arena', 'buy_pk_num', ['t' => 0]);
-            $this->assertSame(1, $price['status']);
-            $this->assertGreaterThan(0, $price['price']);
+        // 旧版 26 级开放
+        $low = $this->newGuestPlayer();
+        $this->assertSame(['status' => -1, 'list' => []], array_intersect_key($this->request('arena', 'index', $low['auth']), ['status' => 1, 'list' => 1]));
+        $this->assertNull(DB::table('arena')->where('uid', $low['uid'])->first());
+        $this->assertSame(0, (int)DB::table('member_field')->where('uid', $low['uid'])->value('rank'), '未入榜 member_field.rank 为 0');
 
-            $buy = $this->request('arena', 'buy_pk_num', ['t' => 1]);
-            $this->assertSame(1, $buy['status']);
-            $this->assertGreaterThan(0, $buy['times']);
+        // 第二个玩家入榜：最后一名 + 1，首次次数 10、领奖时间为入榜时间（当天显示「明日可领取」status 1）
+        $b = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $b['uid'])->update(['level' => 26, 'gender' => 2]);
+        $res = $this->request('arena', 'index', $b['auth']);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(['uid', 'username', 'rank', 'times', 'total_rank', 'dateline', 'get_time', 'cd', 'act_arena_int'], array_keys($res['log']));
+        $this->assertSame(2, $res['log']['rank']);
+        $this->assertSame(2, $res['log']['total_rank']);
+        $this->assertSame(10, $res['log']['times']);
+        $this->assertSame(0, $res['log']['cd']);
+        $this->assertSame(0, $res['log']['act_arena_int']);
+        $this->assertSame(2, (int)DB::table('member_field')->where('uid', $b['uid'])->value('rank'));
+        // 名次 2 → ArenaRankreward 第 2 档
+        $this->assertSame(['intnum' => \Hanjiang\MasterData\ArenaRankreward::ROWS[2]['intnum']], $res['reward']);
+        $this->assertEqualsWithDelta(strtotime(date('Y-m-d', $now)) + 86400 - $now, $res['end_time'], 2, '距明日 0 点的秒数');
+        // 名次 ≤ 5 取 1 ~ 5 名中存在的玩家，键从 1 开始；旧版 status 恒为 0
+        $this->assertSame([1, 2], array_keys($res['list']));
+        $this->assertSame(['id', 'uid', 'username', 'rank', 'status', 'gender', 'level'], array_keys($res['list'][1]));
+        $this->assertSame([$a['uid'], 1, 0, 26], [$res['list'][1]['uid'], $res['list'][1]['rank'], $res['list'][1]['status'], $res['list'][1]['level']]);
+        $this->assertSame([$b['uid'], 2, 2], [$res['list'][2]['uid'], $res['list'][2]['rank'], $res['list'][2]['gender']]);
+        $this->assertSame([1 => ['uid' => $a['uid'], 'username' => $res['list'][1]['username'], 'tree' => 0], 2 => ['uid' => $b['uid'], 'username' => $res['list'][2]['username'], 'tree' => 0]], $res['top_list']);
+        // 没有 NPC 守榜
+        $this->assertSame(2, DB::table('arena')->count());
 
-            // 测试演武积分商城主页
-            $arenaShop = $this->request('arena', 'shop_index');
-            $this->assertSame(1, $arenaShop['status']);
-            $this->assertArrayHasKey('act_arena_int', $arenaShop);
-            $this->assertNotEmpty($arenaShop['list']);
+        // 同一天再进不重置次数；跨天（dateline 为昨天）重置为 15
+        DB::table('arena')->where('uid', $b['uid'])->update(['times' => 3]);
+        $this->assertSame(3, $this->request('arena', 'index', $b['auth'])['log']['times']);
+        DB::table('arena')->where('uid', $b['uid'])->update(['dateline' => strtotime('yesterday')]);
+        $this->assertSame(15, $this->request('arena', 'index', $b['auth'])['log']['times']);
+        $this->assertSame(15, (int)$this->arenaRow($b['uid'])['times']);
 
-            // 测试演武积分兑换 (银两包 id: 1)
-            $exch = $this->request('arena', 'shop_exchange', ['id' => 1]);
-            $this->assertSame(1, $exch['status']);
-            $this->assertArrayHasKey('act_arena_int', $exch);
-            $this->assertArrayHasKey('reward', $exch);
-            $this->assertSame(2, $exch['reward']['re_type']); // 2 为银币奖励
-            $this->assertNotEmpty($exch['list']);
-        });
+        // 排名表
+        $list = $this->request('arena', 'get_reward_list', $b['auth']);
+        $this->assertSame(1, $list['status']);
+        $this->assertSame(array_values(\Hanjiang\MasterData\ArenaRankreward::ROWS), $list['list']);
+
+        // 旧版 cd_time 为 0：从不需要清除 cd
+        $this->assertSame(-1, $this->request('arena', 'clear_cd', $b['auth'] + ['t' => 1])['status']);
+    }
+
+    public function testArenaEntersLadderOnLevel26(): void
+    {
+        $this->freshArenaPlayers(0);
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => 25, 'exp' => Member::getLevelUpExp(25) - 1]);
+        $res = $this->request('map', 'action', $p['auth'] + ['l' => 1, 's' => 1, 'id' => 1]);
+        $this->assertGreaterThanOrEqual(1, $res['info']['win']);
+        $this->assertSame(1, $res['info']['levelup']);
+        // 旧版 member_model 升到 26 级即入榜
+        $row = $this->arenaRow($p['uid']);
+        $this->assertSame([1, 10, 1], [(int)$row['rank'], (int)$row['times'], (int)$row['total_rank']]);
+        $this->assertSame(1, (int)DB::table('member_field')->where('uid', $p['uid'])->value('rank'));
+    }
+
+    public function testArenaChallengeHigherRankSwapsRanks(): void
+    {
+        [$b, $c, $d, $a] = $this->freshArenaPlayers(4);
+
+        // B 阵法里没有武将：旧版 battle_pk 按空队伍继续战斗，A 不消耗随机数直接完胜（assess 3）
+        $this->emptyFormation($b['uid']);
+        $res = $this->request('arena', 'action', $a['auth'] + ['t' => $b['uid']]);
+        $this->assertSame(1, $res['status']);
+        $info = $res['info'];
+        $this->assertSame(3, $info['win']);
+        $this->assertSame(1, $info['rank']);
+        $this->assertSame(1, $info['total_rank'], '历史最高排名更新为 1');
+        $this->assertSame(5, $info['win_times'], '旧版取历史最高排名（4）+ 1');
+        $this->assertSame(1, $info['reward_status'], '当天已领奖（入榜即记领奖时间），显示新名次奖励');
+        $this->assertSame(['status' => 1, 'reward' => ['intnum' => \Hanjiang\MasterData\ArenaRankreward::ROWS[1]['intnum']]], $info['reward']);
+        $this->assertSame(9, $info['times']);
+        $this->assertSame(0, $info['cd']);
+        $this->assertSame([1, 2, 3, 4], array_column($info['list'], 'rank'));
+        $this->assertSame([$a['uid'], $c['uid'], $d['uid'], $b['uid']], array_column($info['list'], 'uid'));
+        $this->assertSame([$a['uid'], $c['uid'], $d['uid'], $b['uid']], array_column($info['top_list'], 'uid'), '前 5 名缓存已刷新');
+        $this->assertGreaterThan(0, $info['report']);
+        $this->assertSame(['id' => $info['report'], 'type' => 'arena'], $res['share']);
+        // 战报（客户端 xGame.loadBattle 读 res.battle）
+        $this->assertSame(['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff', 'left_role', 'right_role'], array_keys($res['battle']));
+        $this->assertNotEmpty($res['battle']['leftteam']);
+        $this->assertSame([], $res['battle']['rightteam']);
+        $this->assertSame(3, $res['battle']['assess']);
+        $this->assertSame(['name', 'level', 'gender'], array_keys($res['battle']['right_role']));
+
+        $rowA = $this->arenaRow($a['uid']);
+        $rowB = $this->arenaRow($b['uid']);
+        $this->assertSame([1, 1, 0, 9], [(int)$rowA['rank'], (int)$rowA['total_rank'], (int)$rowA['win'], (int)$rowA['times']]);
+        $this->assertSame([4, 1, 0], [(int)$rowB['rank'], (int)$rowB['total_rank'], (int)$rowB['win']], '防守方历史最高排名不变');
+        $this->assertSame(1, (int)DB::table('member_field')->where('uid', $a['uid'])->value('rank'));
+        $this->assertSame(4, (int)DB::table('member_field')->where('uid', $b['uid'])->value('rank'));
+        $logs = DB::table('arena_log')->select('uid', 'type', 'win', 'rank', 'userid')->orderBy('id')->get();
+        $this->assertEquals([
+            ['uid' => $a['uid'], 'type' => 1, 'win' => 1, 'rank' => 1, 'userid' => $b['uid']],
+            ['uid' => $b['uid'], 'type' => 2, 'win' => 2, 'rank' => 4, 'userid' => $a['uid']],
+        ], $logs);
+        // 演武信件（type 4，发件人为挑战者）
+        $mail = Redis::getJson('user_messages:' . $b['uid']);
+        $last = end($mail);
+        $this->assertSame([4, $a['uid'], $info['report']], [$last['type'], $last['fromuid'], $last['id']]);
+        $this->assertStringEndsWith('在演武榜将您击败，排名跌落至第4名', $last['message']);
+
+        // 排名比我低的不能打：C（2）打 B（4）
+        $this->assertSame(-3, $this->request('arena', 'action', $c['auth'] + ['t' => $b['uid']])['status']);
+        // 不在可挑战名单
+        $outsider = $this->newGuestPlayer();
+        $this->assertSame(-4, $this->request('arena', 'action', $c['auth'] + ['t' => $outsider['uid']])['status']);
+
+        // D（3）阵法里没有武将打 C（2）：空队伍直接大败，名次不变、不记 log
+        $this->emptyFormation($d['uid']);
+        $lose = $this->request('arena', 'action', $d['auth'] + ['t' => $c['uid']]);
+        $this->assertSame(1, $lose['status']);
+        $this->assertSame(-3, $lose['info']['win']);
+        $this->assertSame(3, $lose['info']['rank']);
+        $this->assertSame(0, $lose['info']['win_times']);
+        $this->assertSame([], $lose['info']['reward']);
+        $this->assertSame([], $lose['battle']['leftteam']);
+        $this->assertSame(3, (int)$this->arenaRow($d['uid'])['rank']);
+        $this->assertSame(2, (int)$this->arenaRow($c['uid'])['rank']);
+        $this->assertSame(2, DB::table('arena_log')->count());
+        $mail = Redis::getJson('user_messages:' . $c['uid']);
+        $this->assertStringEndsWith('在演武榜向您挑战，被您打的落花流水。', end($mail)['message']);
+
+        // 双方都有阵容的正常战斗：战报带完整过程；胜（assess ≥ 1）则互换名次，否则不变
+        $real = $this->request('arena', 'action', $c['auth'] + ['t' => $a['uid']]);
+        $this->assertSame(1, $real['status']);
+        $this->assertNotEmpty($real['battle']['leftteam']);
+        $this->assertNotEmpty($real['battle']['rightteam']);
+        $this->assertNotEmpty($real['battle']['process']);
+        $won = $real['battle']['assess'] >= 1;
+        $this->assertSame($real['battle']['assess'], $real['info']['win']);
+        $this->assertSame($won ? 1 : 2, (int)$this->arenaRow($c['uid'])['rank']);
+        $this->assertSame($won ? 2 : 1, (int)$this->arenaRow($a['uid'])['rank']);
+        $this->assertSame($won ? 1 : 2, $real['info']['rank']);
+    }
+
+    public function testArenaChallengeGuards(): void
+    {
+        [$b, $a] = $this->freshArenaPlayers(2);
+
+        // 对方正在被挑战（action 锁）
+        Redis::set('action_lock_' . $b['uid'], 1, 30);
+        $this->assertSame(-2, $this->request('arena', 'action', $a['auth'] + ['t' => $b['uid']])['status']);
+        Redis::del('action_lock_' . $b['uid']);
+
+        // 对方正在 pk 中（战斗锁），请求结束后 action 锁已释放
+        Redis::set('arena_battle_' . $b['uid'], 1, 500);
+        $this->assertSame(-5, $this->request('arena', 'action', $a['auth'] + ['t' => $b['uid']])['status']);
+        Redis::del('arena_battle_' . $b['uid']);
+        $this->assertNull(Redis::get('action_lock_' . $a['uid']));
+
+        // 挑战次数用完
+        DB::table('arena')->where('uid', $a['uid'])->update(['times' => 0]);
+        $this->assertSame(-1, $this->request('arena', 'action', $a['auth'] + ['t' => $b['uid']])['status']);
+        $this->assertSame(0, (int)$this->arenaRow($a['uid'])['times']);
+    }
+
+    public function testArenaBuyPkNum(): void
+    {
+        [$a] = $this->freshArenaPlayers(1);
+        $price = \Hanjiang\MasterData\Price::ROWS[1]['act'];
+        $gold = (int)DB::table('member')->where('uid', $a['uid'])->value('gold');
+
+        // 只查价格（第 1 次购买取 Price 第 1 行军令价格）
+        $this->assertSame(['status' => 1, 'price' => $price], array_intersect_key($this->request('arena', 'buy_pk_num', $a['auth'] + ['t' => 0]), ['status' => 1, 'price' => 1]));
+        $this->assertSame($gold, (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
+
+        $buy = $this->request('arena', 'buy_pk_num', $a['auth'] + ['t' => 1]);
+        $this->assertSame(1, $buy['status']);
+        $this->assertSame($gold - $price, $buy['gold']);
+        $this->assertSame(11, $buy['times']);
+        $this->assertSame(\Hanjiang\MasterData\Price::ROWS[2]['act'], $buy['price']);
+        $this->assertSame($gold - $price, (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
+        $pay = DB::table('arena_paylog')->where('uid', $a['uid'])->first();
+        $this->assertSame([1, 1], [(int)$pay['times'], (int)$pay['total_times']]);
+
+        // 昨天买过：今日次数从 0 算，累计次数继续加
+        DB::table('arena_paylog')->where('uid', $a['uid'])->update(['dateline' => strtotime('yesterday')]);
+        $this->assertSame(12, $this->request('arena', 'buy_pk_num', $a['auth'] + ['t' => 1])['times']);
+        $pay = DB::table('arena_paylog')->where('uid', $a['uid'])->first();
+        $this->assertSame([1, 2], [(int)$pay['times'], (int)$pay['total_times']]);
+
+        // 元宝不足
+        DB::table('member')->where('uid', $a['uid'])->update(['gold' => $price - 1]);
+        $this->assertSame(-1, $this->request('arena', 'buy_pk_num', $a['auth'] + ['t' => 1])['status']);
+        $this->assertSame(12, (int)$this->arenaRow($a['uid'])['times']);
+    }
+
+    public function testArenaRankRewardTiming(): void
+    {
+        [$a] = $this->freshArenaPlayers(1);
+
+        // 入榜当天已记领奖时间：显示当前名次奖励，没有可领取的
+        $this->assertSame(1, $this->request('arena', 'index', $a['auth'])['status']);
+        $this->assertSame(-1, $this->request('arena', 'get_reward', $a['auth'])['status']);
+
+        // 昨天领过、昨天最后一条挑战记录名次 11：今天按 11 名发（ArenaRankreward rank 11 档）
+        DB::table('arena')->where('uid', $a['uid'])->update(['get_time' => strtotime('yesterday')]);
+        DB::table('arena_log')->insert(['uid' => $a['uid'], 'type' => 1, 'win' => 1, 'rank' => 11, 'userid' => 0, 'dateline' => strtotime('yesterday') + 3600]);
+        DB::table('arena_log')->insert(['uid' => $a['uid'], 'type' => 2, 'win' => 2, 'rank' => 30, 'userid' => 0, 'dateline' => strtotime('yesterday') + 60]);
+        $intnum = \Hanjiang\MasterData\ArenaRankreward::ROWS[5]['intnum'];
+        $res = $this->request('arena', 'index', $a['auth']);
+        $this->assertSame(2, $res['status']);
+        $this->assertSame(['intnum' => $intnum], $res['reward']);
+
+        $get = $this->request('arena', 'get_reward', $a['auth']);
+        $this->assertSame(1, $get['status']);
+        $this->assertSame($intnum, $get['reward']['intnum']);
+        $this->assertSame($intnum, $get['act_arena_int']);
+        $this->assertSame(['intnum' => \Hanjiang\MasterData\ArenaRankreward::ROWS[1]['intnum']], $get['new_reward'], '新奖励按当前名次 1');
+        $this->assertGreaterThanOrEqual(strtotime('today'), (int)$this->arenaRow($a['uid'])['get_time']);
+        $this->assertSame($intnum, (int)DB::table('member_integral')->where('uid', $a['uid'])->value('act_arena_int'));
+        $log = DB::table('integral_log')->where('uid', $a['uid'])->first();
+        $this->assertSame([1, $intnum, $intnum, 'act_arena_int', 'arena', 'get_reward'], [(int)$log['type'], (int)$log['intnum'], (int)$log['balance'], $log['argument'], $log['class'], $log['method']]);
+
+        // 同日不能重复领；再进演武榜显示明日奖励
+        $this->assertSame(-1, $this->request('arena', 'get_reward', $a['auth'])['status']);
+        $again = $this->request('arena', 'index', $a['auth']);
+        $this->assertSame(1, $again['status']);
+        $this->assertSame($intnum, $again['log']['act_arena_int']);
+    }
+
+    public function testArenaShopExchange(): void
+    {
+        [$a] = $this->freshArenaPlayers(1);
+        $uid = $a['uid'];
+        $rows = \Hanjiang\MasterData\ArenaExchange::ROWS;
+
+        $low = $this->newGuestPlayer();
+        $this->assertSame(-1, $this->request('arena', 'shop_index', $low['auth'])['status']);
+        $this->assertSame(-1, $this->request('arena', 'shop_exchange', $low['auth'] + ['id' => 1])['status']);
+
+        DB::table('member_integral')->where('uid', $uid)->update(['act_arena_int' => 1000]);
+        $shop = $this->request('arena', 'shop_index', $a['auth']);
+        $this->assertSame(1, $shop['status']);
+        $this->assertSame(1000, $shop['act_arena_int']);
+        $this->assertCount(count($rows), $shop['list']);
+        $byId = array_column($shop['list'], null, 'id');
+        $this->assertSame([1, $rows[1]['num']], [$byId[1]['is_exch'], $byId[1]['exch_num']]);
+        $this->assertSame([0, $rows[8]['num']], [$byId[8]['is_exch'], $byId[8]['exch_num']], '积分不足不可兑换');
+        $equip = \Hanjiang\MasterData\Equip::ROWS[$rows[15]['re_value1']];
+        $this->assertSame(['id' => $equip['id'], 'image' => $equip['id'], 'name' => $equip['name'], 'quality' => $equip['quality'], 'type' => $equip['type'], 'needlevel' => $equip['needlevel'], 'power' => $equip['power']], $byId[15]['info']);
+        $general = \Hanjiang\MasterData\General::ROWS[$rows[32]['re_value1']];
+        $this->assertSame($general['name'], $byId[32]['info']['name']);
+        $this->assertEquals(\Hanjiang\MasterData\Skill::ROWS[$general['skillid']], $byId[32]['info']['skill'], 'JSON 中 0.0 解码为 0');
+        $this->assertArrayNotHasKey('is_exist', $byId[32]['info'], '旧版未拥有时没有 is_exist');
+        $this->assertSame(\Hanjiang\MasterData\Gem::ROWS[1]['name'], $byId[27]['info']['gem_name']);
+        $this->assertSame(2, $byId[27]['info']['gem_quality']);
+        $soul = \Hanjiang\MasterData\Soul::ROWS[$rows[19]['re_value1']];
+        $this->assertSame([$soul['name'], $soul['type'] . $soul['quality'], 6], [$byId[19]['info']['name'], $byId[19]['info']['image'], $byId[19]['info']['level']]);
+        $this->assertArrayNotHasKey('info', $byId[1]);
+
+        // 参数 / 商品校验
+        $this->assertSame(-2, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 0])['status']);
+        $this->assertSame(-3, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 9999])['status']);
+        // 依赖未移植：将魂（re_type 27）无法发放，不扣积分
+        $this->assertSame(-3, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 19])['status']);
+        $this->assertSame(1000, (int)DB::table('member_integral')->where('uid', $uid)->value('act_arena_int'));
+        // 防刷锁
+        Redis::set('arena_exchange_' . $uid, 1, 30);
+        $this->assertSame(2, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 1])['status']);
+        Redis::del('arena_exchange_' . $uid);
+
+        // 银币（re_type 2）
+        $silver = (int)DB::table('member')->where('uid', $uid)->value('silver');
+        $res = $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 1]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1000 - $rows[1]['use_int'], $res['act_arena_int']);
+        $this->assertSame([1, 2, $rows[1]['re_value1'], $rows[1]['num'] - 1], [$res['reward']['id'], $res['reward']['re_type'], $res['reward']['re_value1'], $res['reward']['exch_num']]);
+        $this->assertSame($silver + $rows[1]['re_value1'], (int)DB::table('member')->where('uid', $uid)->value('silver'));
+        $this->assertSame(1, DB::table('arena_exchange_log')->where('uid', $uid)->where('pid', 1)->where('ptype', 1)->count());
+        $log = DB::table('integral_log')->where('uid', $uid)->where('type', 2)->first();
+        $this->assertSame([$rows[1]['use_int'], 1000 - $rows[1]['use_int'], 'shop_exchange'], [(int)$log['intnum'], (int)$log['balance'], $log['method']]);
+
+        // 装备（re_type 8，限量 1 次）
+        $points = 1000 - $rows[1]['use_int'];
+        $res = $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 15]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame($equip['name'], $res['reward']['info']['name']);
+        $this->assertSame(0, $res['reward']['exch_num']);
+        $this->assertSame(1, DB::table('equipment')->where('uid', $uid)->where('equipid', $equip['id'])->whereNull('deleted_at')->count());
+        $this->assertSame(3, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 15])['status'], '限量已兑完');
+        $points -= $rows[15]['use_int'];
+
+        // 武将（re_type 12）：积分不足 3；已招募 4；兑换后 is_exist 1
+        $this->assertSame(3, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 32])['status']);
+        DB::table('member_integral')->where('uid', $uid)->update(['act_arena_int' => 100000]);
+        General::createFromTemplate($uid, $rows[35]['re_value1']);
+        $this->assertSame(4, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 35])['status']);
+        $res = $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 32]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(1, $res['reward']['info']['is_exist']);
+        $this->assertSame(1, DB::table('general')->where('uid', $uid)->where('generalid', $general['id'])->whereNull('deleted_at')->count());
+        $this->assertSame(100000 - $rows[32]['use_int'], $res['act_arena_int']);
+    }
+
+    public function testArenaSendToChat(): void
+    {
+        [$b, $a] = $this->freshArenaPlayers(2);
+        $this->assertSame(-1, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid']])['status']);
+        $this->assertSame(-3, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => 999999999, 'report' => 5])['status']);
+        DB::table('member')->where('uid', $a['uid'])->update(['gold' => 1]);
+        $this->assertSame(-2, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid'], 'report' => 5])['status']);
+        DB::table('member')->where('uid', $a['uid'])->update(['gold' => 10]);
+        $res = $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid'], 'report' => 5, 'win' => 3]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(8, $res['all_gold']);
+        $this->assertSame(8, (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
     }
 
     public function testWebSocketAndBroadcasterSystem(): void

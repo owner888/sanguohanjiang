@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Campaign;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Handler\Pvp\ArenaHandler;
 use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\Map as MapTemplate;
 use Hanjiang\MasterData\Mission as MissionTemplate;
@@ -420,42 +421,35 @@ final class MapHandler
 
         // 1. 我方队伍（旧版 battle_model->battle_mission：PVE，init_member_team_info）
         $left = TeamBuilder::forMember($uid, pve: true);
-        $teamError = false;
         // 2. 守军（init_monster_team_info，Monster 表）
         $right = TeamBuilder::forMonsters($missionRow, TeamBuilder::MONSTER_MISSION);
 
         if ($left['status'] === -1 || $left['status'] === -3) {
-            // 旧版 battle_mission 返回 -1（没有阵法）/ -3（武将信息错误）：map 控制器把 assess 记 0，按未胜利处理，battle 为空
+            // 旧版 battle_mission 返回 -1（没有阵法）/ -3（武将信息错误）：map 控制器把 assess 记 0，battle 只有 assess
             $battleReport = ['assess' => 0];
-            $simResult = ['win' => false];
-            $teamError = true;
         } else {
             // -2（阵法里没有武将）旧版按空队伍继续战斗：空队伍直接判大败（assess -3），没有战斗过程
-            $leftHeroes = TeamBuilder::heroes($left['team'], $left['matrix_type'], $left['matrix_coe']);
-            $rightHeroes = TeamBuilder::heroes($right['team']);
-
-            // 3. 调用确定性纯内存九宫格推演引擎
-            $engine = new BattleEngine(array_values($leftHeroes), array_values($rightHeroes));
-            $simResult = $engine->simulate();
-
-            // 4. 组装战斗回放（旧版 battle()：leftteam / rightteam / leftresult / rightresult 均为 team_return_arr）
-            // 依赖未移植：process 战斗过程格式（P5 移植 process_attack）；leftbuff / rightbuff（buff_return）
-            $battleReport = [
-                'leftteam' => TeamBuilder::teamReturnArr($left['team']),
-                'rightteam' => TeamBuilder::teamReturnArr($right['team']),
-                'process' => self::buildBattleProcess($simResult['logs']),
-                'assess' => (int)$simResult['assess'],
-                'leftresult' => TeamBuilder::teamReturnArr($left['team'], true, $leftHeroes),
-                'rightresult' => TeamBuilder::teamReturnArr($right['team'], true, $rightHeroes),
-                'leftbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
-                'rightbuff' => ['mingzhong' => 0, 'jingzhun' => 0, 'kangyun' => 0],
-            ];
+            // 3. 推演（旧版 battle()；我方阵法记在左侧，守军没有阵法）
+            $engine = new BattleEngine($left['matrix_type'], $left['matrix_coe']);
+            $battleReport = $engine->battle($left['team'], $right['team']);
         }
+        // 旧版 map 控制器：战斗双方信息
+        $battleReport['left_role'] = [
+            'name' => $member['nickname'] ?? '',
+            'level' => $member['level'] ?? 0,
+            'gender' => $member['gender'] ?? 0,
+        ];
+        $battleReport['right_role'] = [
+            'name' => $missionRow['name'],
+            'level' => $missionRow['level'],
+            'type' => $missionRow['type'],
+        ];
         // 依赖未移植：经验结算仍取新版自定的 getEnemyConfig 等级公式（旧版取 Mission 行的 firstkillexp / exp / gfirstkillexp / gexp）
         $enemyCfg = self::getEnemyConfig($level, $stage, $missionId);
 
         // 5. 战斗胜利关卡推进、升级与经验结算
-        $isWin = $simResult['win'];
+        // 旧版：battle_mission 成功且 assess >= 1 为胜利
+        $isWin = $battleReport['assess'] >= 1;
         $isLastMission = ($missionId >= 5); // 5号Boss是本关最终守关将领
         $nextStage = $stage;
         $nextMissionId = $missionId;
@@ -550,6 +544,11 @@ final class MapHandler
                     'missionid' => $nextMissionId,
                 ]);
 
+                // 旧版 member_model 升级：升到 26 级时进入演武榜（arena_model->get_info_by_id）
+                if ($curLevel > (int)$member['level'] && $curLevel === ArenaHandler::OPEN_LEVEL) {
+                    ArenaHandler::getInfoById(['level' => $curLevel] + $member, time());
+                }
+
                 // 记录关卡进度到 zc_sanguo_map 表
                 $existMap = DB::table('map')->where('uid', $uid)->where('level', $level)->where('stage', $stage)->first();
                 if ($existMap !== null) {
@@ -577,7 +576,8 @@ final class MapHandler
         }
 
         $resultInfo = [
-            'win' => $teamError ? 0 : ($isWin ? 1 : -1),
+            // 旧版 info.win 即战斗评级 assess（-3 ~ 3，组队失败为 0）
+            'win' => $battleReport['assess'],
             'exp' => $gainExp,
             'gexp' => $gainGexp,
             'get_number' => $drop['get_number'],
@@ -760,38 +760,6 @@ final class MapHandler
             }
         }
         return null;
-    }
-
-    /**
-     * @param list<array<string, mixed>> $logs
-     * @return list<array<string, mixed>>
-     */
-    private static function buildBattleProcess(array $logs): array
-    {
-        $process = [];
-        foreach ($logs as $index => $log) {
-            $isLeft = ($log['side'] === 'left');
-            $process[] = [
-                'round' => (int)($index / 2) + 1,
-                'launch' => $isLeft ? 'left' : 'right',
-                'attackor' => (int)$log['attacker_pos'],
-                'attackpower' => 25,
-                'skill' => 0,
-                'hit' => $log['is_crit'] ? 1 : 0,
-                'attacktype' => 0,
-                'beattackors' => [(int)$log['target_pos']],
-                'hurt' => [
-                    [
-                        'pos' => (int)$log['target_pos'],
-                        'blood' => (int)$log['damage'],
-                        'power' => 25,
-                        'self' => 0,
-                        'faint' => 0,
-                    ],
-                ],
-            ];
-        }
-        return $process;
     }
 
     /**

@@ -43,9 +43,8 @@
 │       ├── js/data/ini.js   # 核心战斗数值表与武将属性 (442KB)
 │       └── js/view/         # 前端视图引擎 (battleworld, cityworld, mapworld)
 ├── src/
-│   ├── Battle/              # 确定性九宫格战斗引擎
-│   │   ├── BattleEngine.php # 核心战斗推演逻辑 (源自 battle_model.php 重构)
-│   │   ├── Hero.php         # 战斗单位（旧版字段 + 给当前引擎用的临时适配层）
+│   ├── Battle/              # 九宫格战斗引擎（移植旧版 battle_model，随机数可注入）
+│   │   ├── BattleEngine.php # 移植旧版 battle() / process / process_effect / process_hurt，输出旧版战报结构
 │   │   ├── Position.php     # 九宫格战位 (1-9号位) 枚举
 │   │   ├── LegacyStats.php  # 旧版武将/装备数值公式（纯函数，逐条注明旧版出处）
 │   │   └── TeamBuilder.php  # 旧版组队（玩家 / 怪物队伍、team_return_arr）
@@ -102,7 +101,7 @@
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
-   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。`20261031_matrix_legacy.sql` 把每个玩家一行的 `matrix` 表转成旧版每个阵法一行，按原阵法行写入 `member_field.matrixid`，按原 `pos` / 阵法站位重建 `general.goout`，然后删除 `general.pos` / `general.matrix_id`。
+   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。`20261031_matrix_legacy.sql` 把每个玩家一行的 `matrix` 表转成旧版每个阵法一行，按原阵法行写入 `member_field.matrixid`，按原 `pos` / 阵法站位重建 `general.goout`，然后删除 `general.pos` / `general.matrix_id`。`20261031_arena_legacy.sql` 假定演武榜只有测试数据：重建演武榜相关表（不保留旧排名）、新增积分表，并把所有玩家 `member_field.rank` 归 0，玩家下次打开演武榜时按旧版重新入榜。
 
 4. 启动服务：
    ```bash
@@ -149,7 +148,7 @@
 - `c=map&m=get_scene_list`：战役势力关卡场景列表（如：大兴山）
 - `c=map&m=get_mission_list`：据点敌人阵容与关卡敌将数据
 - `c=map&m=mission`：战前敌将情报与布阵确认弹窗
-- `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发（我方按旧版阵法 / 装备公式组队，守军取旧版 `Mission` → `Monster`）；胜利后按旧版 `Mission` 概率掉落（`getrate` / `gettype` / `getvalue`）结算发放
+- `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发（旧版 `battle_model` 推演与战报结构：`process` / `assess` / `leftbuff` / `rightbuff`，附 `left_role` / `right_role`；`info.win` 即旧版 `assess`；我方按旧版阵法 / 装备公式组队，守军取旧版 `Mission` → `Monster`）；胜利后按旧版 `Mission` 概率掉落（`getrate` / `gettype` / `getvalue`）结算发放
 - `c=map&m=get_newreward_index|get_newreward|get_newresult`：战役势力据点关卡宝箱、整势力通关大礼奖励领取与防重校验
 - `c=general&m=index|get_info|equip|unequip`：将领界面，按旧版 `general.php` 移植（只列出征将领、旧版 `info_field`、装备显示能力含精炼 / 强化成就加成、旧版血量公式、旧版装配校验与状态码）
 - `c=matrix&m=index|get_info|update_matrix|use_matrix|levelup`：阵法，按旧版 `matrix.php` 移植（每个拥有的阵法一行，启用的阵法记在 `member_field.matrixid`，只有出征将领能上阵，开放位置 / 加成 / 元宝升级价格取 MasterData `Matrix` / `MatrixLevel`）
@@ -161,7 +160,7 @@
 - `c=chat&m=read|send`：世界与国家频道实时消息流
 - `c=mainquest&m=index`：主线任务进度与里程碑领奖
 - `c=shop&m=index`：商城道具（旧版 `Shop` 表：兵符，装备 7、9–15、53–56）与军令体力购买
-- `c=arena&m=index|action|buy_pk_num|get_reward|clear_cd`：演武榜竞技场天梯对决、排名互换、挑战次数购买与每日声望俸禄
+- `c=arena&m=index|action|buy_pk_num|get_reward|get_reward_list|clear_cd|send_to_chat|shop_index|shop_exchange`：演武榜（按旧版移植）：主公 26 级以「最后一名 + 1」入榜，挑战名次在前的玩家、胜则互换名次（带旧版战报），每日 15 次挑战与元宝购买次数，按昨日名次领演武积分，积分商城取 `ArenaExchange`
 - `c=tower&m=index|action|sweep`：将魂星路试炼塔爬塔闯关、守关神兽决战、一键扫荡与将魂结算
 - `c=pass_general&m=index|action|reset`：经典过关斩将单挑六大名将（华雄/颜良/文丑/庞德/典韦/吕布）与通关宝箱开启
 - `c=soul&m=index|upgrade`：将魂星盘八大命格孔位激活、试炼塔将魂消耗升级与攻防血量永久加成
@@ -265,7 +264,7 @@
 - [x] 深度联动纯内存九宫格战斗推演，上阵武将与装备强化数值无缝作用于战场战力
 - [x] 旧版阵法存储 (`matrix`)：每个阵法一行、启用阵法切换、防重上阵拦截、元宝升级；战斗读启用的阵法
 - [x] 多武将同屏协同出征作战，真实九宫格站位多目标推演与战报回放
-- [x] 演武榜竞技场真实 PVP 系统 (`arena`)，支持天梯名次互换、每日俸禄领取与纯内存镜像对决推演
+- [x] 演武榜 (`arena`) 按旧版移植：玩家名次挑战与互换、旧版战报、每日排名积分与积分商城
 - [x] 主城征收与强征系统 (`city`)，支持丰收暴击银两倍数与元宝强征加倍收益
 - [x] 原生 WebSocket 全双工长连接网关，支持鉴权、实时世界聊天与全服跑马灯大喇叭广播
 - [x] 完全对齐 `smart-book` 标准的纯粹 RFC 6455 协议级心跳机制（0x9/0xA 控制帧 ping/pong，杜绝应用层冗余载荷开销）
