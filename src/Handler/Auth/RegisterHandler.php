@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\Auth;
 
+use Hanjiang\Model\General;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 
@@ -170,44 +171,10 @@ final class RegisterHandler
             'race_dateline' => 0,
         ]);
 
-        // 初始化主公将领
-        $genId = DB::table('general')->insert([
-            'uid' => $uid,
-            'generalid' => 1,
-            'name' => '新主公' . $uid,
-            'level' => 1,
-            'exp' => 0,
-            'pos' => 2,
-            'matrix_id' => 1,
-            'status' => 1,
-        ]);
+        // 初始武将：旧版 controllers/login.php 注册时 init_general(1, uid)，不送初始装备
+        $genId = General::initGeneral($uid);
 
-        // 初始化新手初始装备 (青铜剑, 青铜甲)
-        DB::table('equipment')->insert([
-            'uid' => $uid,
-            'equipid' => 101,
-            'name' => '青铜剑',
-            'type' => 1, // 武器
-            'quality' => 1,
-            'level' => 1,
-            'generalid' => 0,
-            'number' => 1,
-            'saleprice' => 50,
-        ]);
-
-        DB::table('equipment')->insert([
-            'uid' => $uid,
-            'equipid' => 201,
-            'name' => '青铜甲',
-            'type' => 2, // 铠甲
-            'quality' => 1,
-            'level' => 1,
-            'generalid' => 0,
-            'number' => 1,
-            'saleprice' => 50,
-        ]);
-
-        // 初始化默认阵法 (鱼鳞阵, 主公放置在 2 号位)
+        // 初始化默认阵法：旧版 init_matrix(1, uid, 2, gid)，初始武将放在 1 号阵法 2 号位
         DB::table('matrix')->insert([
             'uid' => $uid,
             'mid' => 1,

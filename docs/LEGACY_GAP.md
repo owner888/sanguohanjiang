@@ -2,7 +2,7 @@
 
 对比基线：前端 `public/static/js` 中写死的 `c`/`m` 调用 vs 新版 `src/Handler` 的 `public static` 方法 vs 旧版 CodeIgniter `wwwroot/s1`、`wwwroot/uc` 控制器。动态拼接的调用未覆盖。
 
-- 前端调用：653；已实现：306；缺失：347（旧版有 325，旧版也无 22）
+- 前端调用：653；已实现：308；缺失：345（旧版有 323，旧版也无 22）
 - 「旧版位置」为相对旧服务端 `HJServer/wwwroot/` 的路径；「—」表示旧版 s1/uc 中没有，需按前端字段反推（部分可能在 `battle`/`war` 服）。
 - 标记 🆕 的控制器在新版中整个 Handler 都不存在。
 
@@ -570,13 +570,6 @@
 | `c=elite&m=buy_number` | `s1/application/controllers/elite.php:566` | `static/js/view/elitepop.js:1073`<br>`static/js/view/elitepop.js:1101` |
 | `c=elite&m=sendinvite` | `s1/application/controllers/elite.php:629` | `static/js/view/elitepop.js:1027` |
 
-### first_recharge（2）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=first_recharge&m=action` | `s1/application/controllers/first_recharge.php:389` | `static/js/view/firstpaygiftpop.js:492` |
-| `c=first_recharge&m=lottery` | `s1/application/controllers/first_recharge.php:273` | `static/js/view/firstpaygiftpop.js:404` |
-
 ### general_book（2）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -838,27 +831,46 @@
 |---|---|
 | `c=pack&m=use_item` | 直接返回「使用成功」。旧版只用于跨服道具（`own_equip` type 11–18，规则见 `world_shop`），随跨服竞技一起补 |
 | `c=ios&m=verify`、`c=ios&m=savetoken` | 直接返回成功 |
-| `c=shop&m=get_info` | 固定内容 |
+| `c=shop&m=get_info` | 商品取旧版 `Shop` + `Equip` 模板；`nowmaxtimes`、`cd` 为固定值（不读当日购买次数） |
 | `c=overseastrade&m=get_trade_log`、`c=overseastrade&m=item_list` | 固定内容 |
 | `c=studfarm&m=index` | 固定内容 |
 | `c=practice&m=get_unlock_price` | 固定内容 |
 | `c=elite&m=get_server` | 固定内容 |
 | `c=user&m=get_info_by_temptoken` | 固定内容 |
 | `c=activationcode&m=index` | 固定文案（兑换走 `get_reward`，激活码表为代码内常量） |
-| `c=arena&m=clear_cd`、`c=city&m=clear_cd`、`c=strengthen&m=clear_cd` | 不扣元宝、不清 CD 状态 |
+| `c=arena&m=clear_cd`、`c=city&m=clear_cd` | 不扣元宝、不清 CD 状态 |
+
+## 已实现但待按旧版重写
+
+接口能用，但玩法、数值或存储不是旧版的；当前战斗不读这些数据。
+
+| 接口 / 位置 | 现状 |
+|---|---|
+| `c=star`（`StarHandler`） | 待按旧版重写。旧版武将没有逐将升星；星级存 Redis `general_star:{uid}:{gid}`。已不再给 `wuliup`/`tiliup` 加值（培养字段只属于 `cultivate`） |
+| `c=talent`（`TalentHandler`） | 待按旧版重写。天赋等级存 Redis `general_talents:{uid}:{gid}`，不是旧版 `talentid` 天赋体系 |
+| `c=refine`（`RefineHandler`） | 待按旧版重写。精炼词条存 Redis `equip_refine:{uid}:{eid}`；旧版写 `equipment.hammer`，加成见 `LegacyStats::refineAdd` |
+| `c=gem`（`GemHandler`） | 待按旧版重写。宝石存 Redis `user_gems:{uid}`，不是旧版按装备镶嵌 |
+| `c=tavern`（`TavernHandler::HERO_POOL`） | 依赖未移植：名将池、价格、展示数值不是旧版 Pub 数据；入库武将按名称+形象对上的模板（52 张飞、33 关羽、51 诸葛亮、6 赵云） |
+| `c=lottery&m=action` | 依赖未移植：旧版按 `Lottery` 分组概率抽奖；新版写死转盘的装备格「青钢名剑」在 MasterData 中不存在，抽中不发装备 |
+| `c=arena&m=shop_exchange` | 依赖未移植：旧版兑换取 `ArenaExchange`；新版写死的兵符兑换品（re_type 8）在 MasterData 中不存在，返回 -3 不扣积分 |
+| `c=equip_forge&m=fabrication` | 依赖未移植：旧版打造走 newequip 体系；只有图纸 1 能对上模板（Equip 22 青龙偃月刀），图纸 2、3 不可锻造 |
+| `c=map&m=action` 关卡掉落 | 已按旧版 `Mission` 发 gettype 1（装备）/ 3 / 4；依赖未移植：2 装备碎片、5 / 6 天赋卷轴（及碎片）不发放；`times` 刷图未移植（按单次攻击） |
+| `c=map&m=get_newresult` | 已按旧版 `Map` 表发 rewardtype 1（装备）；2 天赋卷轴 / 3 声望 / 4 坐骑依赖未移植，返回 -4 |
+| `General::createFromTemplate` | 依赖未移植：获得武将气泡（`ongeneral`）、主公 80 级以上名将成就加成重算、主线任务 19 |
+| `Equipment::addFromTemplate` | 依赖未移植：碎片分支（旧版 `add_item` `$type = 1`、`itemchip_log`） |
 
 ## 数据结构缺口
 
-旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 13 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
+旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 22 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
 
 ### 已建表的缺失字段
 
 | 新表 ← 旧表 | 旧版有、新版无的字段 |
 |---|---|
 | `member` ← `member` | `jade`、`gem`、`gemuse`、`refinestone`、`colorstone`、`bloodstone`、`souluse`、`soulpack`、`newpm`、`newmail`、`status`、`statustime`、`rebate_firstpay`、`jointime`、`dateline`、`actdateline`、`levelupexp`、`missionworld`、`firstworld`、`server_reward`、`ndgift`、`channel`、`regchannel`、`guest`、`version`、`appversion`、`crontime`、`gift`、`bind91`、`bind360` |
-| `general` ← `own_general` | `wuli`、`zhili`、`tili`、`star`、`talentid`、`skillid`、`quality`、`type`、`image`、`turn`、`addtype`、`addvalue`、`eid1`~`eid4`、`mid0`~`mid4`、`goout`、`disable`、`levelupexp` |
-| `equipment` ← `own_equip` | `power`、`powerup`、`gid`、`glevel`、`forgeid`、`newquality`、`newattribute`、`oldequipid`、`hammer`、`chip`、`needlevel`、`sale_site`、`aid`、`disable`、`dateline` |
-| `member_field` ← `member_field` | `levyall`、`levystatus`、`exercisetimes`、`imposetimes`、`baijintimes`、`zhizuntimes`、`qiangstatus`、`qiangdateline`、`shopdateline`、`matrixid`、`actnumber`、`actdateline`、`vip_reward`、`devicetoken`、`soultimes`、`onmine`、`onworkshop`、`oncountrymine`、`ongeneral`、`trends_times`、`newyeardinner`、`free_inherit`、`rebate_dateline`、`rebate_version`、`general_sale`、`advanced_time`、`close_invitation`、`clickreward`、`inherit_dateline`、`stone1_times`~`stone3_times`、`login_day`、`login_dateline`、`levelgift`、`first_recharge`、`first_recharge_an`、`heaventimes`、`treasure_free`、`macaddr`、`start_time` |
+| `general` ← `own_general` | `disable`（`eid1`~`eid4` 不存储，由 `equipment.generalid` + 旧版 `get_item_site` 派生；其余旧字段已补，获得时从模板复制） |
+| `equipment` ← `own_equip` | `glevel`、`disable`、`dateline`（`gid` 即 `generalid`；其余旧字段已补，同一武将同一装配位置由 `uk_general_site` 约束） |
+| `member_field` ← `member_field` | `levyall`、`levystatus`、`exercisetimes`、`imposetimes`、`baijintimes`、`zhizuntimes`、`qiangstatus`、`qiangdateline`、`shopdateline`、`matrixid`、`actnumber`、`actdateline`、`vip_reward`、`devicetoken`、`soultimes`、`onmine`、`onworkshop`、`oncountrymine`、`ongeneral`、`trends_times`、`newyeardinner`、`free_inherit`、`rebate_dateline`、`rebate_version`、`general_sale`、`advanced_time`、`close_invitation`、`clickreward`、`inherit_dateline`、`stone1_times`~`stone3_times`、`login_day`、`login_dateline`、`levelgift`、`first_recharge_an`、`heaventimes`、`treasure_free`、`macaddr`、`start_time` |
 | `general_soul` ← `own_general_soul` | 字段改名 `site1-8` → `slot1-8`（客户端若读 `site*` 需双写） |
 | `practice` ← `own_practice` | 字段改名 `gid` → `generalid` |
 | `arena` ← `arena` | `win`、`total_rank` |
@@ -885,7 +897,7 @@
 ## 建议补齐顺序
 
 0. 旧版配置表已生成到 `src/MasterData/`（`tools/gen_master_data.php`），补玩法时数值一律取自这里，不再手写配置。
-1. `general` / `equipment` 属性字段（基础属性、星级、技能、宝石孔、锻造）——影响战力计算。
+1. `general` / `equipment` 字段已按旧版补齐（公式见 `src/Battle/LegacyStats.php`），将领界面、背包、强化已按旧版读写；下一步把战力计算、组队改为读这些字段（各战斗 Handler 仍调用新版自定的 `General::calculateStats` / `Equipment::calculateBonus`）。
 2. 军团体系的外围依赖：国战（`countryfight`）、税金、谏言、国家庆典等（代码中 `依赖未移植` 注释标出）。
 3. 将魂、tower、beauty、gem、heaven 等缺口大的玩法。
 4. 跨服 god / war / worldarena（含 `pack.use_item`），节日活动。

@@ -54,21 +54,8 @@ final class InformationHandler
         ];
 
         // 查询玩家所有武将 (过滤软删除)
+        // 查看他人信息时不再替对方补武将（旧版无此行为，初始武将只在注册时发放）
         $generals = DB::table('general')->where('uid', $targetUid)->whereNull('deleted_at')->get();
-        if (empty($generals)) {
-            // 初始化初始武将
-            DB::table('general')->insert([
-                'uid' => $targetUid,
-                'generalid' => 1,
-                'name' => $player['nickname'],
-                'level' => 1,
-                'exp' => 0,
-                'pos' => 2,
-                'matrix_id' => 1,
-                'status' => 1,
-            ]);
-            $generals = DB::table('general')->where('uid', $targetUid)->whereNull('deleted_at')->get();
-        }
 
         // 排序规则：出征武将优先，等级降序
         usort($generals, static function (array $a, array $b): int {
@@ -101,8 +88,11 @@ final class InformationHandler
         foreach ($generals as $g) {
             $gid = (int)$g['id'];
             $equipped = $equipsByGeneral[$gid] ?? [];
-            $heroData = GeneralHandler::formatHeroData($g, $equipped, $targetUid);
-            $totalPower += (int)($heroData['attack'] * 2 + $heroData['defense'] + $heroData['hp'] * 0.2);
+            // 武将展示字段按旧版 general get_info（info_field + hp）
+            $heroData = GeneralHandler::legacyInfo($targetUid, $g) ?? [];
+            // total_power 是新版自定字段（非旧版），仍用新版自定 calculateGeneralStats，随战斗重写一并处理
+            $stats = GeneralHandler::calculateGeneralStats($g, $equipped);
+            $totalPower += (int)($stats['attack'] * 2 + $stats['defense'] + $stats['hp'] * 0.2);
 
             if ($idx <= 8) {
                 $list[(string)$idx] = $heroData;

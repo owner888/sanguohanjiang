@@ -82,6 +82,7 @@ CREATE TABLE `zc_sanguo_member_field` (
     `race` TINYINT NOT NULL DEFAULT 0,
     `race_dateline` INT UNSIGNED NOT NULL DEFAULT 0,
     `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '每日第一次游戏时间（每日计划任务判断依据）',
+    `first_recharge` TINYINT UNSIGNED NOT NULL DEFAULT 1 COMMENT '首充返利标识（1 显示首充图标，2 已首充待领奖，0 不显示）',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL
@@ -94,10 +95,29 @@ DROP TABLE IF EXISTS `zc_sanguo_general`;
 CREATE TABLE `zc_sanguo_general` (
     `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     `uid` INT UNSIGNED NOT NULL,
-    `generalid` INT NOT NULL COMMENT '对应 ini.js 中的武将模版ID',
+    `generalid` INT NOT NULL COMMENT '武将模板ID（MasterData General，即旧版模板表 zc_sanguo_general.id）',
     `name` VARCHAR(64) NOT NULL DEFAULT '',
     `level` INT NOT NULL DEFAULT 1,
     `exp` BIGINT NOT NULL DEFAULT 0,
+    `levelupexp` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '将领升级经验',
+    `image` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '武将资源ID',
+    `type` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '职业（1 猛将、2 谋士）',
+    `wuli` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '初始武力',
+    `zhili` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '初始智力',
+    `tili` SMALLINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '初始体力',
+    `talentid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '天赋ID',
+    `skillid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '技能ID',
+    `star` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '武将星级',
+    `turn` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '转生次数',
+    `quality` INT UNSIGNED NOT NULL DEFAULT 1 COMMENT '武将进阶品级（1白，2绿，3蓝，4金，5紫，6红）',
+    `addtype` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '成就加成类型',
+    `addvalue` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '成就加成值',
+    `mid0` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '主战坐骑',
+    `mid1` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '备战坐骑1',
+    `mid2` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '备战坐骑2',
+    `mid3` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '备战坐骑3',
+    `mid4` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '备战坐骑4',
+    `goout` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '是否出征(1 出征中、0 休息中)',
     `pos` TINYINT NOT NULL DEFAULT 0 COMMENT '九宫格阵位 1~9, 0为未出战',
     `matrix_id` TINYINT NOT NULL DEFAULT 1 COMMENT '所在阵法',
     `status` TINYINT NOT NULL DEFAULT 1,
@@ -112,23 +132,36 @@ CREATE TABLE `zc_sanguo_general` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='武将名册表';
 
 -- -------------------------------------------------------------
--- 5. 装备背包表 (含软删除覆盖索引)
+-- 5. 装备背包表 (含软删除覆盖索引；同一武将同一装配位置最多一件，见 uk_general_site)
 -- -------------------------------------------------------------
 DROP TABLE IF EXISTS `zc_sanguo_equipment`;
 CREATE TABLE `zc_sanguo_equipment` (
     `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     `uid` INT UNSIGNED NOT NULL,
-    `equipid` INT NOT NULL COMMENT '装备模版ID',
+    `equipid` INT NOT NULL COMMENT '装备模板ID（MasterData Equip，即旧版 zc_sanguo_equip.id）',
     `name` VARCHAR(64) NOT NULL DEFAULT '',
-    `type` TINYINT NOT NULL DEFAULT 1 COMMENT '1武器 2衣服 3坐骑 4书籍 5兵符',
-    `quality` TINYINT NOT NULL DEFAULT 1 COMMENT '品质品级 1白 2绿 3蓝 4紫 5橙',
-    `level` INT NOT NULL DEFAULT 1 COMMENT '强化等级',
-    `generalid` INT NOT NULL DEFAULT 0 COMMENT '穿戴该装备的武将ID，0为背包闲置',
+    `type` TINYINT NOT NULL DEFAULT 1 COMMENT '装备类型（1 猛将武器、2 谋士武器、3 铠甲、4 披风、5 兵符）',
+    `quality` TINYINT NOT NULL DEFAULT 1 COMMENT '装备品质（1 白、2 绿、3 蓝、4 金、5 紫）',
+    `needlevel` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '武将装配等级',
+    `level` INT NOT NULL DEFAULT 0 COMMENT '装备强化等级',
+    `power` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '装备能力初始值',
+    `powerup` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '强化后能力',
+    `generalid` INT NOT NULL DEFAULT 0 COMMENT '穿戴该装备的武将（本库 zc_sanguo_general.id），0 为未穿戴',
+    `site` TINYINT UNSIGNED AS (CASE WHEN `generalid` > 0 AND `deleted_at` IS NULL THEN CASE `type` WHEN 1 THEN 1 WHEN 2 THEN 1 WHEN 3 THEN 2 WHEN 4 THEN 3 WHEN 5 THEN 4 END END) STORED COMMENT '装配位置（旧版 get_item_site 派生，未穿戴/已删除为 NULL），仅用于唯一约束',
     `number` INT NOT NULL DEFAULT 1,
     `saleprice` INT NOT NULL DEFAULT 0,
+    `chip` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '碎片数(0 道具、>1碎片)',
+    `sale_site` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '道具出售位置（1红装回收，0背包出售）',
+    `hammer` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '锤子等级(1-7:白绿蓝黄紫红橙)',
+    `aid` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '强化等级成就ID',
+    `forgeid` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '神铸属性关联id',
+    `newquality` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '打造出来的装备新品级',
+    `oldequipid` MEDIUMINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '打造出来的装备关联旧的装备id',
+    `newattribute` VARCHAR(50) NOT NULL DEFAULT '' COMMENT '神铸属性',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_general_site` (`uid`, `generalid`, `site`),
     INDEX `idx_uid` (`uid`),
     INDEX `idx_general` (`uid`, `generalid`),
     INDEX `idx_uid_deleted` (`uid`, `deleted_at`)
@@ -466,5 +499,22 @@ CREATE TABLE `zc_sanguo_country_learn_log` (
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='国师授艺记录表';
+
+-- -------------------------------------------------------------
+-- 首充返利日志 (对齐原版 zc_sanguo_first_recharge_log，每个玩家一行)
+-- -------------------------------------------------------------
+DROP TABLE IF EXISTS `zc_sanguo_first_recharge_log`;
+CREATE TABLE `zc_sanguo_first_recharge_log` (
+    `id` INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    `uid` BIGINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '角色ID',
+    `gold` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '充值元宝数量',
+    `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '已领取的首充档位ID（0 未领取）',
+    `lottery` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '转盘抽奖状态（0 未抽奖，1 已抽奖）',
+    `dateline` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '领取奖励时间',
+    `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    `deleted_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uk_uid` (`uid`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci COMMENT='首充返利领取奖励日志表';
 
 SET FOREIGN_KEY_CHECKS = 1;

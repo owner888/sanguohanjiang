@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\MasterData\Skill;
+use Hanjiang\MasterData\Talent;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -20,24 +22,8 @@ final class MusterHandler
     public static function index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
+        // 旧版没有「名册为空时自动补武将」：初始武将只在注册时发放
         $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
-
-        if (empty($generals)) {
-            // 初始化初始主公将领
-            $member = DB::table('member')->where('uid', $uid)->first();
-            $nickname = $member['nickname'] ?? '天命主公';
-            DB::table('general')->insert([
-                'uid' => $uid,
-                'generalid' => 1,
-                'name' => $nickname,
-                'level' => 1,
-                'exp' => 0,
-                'pos' => 2,
-                'matrix_id' => 1,
-                'status' => 1,
-            ]);
-            $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
-        }
 
         // 排序规则：出征武将优先，等级从高到低
         usort($generals, static function (array $a, array $b): int {
@@ -306,9 +292,39 @@ final class MusterHandler
             'wuliup' => (int)($g['wuliup'] ?? 0),
             'zhiliup' => (int)($g['zhiliup'] ?? 0),
             'tiliup' => (int)($g['tiliup'] ?? 0),
-            'skill' => GeneralHandler::getGeneralSkill($g),
-            'talent' => GeneralHandler::getGeneralTalent($g),
+            'skill' => self::musterSkill((int)($g['skillid'] ?? 0)),
+            'talent' => self::musterTalent((int)($g['talentid'] ?? 0)),
             'goout' => ($pos > 0) ? 1 : 0,
         ];
+    }
+
+    /**
+     * 技能：旧版 controllers/muster.php 取 id / name / type / description，技能不存在时各项为空串
+     *
+     * @return array<string, mixed>
+     */
+    private static function musterSkill(int $skillid): array
+    {
+        $skill = Skill::ROWS[$skillid] ?? null;
+        $return = [];
+        foreach (['id', 'name', 'type', 'description'] as $field) {
+            $return[$field] = $skill !== null ? $skill[$field] : '';
+        }
+        return $return;
+    }
+
+    /**
+     * 天赋：旧版 controllers/muster.php 取 id / name / description，天赋不存在时各项为空串
+     *
+     * @return array<string, mixed>
+     */
+    private static function musterTalent(int $talentid): array
+    {
+        $talent = Talent::ROWS[$talentid] ?? null;
+        $return = [];
+        foreach (['id', 'name', 'description'] as $field) {
+            $return[$field] = $talent !== null ? $talent[$field] : '';
+        }
+        return $return;
     }
 }

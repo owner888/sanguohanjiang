@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Model\General;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -29,11 +30,15 @@ final class TavernHandler
     /**
      * 酒馆常驻名将池配置
      *
+     * 依赖未移植：名将池、价格与展示数值不是旧版数据（旧版招募走 MasterData Pub）。
+     * 入库只认 generalid：按名称 + 形象 id 对上的 MasterData General 模板（池 key 10~13 与模板 id 不是一回事）。
+     *
      * @var array<int, array<string, mixed>>
      */
     public const array HERO_POOL = [
         10 => [
             'id' => 10,
+            'generalid' => 52,
             'name' => '张飞',
             'image' => 54,
             'quality' => 4,
@@ -47,6 +52,7 @@ final class TavernHandler
         ],
         11 => [
             'id' => 11,
+            'generalid' => 33,
             'name' => '关羽',
             'image' => 58,
             'quality' => 5,
@@ -60,6 +66,7 @@ final class TavernHandler
         ],
         12 => [
             'id' => 12,
+            'generalid' => 51,
             'name' => '诸葛亮',
             'image' => 76,
             'quality' => 5,
@@ -73,6 +80,7 @@ final class TavernHandler
         ],
         13 => [
             'id' => 13,
+            'generalid' => 6,
             'name' => '赵云',
             'image' => 25,
             'quality' => 5,
@@ -104,9 +112,8 @@ final class TavernHandler
         $list = [];
         $idx = 1;
         foreach (self::HERO_POOL as $hero) {
-            $gid = (int)$hero['id'];
             $list[$idx] = array_merge($hero, [
-                'is_recruited' => isset($ownedMap[$gid]) ? 1 : 0,
+                'is_recruited' => isset($ownedMap[(int)$hero['generalid']]) ? 1 : 0,
             ]);
             $idx++;
         }
@@ -167,7 +174,7 @@ final class TavernHandler
         $barList = [];
         $idx = 1;
         foreach (self::HERO_POOL as $gid => $hero) {
-            $isOwn = isset($ownedMap[$gid]) ? 1 : 0;
+            $isOwn = isset($ownedMap[(int)$hero['generalid']]) ? 1 : 0;
             $star = match ((int)$hero['quality']) {
                 5 => 5,
                 4 => 4,
@@ -240,11 +247,12 @@ final class TavernHandler
 
         $heroConfig = self::HERO_POOL[$gid];
         $costSilver = (int)$heroConfig['cost_silver'];
+        $templateId = (int)$heroConfig['generalid'];
 
         // 检查是否已经拥有
         $exist = DB::table('general')
             ->where('uid', $uid)
-            ->where('generalid', $gid)
+            ->where('generalid', $templateId)
             ->whereNull('deleted_at')
             ->first();
 
@@ -263,21 +271,17 @@ final class TavernHandler
             ];
         }
 
+        // 入库走唯一入口（旧版 add_general）：模板属性按 MasterData General 复制
+        if (General::createFromTemplate($uid, $templateId) === null) {
+            return [
+                'status' => 4,
+                'message' => '您已经招募过该武将',
+            ];
+        }
+
         // 扣除银两
         $newSilver = (int)$member['silver'] - $costSilver;
         DB::table('member')->where('uid', $uid)->update(['silver' => $newSilver]);
-
-        // 插入武将
-        DB::table('general')->insert([
-            'uid' => $uid,
-            'generalid' => $gid,
-            'name' => $heroConfig['name'],
-            'level' => 1,
-            'exp' => 0,
-            'pos' => 0,
-            'matrix_id' => 1,
-            'status' => 1,
-        ]);
 
         Redis::del('player:' . $uid);
 
@@ -298,7 +302,7 @@ final class TavernHandler
             'price' => $costSilver,
             'jade' => $remainJade,
             'general' => [
-                'generalid' => $gid,
+                'generalid' => $templateId,
                 'name' => (string)$heroConfig['name'],
                 'type' => $vocation,
                 'image' => 'hero_' . $gid,
@@ -420,6 +424,24 @@ final class TavernHandler
     public static function trade_batch(Context $ctx): array
     {
         return self::trade($ctx);
+    }
+
+    /**
+     * 增加宝石（移植旧版 models/tavern_model.php:add_jade 的 site = 0 用法：只累加 get{type}，不动会客位置）
+     *
+     * 宝石与会客记录同存于 Redis user_trader:{uid}（新版现有存储，旧版为 trader_log 表）。
+     * 依赖未移植：宝石流水 _tavernjade_log。
+     *
+     * @param int $type 1 蓝宝石、2 黄宝石、3 紫宝石
+     * @return int 增加后的该类宝石数量
+     */
+    public static function addJade(int $uid, int $type, int $num): int
+    {
+        $traderData = self::getUserTraderData($uid);
+        $traderData['get' . $type] = (int)($traderData['get' . $type] ?? 0) + $num;
+        Redis::setJson("user_trader:{$uid}", $traderData, 86400 * 30);
+        Redis::del('player:' . $uid);
+        return $traderData['get' . $type];
     }
 
     /**

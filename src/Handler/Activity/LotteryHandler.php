@@ -143,18 +143,8 @@ final class LotteryHandler
                 MemberHandler::addCurrency($uid, act: $rewardAct);
                 break;
             case 7:
-                // 装备入库
-                DB::table('equipment')->insert([
-                    'uid' => $uid,
-                    'equipid' => (int)$prizeItem['getvalue'],
-                    'name' => $prizeItem['itemname'],
-                    'type' => (int)$prizeItem['itemtype'],
-                    'quality' => (int)$prizeItem['itemquality'],
-                    'level' => 1,
-                    'generalid' => 0,
-                    'number' => 1,
-                    'saleprice' => 100,
-                ]);
+                // 依赖未移植：旧版转盘按 MasterData Lottery 分组/概率抽奖（gettype 7 发 getvalue 号装备）；
+                // 本格「青钢名剑」不在 MasterData Equip 中（101 是玄武杖），没有可对应的模板，不发装备。
                 break;
             case 8:
                 // 突飞卡

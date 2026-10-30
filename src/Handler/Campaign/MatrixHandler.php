@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Campaign;
 
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\Handler\General\GeneralHandler;
 
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
@@ -92,9 +91,6 @@ final class MatrixHandler
         }
 
         // 获取用户所有武将并标注其出战状态 (包含 image, quality 等展示字段)
-        $member = DB::table('member')->where('uid', $uid)->first();
-        $memberGender = (int)($member['gender'] ?? 1);
-
         $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
         $generalList = [];
         $gIdx = 1;
@@ -102,19 +98,14 @@ final class MatrixHandler
             $gid = (int)$g['id'];
             $pos = (int)($g['pos'] ?? 0);
             $name = (string)$g['name'];
-            $cfg = GeneralHandler::HERO_CONFIGS[$name] ?? null;
-
-            $image = (int)($g['image'] ?? 0);
-            if ($image <= 0) {
-                $image = GeneralHandler::resolveHeroImage($name, $memberGender, (int)($g['generalid'] ?? 1));
-            }
 
             $generalList[(string)$gIdx] = [
                 'id' => $gid,
                 'generalid' => (int)($g['generalid'] ?? 1),
                 'name' => $name,
-                'quality' => (int)($g['quality'] ?? $cfg['quality'] ?? 3),
-                'image' => $image,
+                // 品级 / 形象取自武将行（获得时已从 MasterData General 模板复制）
+                'quality' => (int)$g['quality'],
+                'image' => (int)$g['image'],
                 'level' => (int)($g['level'] ?? 1),
                 'pos' => $pos,
                 'goout' => ($pos > 0 && in_array($gid, $onBattleGids, true)) ? 1 : 0,

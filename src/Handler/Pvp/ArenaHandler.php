@@ -583,7 +583,9 @@ final class ArenaHandler
             }
         }
 
-        if ($target === null) {
+        // 依赖未移植：旧版积分兑换取 MasterData ArenaExchange（re_type 8 发 re_value1 号装备）；
+        // 新版写死的兵符兑换品不在 MasterData Equip 中，没有可对应的模板，不予兑换（不扣积分）。
+        if ($target === null || (int)$target['re_type'] === 8) {
             return ['status' => -3, 'msg' => '商品不存在'];
         }
 
@@ -634,21 +636,6 @@ final class ArenaHandler
             14 => (function() use ($uid, $val, &$rewardName) {
                 MemberHandler::addCurrency($uid, silver: $val * 1000);
                 $rewardName = "精炼石 x{$val}";
-            })(),
-            8 => (function() use ($uid, $target, &$rewardName) {
-                $eqId = (int)$target['info']['id'];
-                DB::table('equipment')->insert([
-                    'uid' => $uid,
-                    'equipid' => $eqId,
-                    'name' => $target['info']['name'],
-                    'type' => 4,
-                    'level' => 1,
-                    'quality' => (int)$target['info']['quality'],
-                    'generalid' => 0,
-                    'number' => 1,
-                    'saleprice' => 500,
-                ]);
-                $rewardName = $target['info']['name'];
             })(),
             default => null,
         };

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\City;
 
+use Hanjiang\Model\General;
 use Hanjiang\Model\Member;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
@@ -139,6 +140,11 @@ final class MemberHandler
             'gift' => (int)($field['gift'] ?? 0),
             'race' => (int)($field['race'] ?? 0),
             'race_dateline' => (int)($field['race_dateline'] ?? 0),
+            // 首充图标（旧版 member.php：1 显示未领奖 / 未抽转盘，2 充值后弹领奖，0 不显示；强制引导期间有图标时为 3）
+            'first_recharge' => (int)$member['guidestop'] === 0 && (int)($field['first_recharge'] ?? 1) > 0
+                ? 3
+                : (int)($field['first_recharge'] ?? 1),
+            'first_recharge_an' => 0,
             'new_role_reward' => 0,
             'opennewyearboss' => 0,
             'daily_task' => [
@@ -270,42 +276,8 @@ final class MemberHandler
             DB::table('general')->where('uid', $uid)->delete();
             DB::table('matrix')->where('uid', $uid)->delete();
 
-            // 3. 重新插入初始主公将领
-            $genId = DB::table('general')->insert([
-                'uid' => $uid,
-                'generalid' => 1,
-                'name' => '新主公' . $uid,
-                'level' => 1,
-                'exp' => 0,
-                'pos' => 2,
-                'matrix_id' => 1,
-                'status' => 1,
-            ]);
-
-            // 初始装备
-            DB::table('equipment')->insert([
-                'uid' => $uid,
-                'equipid' => 101,
-                'name' => '青铜剑',
-                'type' => 1,
-                'quality' => 1,
-                'level' => 1,
-                'generalid' => 0,
-                'number' => 1,
-                'saleprice' => 50,
-            ]);
-
-            DB::table('equipment')->insert([
-                'uid' => $uid,
-                'equipid' => 201,
-                'name' => '青铜甲',
-                'type' => 2,
-                'quality' => 1,
-                'level' => 1,
-                'generalid' => 0,
-                'number' => 1,
-                'saleprice' => 50,
-            ]);
+            // 3. 重新发放旧版初始武将（init_general），不送初始装备
+            $genId = General::initGeneral($uid);
 
             // 初始鱼鳞阵
             DB::table('matrix')->insert([

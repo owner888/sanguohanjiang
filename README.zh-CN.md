@@ -46,7 +46,8 @@
 │   ├── Battle/              # 确定性九宫格战斗引擎
 │   │   ├── BattleEngine.php # 核心战斗推演逻辑 (源自 battle_model.php 重构)
 │   │   ├── Hero.php         # 战斗英雄实体模型
-│   │   └── Position.php     # 九宫格战位 (1-9号位) 枚举
+│   │   ├── Position.php     # 九宫格战位 (1-9号位) 枚举
+│   │   └── LegacyStats.php  # 旧版武将/装备数值公式（纯函数，逐条注明旧版出处）
 │   ├── MasterData/          # 旧版配置表常量数组（脚本生成，勿手改）
 │   ├── Middleware/          # 中间件流水线 (完全对齐 smart-book 架构)
 │   │   ├── MiddlewareInterface.php
@@ -100,6 +101,7 @@
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
+   已有数据库改为升级：按文件名顺序执行 `database/migrations/` 中比现有结构新的文件（每个文件开头写明作用）。`20261031_general_equip_legacy_cols.sql` 假定武将/装备表只有测试数据：会清空这两张表，并给每个玩家重新发放旧版初始武将。
 
 4. 启动服务：
    ```bash
@@ -133,7 +135,7 @@
 网关无缝支持原版客户端通过 `?c={controller}&m={method}` 发起的各项业务请求：
 
 - `c=ios&m=update_world_common`：客户端启动环境握手与模块清单验证
-- `c=register&m=guest`：游客一键试玩账号创建与初始区服下发
+- `c=register&m=guest`：游客一键试玩账号创建与初始区服下发（按旧版：初始武将为模板 1 廖化，放在 1 号阵法 2 号位，不送初始装备）
 - `c=register&m=reg`：正式账号注册
 - `c=user&m=login`：账号验证与角色登录
 - `c=login&m=guest`：单服试玩令牌签发
@@ -146,18 +148,18 @@
 - `c=map&m=get_scene_list`：战役势力关卡场景列表（如：大兴山）
 - `c=map&m=get_mission_list`：据点敌人阵容与关卡敌将数据
 - `c=map&m=mission`：战前敌将情报与布阵确认弹窗
-- `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发
+- `c=map&m=action`：发起推图战斗与纯内存九宫格战报下发；胜利后按旧版 `Mission` 概率掉落（`getrate` / `gettype` / `getvalue`）结算发放
 - `c=map&m=get_newreward_index|get_newreward|get_newresult`：战役势力据点关卡宝箱、整势力通关大礼奖励领取与防重校验
-- `c=general&m=index`：玩家武将列表、穿戴装备与属性计算
+- `c=general&m=index|get_info|equip|unequip`：将领界面，按旧版 `general.php` 移植（只列出征将领、旧版 `info_field`、装备显示能力含精炼 / 强化成就加成、旧版血量公式、旧版装配校验与状态码）
 - `c=matrix&m=index`：九宫格战位阵法管理与上阵站位调换
-- `c=pack&m=index`：背包道具、消耗品与装备仓储
-- `c=strengthen&m=index`：铁匠铺装备强化升级与成功率计算
+- `c=pack&m=index|sale`：背包，按旧版 `pack.php` 移植（只列未穿戴、碎片 / 卷轴售价、VIP 11 强化返还、强化 10 级以上装备每日限售）
+- `c=strengthen&m=index|strengthen_info|strengthen_start|clear_cd`：铁匠铺，按旧版 `strengthen.php` 移植（`EquipLevel` 花费与成功率、VIP 5 暴击 +2 级、写回等级 / 强化能力 / 售价；旧版强化从不累加冷却）
 - `c=tavern&m=index`：酒馆将领招募与会客商人
 - `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`：校场武将挂机演武训练、突飞猛进与扫荡、8大训练位进阶解锁及武将转生
 - `c=activity&m=index`：每日精彩活动列表总览、开放时段区间判定与签到/Boss红点气泡
 - `c=chat&m=read|send`：世界与国家频道实时消息流
 - `c=mainquest&m=index`：主线任务进度与里程碑领奖
-- `c=shop&m=index`：商城道具与军令体力购买
+- `c=shop&m=index`：商城道具（旧版 `Shop` 表：兵符，装备 7、9–15、53–56）与军令体力购买
 - `c=arena&m=index|action|buy_pk_num|get_reward|clear_cd`：演武榜竞技场天梯对决、排名互换、挑战次数购买与每日声望俸禄
 - `c=tower&m=index|action|sweep`：将魂星路试炼塔爬塔闯关、守关神兽决战、一键扫荡与将魂结算
 - `c=pass_general&m=index|action|reset`：经典过关斩将单挑六大名将（华雄/颜良/文丑/庞德/典韦/吕布）与通关宝箱开启
@@ -181,7 +183,7 @@
 - `c=gvg&m=index|betting|sync_info`：军团跨服 GVG 巅峰争霸赛对阵树、冠军押注竞猜与胜利分红结算
 - `c=general_inherit&m=index|preview|go_inherit`：武将功法传承、经验与洗髓三围属性无损转移（普通传承 80% 与至尊完璧 100% 传承）
 - `c=blackmarket&m=index|buy|lock|refresh`：西域神秘黑市商人、稀世奇珍锁定保底与货架刷新
-- `c=first_recharge&m=index|get_reward`：开服首充狂欢至尊大礼包、神将赵云、龙胆亮银枪与 VIP 直升
+- `c=first_recharge&m=index|get_reward|lottery|action`：首充返利档位与天命转盘，按旧版 `first_recharge.php` 与 `FirstRecharge` / `FirstRechargeLottery` 数据移植；玩家状态存 `first_recharge_log` 与 `member_field.first_recharge`
 - `c=overseastrade&m=index|goout|trade`：海上丝绸之路远洋商贸、商队启航与满载珍宝凯旋利润结算
 - `c=studfarm&m=index|action`：伯乐相马场、纯血神驹鉴赏寻觅、战马血统注入与战力跃升
 - `c=jadegamble&m=index|mining|gambling|harvest`：翡翠原石赌石坊、选石开采、一刀切石与满色帝王绿玉石折现
@@ -233,10 +235,11 @@
 
 ## 🧪 自动化测试套件
 
-所有 16 个核心业务接口与战斗推演闭环均由 PHPUnit 自动化集成测试全量覆盖：
+所有 16 个核心业务接口与战斗推演闭环均由 PHPUnit 自动化集成测试全量覆盖（`tests/Feature`）；`LegacyStats` 中的旧版公式用旧版库真实行做金标准校验（`tests/Unit`）：
 
 ```bash
-./vendor/bin/phpunit
+./vendor/bin/phpunit                      # 全部测试
+./vendor/bin/phpunit --testsuite Unit     # 只测公式，不需要 DB / Redis
 ```
 
 ---
@@ -255,7 +258,7 @@
 - [x] 战报回放与纯内存推图战斗全闭环
 - [x] 16 个核心游戏玩法全面迁移为无状态 Handler 架构
 - [x] 装备穿戴与卸下系统，支持全属性（攻击/防御/生命）实时动态加成计算
-- [x] 铁匠铺装备强化系统 (`strengthen`)，支持梯度银两消耗与成功率机制
+- [x] 铁匠铺装备强化系统 (`strengthen`)，按旧版 `EquipLevel` 花费、成功率与 VIP 强化暴击
 - [x] 酒馆真实银两招募武将系统 (`tavern`)，名将池持久化入库与防重招募校验
 - [x] 校场武将挂机训练系统 (`practice`)，挂机时长经验自动结算与突飞猛进即时升级
 - [x] 深度联动纯内存九宫格战斗推演，上阵武将与装备强化数值无缝作用于战场战力
@@ -276,7 +279,7 @@
 - [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、天命观星突破 (`heaven`)、全服世界 BOSS 董卓战 (`worldboss`)
 - [x] 军团攻城掠地城池战 (`siege`)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)
 - [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
-- [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充至尊神礼 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
+- [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充返利与天命转盘 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
 - [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)
 - [x] 战神殿与朝堂宏图系统打通：四象圣域神尊决战 (`sanctum`)、跨服群雄论剑 (`compete`)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)
 - [x] 休闲社交与交互狂欢系统全面贯通：群英夜宴大摆豪门宴席 (`banquet`)、青梅煮酒论英雄 (`drink`)、逍遥神骰行大运 (`dice`)、聚宝摇钱神树浇水摇金 (`sacredtree`)
@@ -292,7 +295,7 @@
 - [x] 运营激活与战力成就基石就绪：至尊CDKey激活码兑换 (`activationcode`)、整军经武演武礼包 (`exercise`)、主公全军总战力透视 (`information`)、结义邀请拉新分红 (`invitation`)
 - [x] 核心业务轻量薄模型 (`src/Model/`) 落地：引入 `SoftDeletes` 自动软删除过滤、强类型属性转换与内聚领域方法（`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`）
 - [x] 高并发防连击与防重入机制：基于 Redis 的核心资产操作原子防刷中间件 `ThrottleMiddleware`
-- [x] 编写 PHPUnit 全链路自动化测试套件 (91/91 100% 绿灯全过，1202 个断言)
+- [x] PHPUnit Unit + Feature 测试套件（112 个测试，1967 个断言）
 
 ---
 

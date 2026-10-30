@@ -6,6 +6,10 @@ namespace Hanjiang\Handler\Campaign;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
+use Hanjiang\MasterData\Equip as EquipTemplate;
+use Hanjiang\MasterData\Map as MapTemplate;
+use Hanjiang\MasterData\Mission as MissionTemplate;
+use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 
 use Hanjiang\Battle\BattleEngine;
@@ -440,17 +444,15 @@ final class MapHandler
 
             $leftHeroes[] = new Hero($gid, $heroName, $pos, $stats['hp'], $stats['hp'], $finalAtk, $finalDef, $stats['speed']);
 
-            // 形象 ID 解析：主公将领(generalid=1)依账号 gender 解析，名将依原型配置解析
-            $heroImage = GeneralHandler::resolveHeroImage($heroName, $memberGender, (int)($g['generalid'] ?? 1));
-
-            // 天赋与技能解析
-            $talentObj = GeneralHandler::getGeneralTalent($g);
-            $skillObj = GeneralHandler::getGeneralSkill($g);
+            // 形象 / 职业取自武将行，天赋与技能名取自 MasterData Talent / Skill
+            $heroImage = (int)$g['image'];
+            $talentObj = GeneralHandler::talentById((int)$g['talentid']);
+            $skillObj = GeneralHandler::skillById((int)$g['skillid']);
 
             $leftTeamData[$posInt] = [
                 'heroid' => (string)$gid,
                 'name' => $heroName,
-                'herotype' => (string)($g['type'] ?? (isset(GeneralHandler::HERO_CONFIGS[$heroName]) ? GeneralHandler::HERO_CONFIGS[$heroName]['type'] : '1')),
+                'herotype' => (string)$g['type'],
                 'level' => (string)$stats['level'],
                 'allblood' => $stats['hp'],
                 'blood' => $stats['hp'],
@@ -463,7 +465,7 @@ final class MapHandler
         }
 
         if (empty($leftHeroes)) {
-            $defaultHeroImage = GeneralHandler::resolveHeroImage($nickname, $memberGender, 1);
+            $defaultHeroImage = $memberGender === 2 ? 2 : 1;
             $leftHeroes[] = new Hero(1, $nickname, Position::FrontMiddle, 1500, 1500, 320, 120, 150);
             $leftTeamData[2] = [
                 'heroid' => '1',
@@ -516,7 +518,8 @@ final class MapHandler
 
         $gainExp = 0;
         $gainGexp = 0;
-        $gainSilver = 0;
+        // 关卡掉落（旧版 controllers/map.php:action「处理概率掉落」），胜利后结算
+        $drop = ['get_number' => 0, 'gettype' => 0, 'getvalue' => 0, 'itemid' => 0, 'itemname' => ''];
 
         if ($isWin) {
             $enemyLvl = (int)($enemyCfg['level'] ?? 1);
@@ -527,7 +530,6 @@ final class MapHandler
                 $gainExp = 100 + $enemyLvl * 10;
                 $gainGexp = 150 + $enemyLvl * 15;
             }
-            $gainSilver = 500;
         }
 
         if ($member !== null) {
@@ -589,7 +591,6 @@ final class MapHandler
                 // 推进玩家进度
                 DB::table('member')->where('uid', $uid)->update([
                     'act' => max(0, (int)$member['act'] - 1),
-                    'silver' => (int)$member['silver'] + 500,
                     'exp' => $newExp,
                     'maxexp' => $reqExp,
                     'level' => $curLevel,
@@ -614,39 +615,9 @@ final class MapHandler
                         'mission' => $missionId,
                         'dateline' => time(),
                     ]);
-                    // 首通据点奖励入库
-                    $dropEquipId = match ($missionId) {
-                        1 => 101,
-                        2 => 102,
-                        3 => 103,
-                        default => 0,
-                    };
-                    $dropEquipName = match ($missionId) {
-                        1 => '青铜剑',
-                        2 => '皮甲',
-                        3 => '行军披风',
-                        default => '',
-                    };
-                    $dropEquipType = match ($missionId) {
-                        1 => 1,
-                        2 => 2,
-                        3 => 3,
-                        default => 0,
-                    };
-                    if ($dropEquipId > 0) {
-                        DB::table('equipment')->insert([
-                            'uid' => $uid,
-                            'equipid' => $dropEquipId,
-                            'name' => $dropEquipName,
-                            'type' => $dropEquipType,
-                            'quality' => 1,
-                            'level' => 1,
-                            'generalid' => 0,
-                            'number' => 1,
-                            'saleprice' => 50,
-                        ]);
-                    }
                 }
+
+                $drop = self::missionDrop($uid, $curLevel, $level, $stage, $missionId);
             } else {
                 DB::table('member')->where('uid', $uid)->update([
                     'act' => max(0, (int)$member['act'] - 1),
@@ -659,25 +630,33 @@ final class MapHandler
             'win' => $isWin ? 1 : -1,
             'exp' => $gainExp,
             'gexp' => $gainGexp,
-            'silver' => $gainSilver,
-            'gettype' => $isWin ? 3 : 0,
-            'getvalue' => $gainSilver,
+            'get_number' => $drop['get_number'],
+            'gettype' => $drop['gettype'],
+            'getvalue' => $drop['getvalue'],
+            'itemid' => $drop['itemid'],
             'background' => 1,
             'openstatus' => $openstatus,
             'get_level' => $level, // 势力通关标记
             'missionlevel' => $nextLevel,
             'missionstage' => $nextStage,
             'missionid' => $nextMissionId,
-            'itemname' => '青铜铠甲',
+            'itemname' => $drop['itemname'],
             'levelup' => $levelUp,
             'levelexp' => $newExp ?? 0,
             'levelupexp' => $reqExp ?? 80,
             'report' => 0,
         ];
 
+        // 旧版只在掉落装备 / 卷轴时才有 itemtype、quality
+        foreach (['itemtype', 'quality'] as $key) {
+            if (isset($drop[$key])) {
+                $resultInfo[$key] = $drop[$key];
+            }
+        }
+
         // 若主公升级，生成升级银两奖励与功能预告/功能开启数据包，驱动客户端弹出【主公升级】与【功能开启】弹窗
         if ($levelUp === 1) {
-            $levelData = self::getLevelFuncData($curLevel, (int)($member['silver'] ?? 0) + 500);
+            $levelData = self::getLevelFuncData($curLevel, (int)($member['silver'] ?? 0));
             $resultInfo['levelReward'] = $levelData['levelReward'];
             $resultInfo['levelFunc'] = $levelData['levelFunc'];
         }
@@ -687,6 +666,79 @@ final class MapHandler
             'info' => $resultInfo,
             'battle' => $battleReport,
         ];
+    }
+
+    /**
+     * 胜利后的关卡概率掉落（移植旧版 controllers/map.php:action「处理概率掉落 / 添加道具」）
+     *
+     * 关卡取 MasterData Mission（missionlevel / missionstage / missionid，旧版 map_model::get_mission_by_id 同表）；
+     * 每次攻击 mt_rand(1, 100) <= getrate 计 1 件，get_number > 0 时按 gettype 发放：
+     * 1 装备（Equipment::addFromTemplate，模板取 MasterData Equip），3 银币 getvalue * 主公等级 * 件数，4 元宝 getvalue * 件数。
+     * 依赖未移植：2 装备碎片（Equipment 碎片分支）、5 / 6 天赋卷轴及碎片（talent_scroll）；这三类不发放也不回报。
+     * 旧版双倍掉落活动只在 first == 0 时翻倍，而 action 里 first 只会是 1 或 -1，从不生效，这里不移植。
+     * 新版 action 只支持单次攻击（旧版 times 刷图未移植），攻击次数按 1。
+     *
+     * @return array<string, mixed>
+     */
+    private static function missionDrop(int $uid, int $memberLevel, int $level, int $stage, int $missionId): array
+    {
+        $drop = ['get_number' => 0, 'gettype' => 0, 'getvalue' => 0, 'itemid' => 0, 'itemname' => ''];
+
+        $mission = null;
+        foreach (MissionTemplate::ROWS as $row) {
+            if ((int)$row['missionlevel'] === $level && (int)$row['missionstage'] === $stage && (int)$row['missionid'] === $missionId) {
+                $mission = $row;
+                break;
+            }
+        }
+        if ($mission === null) {
+            return $drop;
+        }
+
+        $number = 1;
+        $getNumber = 0;
+        for ($i = 0; $i < $number; $i++) {
+            if (mt_rand(1, 100) <= (int)$mission['getrate']) {
+                $getNumber++;
+            }
+        }
+        if ($getNumber <= 0) {
+            return $drop;
+        }
+
+        $gettype = (int)$mission['gettype'];
+        $getvalue = (int)$mission['getvalue'];
+        switch ($gettype) {
+            case 1:
+                $tpl = EquipTemplate::ROWS[$getvalue] ?? null;
+                if ($tpl === null) {
+                    break;
+                }
+                Equipment::addFromTemplate($uid, $getvalue, $getNumber);
+                $drop['get_number'] = $getNumber;
+                $drop['gettype'] = $gettype;
+                // itemtype：1 装备、2 卷轴
+                $drop['itemtype'] = 1;
+                $drop['itemid'] = (int)$tpl['id'];
+                $drop['quality'] = (int)$tpl['quality'];
+                $drop['itemname'] = (string)$tpl['name'];
+                break;
+            case 3:
+                $silver = $getvalue * $memberLevel * $getNumber;
+                MemberHandler::addCurrency($uid, silver: $silver);
+                $drop['get_number'] = $getNumber;
+                $drop['gettype'] = $gettype;
+                $drop['getvalue'] = $silver;
+                break;
+            case 4:
+                $gold = $getvalue * $getNumber;
+                MemberHandler::addCurrency($uid, gold: $gold);
+                $drop['get_number'] = $getNumber;
+                $drop['gettype'] = $gettype;
+                $drop['getvalue'] = $gold;
+                break;
+        }
+        return $drop;
     }
 
     /**
@@ -1094,74 +1146,22 @@ final class MapHandler
             return ['status' => -3, 'message' => '该势力通关大奖已领取过'];
         }
 
-        // 根据战役势力配置对应通关神兵大礼
-        $rewards = [
-            1 => [
-                'gettype' => 1,
-                'rewardnum' => 1,
-                'item' => [
-                    'id' => 101,
-                    'equipid' => 101,
-                    'name' => '百炼青钢剑',
-                    'quality' => 3,
-                    'type' => 1,
-                    'description' => '通关黄巾之乱获得的精炼名兵，削铁如泥！',
-                ],
-            ],
-            2 => [
-                'gettype' => 1,
-                'rewardnum' => 1,
-                'item' => [
-                    'id' => 102,
-                    'equipid' => 102,
-                    'name' => '西凉锁子甲',
-                    'quality' => 3,
-                    'type' => 2,
-                    'description' => '通关董卓之乱缴获的坚固战甲，刀枪不入！',
-                ],
-            ],
-            3 => [
-                'gettype' => 1,
-                'rewardnum' => 1,
-                'item' => [
-                    'id' => 103,
-                    'equipid' => 103,
-                    'name' => '修罗疾风披风',
-                    'quality' => 4,
-                    'type' => 3,
-                    'description' => '决战虎牢关大捷封赏的宝贵披风！',
-                ],
-            ],
-        ];
-
-        $targetReward = $rewards[$levelId] ?? [
-            'gettype' => 1,
-            'rewardnum' => 1,
-            'item' => [
-                'id' => 104,
-                'equipid' => 104,
-                'name' => '天命校尉兵符',
-                'quality' => 3,
-                'type' => 4,
-                'description' => '扫平诸侯叛军封赏的精锐兵符！',
-            ],
-        ];
-
-        // 装备真实入库
-        if ((int)$targetReward['gettype'] === 1 && isset($targetReward['item']['name'])) {
-            $itemCfg = $targetReward['item'];
-            DB::table('equipment')->insert([
-                'uid' => $uid,
-                'equipid' => (int)($itemCfg['equipid'] ?? 101),
-                'name' => (string)$itemCfg['name'],
-                'type' => (int)($itemCfg['type'] ?? 1),
-                'quality' => (int)($itemCfg['quality'] ?? 3),
-                'level' => 1,
-                'generalid' => 0,
-                'number' => 1,
-                'saleprice' => 500,
-            ]);
+        // 势力通关奖励取 MasterData Map（旧版 controllers/map.php:get_newresult）
+        $mapRow = MapTemplate::ROWS[$levelId] ?? null;
+        if ($mapRow === null || (int)$mapRow['rewardtype'] <= 0 || (int)$mapRow['reward'] <= 0) {
+            return ['status' => -4, 'message' => '该势力没有通关奖励'];
         }
+        if ((int)$mapRow['rewardtype'] !== 1) {
+            // 依赖未移植：rewardtype 2 天赋卷轴 / 3 声望 / 4 坐骑
+            return ['status' => -4, 'message' => '该势力通关奖励尚未开放'];
+        }
+        $itemTpl = EquipTemplate::ROWS[(int)$mapRow['reward']];
+        Equipment::addFromTemplate($uid, (int)$itemTpl['id']);
+        $targetReward = [
+            'gettype' => 1,
+            'rewardnum' => (int)$mapRow['rewardnum'],
+            'item' => $itemTpl,
+        ];
 
         // 标记已领取
         Redis::set($claimKey, '1', 86400 * 365);

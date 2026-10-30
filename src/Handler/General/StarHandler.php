@@ -81,11 +81,7 @@ final class StarHandler
         Redis::set("general_star:{$uid}:{$gid}", (string)$newStar, 86400 * 30);
         Redis::del('player:' . $uid);
 
-        // 升星奖励：永久提升三围属性
-        DB::table('general')->where('id', $gid)->update([
-            'wuliup' => (int)($general['wuliup'] ?? 0) + 10,
-            'tiliup' => (int)($general['tiliup'] ?? 0) + 20,
-        ]);
+        // 待按旧版重写：旧版武将没有逐将升星，wuliup/zhiliup/tiliup 只属于培养（cultivate），这里不写三围
 
         if ($newStar >= 5) {
             $pName = $member['nickname'] ?? ('主公' . $uid);

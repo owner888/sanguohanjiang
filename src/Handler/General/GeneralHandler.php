@@ -4,94 +4,40 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\General;
 
+use Hanjiang\Battle\LegacyStats;
 use Hanjiang\Handler\City\MemberHandler;
-
+use Hanjiang\MasterData\RefineAchieve;
+use Hanjiang\MasterData\Skill;
+use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\General;
-use Hanjiang\Model\Equipment;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 
+/**
+ * 将领界面（移植旧版 controllers/general.php 的客户端接口 index / get_info / equip / unequip）
+ *
+ * 旧版 own_general.eid1~eid4 新版不存储，由 equipment.generalid + LegacyStats::itemSite 派生；
+ * 旧版 own_general.goout 新版以阵位 pos > 0 为准（MusterHandler / MatrixHandler 只维护 pos）。
+ *
+ * 依赖未移植（界面血量 / 三围加成，均按 0 计入 LegacyStats::infoHp 与 wuliup/zhiliup/tiliup）：
+ * 兵符宝石 gem_model->get_gem_by_eid、主公天赋 _hero_talent_hp（主公 91 级以上）、名将进阶 _get_advanced_info（100 级）、
+ * 坐骑 _get_mount_info（120 级）、名将成就 _get_achievement_info（81 级）、美人 _get_beauty_info（60 级）、
+ * 主公星魄 _get_star_info（80 级）、国家学院 _get_war_college_info（国家 30 级）、套装 _get_siut_info、
+ * 将魂 _get_soul_info、神树活动 _get_sacredtree_info（index 的 tree 恒为 0）。
+ */
 final class GeneralHandler
 {
     /**
-     * 原版经典名将原型主数据 (精准对齐原版美术资产与战斗数值)
-     *
-     * @var array<string, array<string, mixed>>
+     * 旧版 get_info / _get_info 输出的将领字段（info_field），之后再追加 hp
      */
-    public const array HERO_CONFIGS = [
-        '诸葛亮' => [
-            'name' => '诸葛亮',
-            'image' => 76,  // 经典原版：八卦青芒、纶巾羽扇卧龙孔明
-            'type' => 2,    // 谋士(法术策略)
-            'quality' => 5, // 橙色神将
-            'wuli' => 55,
-            'zhili' => 100, // 智绝天下
-            'tili' => 88,
-            'talent' => ['id' => 4, 'name' => '智囊', 'blood' => 1, 'description' => '策略攻击防御综合提升15%'],
-            'skill' => ['id' => 5, 'name' => '卧龙天火', 'description' => '借东风降下神火天降，对敌军全阵型进行法术覆盖'],
-        ],
-        '关羽' => [
-            'name' => '关羽',
-            'image' => 58,  // 经典原版：绿袍长髯公、卧蚕眉丹凤眼
-            'type' => 1,    // 战法猛将
-            'quality' => 5,
-            'wuli' => 98,
-            'zhili' => 82,
-            'tili' => 95,
-            'talent' => ['id' => 5, 'name' => '武帝', 'blood' => 1, 'description' => '受到直接物理伤害降低10%，反击伤害提升15%'],
-            'skill' => ['id' => 4, 'name' => '春秋十字斩', 'description' => '神刀劈砍降下雷霆万钧，重创敌将并提升自身韧性'],
-        ],
-        '张飞' => [
-            'name' => '张飞',
-            'image' => 54,  // 经典原版：红巾黑须、怒目豹头张翼德
-            'type' => 1,    // 物理猛将
-            'quality' => 4,
-            'wuli' => 99,
-            'zhili' => 45,
-            'tili' => 96,
-            'talent' => ['id' => 2, 'name' => '勇士无双', 'blood' => 1, 'description' => '普通物理攻击伤害提升15%'],
-            'skill' => ['id' => 2, 'name' => '万夫莫敌', 'description' => '咆哮怒吼横扫千军，对横排敌方造成160%群体震慑'],
-        ],
-        '赵云' => [
-            'name' => '赵云',
-            'image' => 25,  // 经典原版：常山赵子龙白银战盔红缨
-            'type' => 1,    // 物理神将
-            'quality' => 5,
-            'wuli' => 96,
-            'zhili' => 78,
-            'tili' => 92,
-            'talent' => ['id' => 3, 'name' => '一身是胆', 'blood' => 1, 'description' => '出手先攻速度提升25点，必定暴击'],
-            'skill' => ['id' => 3, 'name' => '龙胆穿心', 'description' => '白马银枪直刺中路，必定暴击并破除敌军格挡'],
-        ],
+    private const array INFO_FIELD = [
+        'id', 'uid', 'quality', 'name', 'level', 'image', 'type', 'wuli', 'zhili', 'tili', 'wuliup', 'zhiliup', 'tiliup',
+        'star', 'turn', 'goout', 'skill', 'talent', 'eid1', 'eid2', 'eid3', 'eid4', 'mid0', 'mid1', 'mid2', 'mid3', 'mid4',
+        'achID', 'achList',
     ];
 
     /**
-     * 解析武将正统头像 ID
-     */
-    public static function resolveHeroImage(string $name, int $gender = 1, int $fallback = 1): int
-    {
-        if (isset(self::HERO_CONFIGS[$name])) {
-            return (int)self::HERO_CONFIGS[$name]['image'];
-        }
-        if ($fallback === 1) {
-            return ($gender === 2) ? 2 : 1;
-        }
-        return $fallback;
-    }
-
-    /**
-     * 计算单件装备提供的属性加成 (委托至 Equipment 领域模型)
-     *
-     * @param array<string, mixed> $equip
-     * @return array{attack: int, defense: int, hp: int}
-     */
-    public static function calculateEquipBonus(array $equip): array
-    {
-        return (new Equipment($equip))->calculateBonus();
-    }
-
-    /**
-     * 计算武将的综合战斗属性 (委托至 General 领域模型)
+     * 计算武将的综合战斗属性（新版自定公式，非旧版；仅供尚未移植的战斗代码使用）
      *
      * @param array<string, mixed> $general
      * @param list<array<string, mixed>> $equippedItems
@@ -111,326 +57,78 @@ final class GeneralHandler
     }
 
     /**
-     * 将领列表: c=general&m=index
+     * 将领列表: c=general&m=index（旧版 controllers/general.php:index）
+     *
+     * list 为出征将领（get_battle_list），只有 list[1] 补齐技能、天赋、装备与血量，其余为原始将领行；
+     * equipments 为 list[1] 可装配的未穿戴装备（get_unequip_list）。
      */
     public static function index(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $member = DB::table('member')->where('uid', $uid)->first();
-        $nickname = $member['nickname'] ?? '天命主公';
+        $return = ['status' => 0, 'list' => [], 'equipments' => []];
 
-        // 查询已有武将
-        $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
-        if (empty($generals)) {
-            // 初始化初始主公将领
-            DB::table('general')->insert([
-                'uid' => $uid,
-                'generalid' => 1,
-                'name' => $nickname,
-                'level' => 1,
-                'exp' => 0,
-                'pos' => 2,
-                'matrix_id' => 1,
-                'status' => 1,
-            ]);
-            $generals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->get();
+        $list = self::battleList($uid);
+        if ($list === []) {
+            // 没有出征将领
+            $return['status'] = 2;
+            return $return;
         }
 
-        // 查询该玩家所有已穿戴装备 (过滤软删除)
-        $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
-        if (empty($allEquips)) {
-            // 初始化新手入门装备放入背包 (generalid=0)
-            DB::table('equipment')->insert([
-                'uid' => $uid,
-                'equipid' => 101,
-                'name' => '青铜剑',
-                'type' => 1,
-                'quality' => 1,
-                'level' => 1,
-                'generalid' => 0,
-                'number' => 1,
-                'saleprice' => 50,
-            ]);
-            $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
+        $first = self::enrich($uid, $list[1]);
+        if ($first === null) {
+            // 获取装备失败
+            $return['status'] = -1;
+            return $return;
         }
-        $equipsByGeneral = [];
-        foreach ($allEquips as $eq) {
-            $gid = (int)$eq['generalid'];
-            if ($gid > 0) {
-                $equipsByGeneral[$gid][] = $eq;
-            }
-        }
+        $list[1] = $first;
 
-        $list = [];
-        $idx = 1;
-        foreach ($generals as $g) {
-            $gid = (int)$g['id'];
-            $equipped = $equipsByGeneral[$gid] ?? [];
-            $list[(string)$idx] = self::formatHeroData($g, $equipped, $uid);
-            $idx++;
-        }
-
-        $availableEquipments = [];
-        $eqIdx = 1;
-        foreach ($allEquips as $eq) {
-            $bonus = self::calculateEquipBonus($eq);
-            $item = array_merge($eq, [
-                'id' => (int)$eq['id'],
-                'equipid' => (int)$eq['equipid'],
-                'etype' => (int)$eq['type'],
-                'name' => $eq['name'],
-                'type' => (int)$eq['type'],
-                'level' => (int)$eq['level'],
-                'quality' => (int)$eq['quality'],
-                'gid' => (int)$eq['generalid'],
-                'needlevel' => 1,
-                'available' => 1,
-                'hammer' => 0,
-                'hammer_quality' => 0,
-                'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
-                'bonus' => $bonus,
-            ]);
-            $availableEquipments[(string)$eqIdx] = $item;
-            $eqIdx++;
-        }
-
-        return [
-            'status' => 1,
-            'list' => $list,
-            'equipments' => $availableEquipments,
-            'message' => 'ok',
-        ];
+        $return['list'] = $list;
+        // 依赖未移植：神树活动（sacredtree 活动开启时为玩家神树 treeid，并按 buff 加血）
+        $return['tree'] = 0;
+        $return['equipments'] = self::unequipList($uid, (int)$first['level'], (int)$first['type']);
+        $return['status'] = 1;
+        return $return;
     }
 
     /**
-     * 将领详情: c=general&m=get_info
+     * 将领详情: c=general&m=get_info（旧版 controllers/general.php:get_info）
      */
     public static function get_info(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $gid = (int)($ctx->input('gid', 1));
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
+        $return = ['status' => 0, 'info' => [], 'equipments' => []];
 
+        $gid = (int)$ctx->input('gid', 0);
+        if ($gid <= 0) {
+            // 参数错误
+            $return['status'] = -1;
+            return $return;
+        }
+
+        // check_battle：不存在或未出征都返回 2
+        $row = self::ownGeneral($uid, $gid);
+        if ($row === null || (int)$row['pos'] <= 0) {
+            $return['status'] = 2;
+            return $return;
+        }
+
+        $general = self::enrich($uid, self::legacyRow($row, self::equippedIds($uid, $gid)));
         if ($general === null) {
-            // 若指定 gid 不存在，回退到该用户拥有的首位武将
-            $general = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->first();
+            // 装备不存在
+            $return['status'] = -3;
+            return $return;
         }
 
-        if ($general === null) {
-            return [
-                'status' => -1,
-                'message' => '武将不存在',
-            ];
-        }
-
-        $realGid = (int)$general['id'];
-        $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
-        $equipped = [];
-        $unequipped = [];
-        $eqIdx = 1;
-        foreach ($allEquips as $eq) {
-            if ((int)$eq['generalid'] === $realGid) {
-                $equipped[] = $eq;
-            } elseif ((int)$eq['generalid'] === 0) {
-                $bonus = self::calculateEquipBonus($eq);
-                $unequipped[(string)$eqIdx] = array_merge($eq, [
-                    'id' => (int)$eq['id'],
-                    'equipid' => (int)$eq['equipid'],
-                    'etype' => (int)$eq['type'],
-                    'name' => $eq['name'],
-                    'type' => (int)$eq['type'],
-                    'level' => (int)$eq['level'],
-                    'quality' => (int)$eq['quality'],
-                    'gid' => 0,
-                    'needlevel' => 1,
-                    'available' => 1,
-                    'hammer' => 0,
-                    'hammer_quality' => 0,
-                    'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
-                    'bonus' => $bonus,
-                ]);
-                $eqIdx++;
-            }
-        }
-
-        $heroInfo = self::formatHeroData($general, $equipped, $uid);
-
-        return [
-            'status' => 1,
-            'info' => $heroInfo,
-            'equipments' => $unequipped,
-        ];
+        $return['info'] = self::infoFields($general);
+        $return['equipments'] = self::unequipList($uid, (int)$general['level'], (int)$general['type']);
+        $return['status'] = 1;
+        return $return;
     }
 
     /**
-     * 格式化武将完整协议数据 (包含 heropop.js 依赖的 talent, skill, eid1~eid4 等)
+     * 穿装备: c=general&m=equip（旧版 controllers/general.php:equip + models/equipment_model.php:equip）
      *
-     * @param array<string, mixed> $g
-     * @param list<array<string, mixed>> $equipped
-     * @return array<string, mixed>
-     */
-    public static function formatHeroData(array $g, array $equipped, int $uid): array
-    {
-        $gid = (int)$g['id'];
-        $name = (string)($g['name'] ?? '');
-        $cfg = self::HERO_CONFIGS[$name] ?? null;
-
-        // 查询玩家性别以决定主公头像 (女2/男1)
-        $memberGender = 1;
-        $member = DB::table('member')->where('uid', $uid)->first();
-        if ($member !== null) {
-            $memberGender = (int)($member['gender'] ?? 1);
-        }
-
-        $image = (int)($g['image'] ?? 0);
-        if ($image <= 0) {
-            $image = self::resolveHeroImage($name, $memberGender, (int)($g['generalid'] ?? 1));
-        }
-
-        $wuli = (int)($g['wuli'] ?? $cfg['wuli'] ?? 85);
-        $zhili = (int)($g['zhili'] ?? $cfg['zhili'] ?? 70);
-        $tili = (int)($g['tili'] ?? $cfg['tili'] ?? 90);
-        $quality = (int)($g['quality'] ?? $cfg['quality'] ?? 3);
-        $type = (int)($g['type'] ?? $cfg['type'] ?? 1);
-
-        $gWithAttributes = array_merge($g, [
-            'wuli' => $wuli,
-            'zhili' => $zhili,
-            'tili' => $tili,
-        ]);
-        $stats = self::calculateGeneralStats($gWithAttributes, $equipped);
-        $level = $stats['level'];
-
-        $equipSlot = [];
-        $eids = [1 => '0', 2 => '0', 3 => '0', 4 => '0'];
-
-        foreach ($equipped as $eq) {
-            $eType = (int)$eq['type'];
-            $bonus = self::calculateEquipBonus($eq);
-            $powerup = $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']);
-            $eqItem = [
-                'id' => (int)$eq['id'],
-                'equipid' => (int)$eq['equipid'],
-                'name' => $eq['name'],
-                'type' => $eType,
-                'level' => (int)$eq['level'],
-                'quality' => (int)$eq['quality'],
-                'needlevel' => 1,
-                'available' => 1,
-                'newquality' => 0,
-                'powerup' => $powerup,
-                'hammer' => 0,
-                'hammer_quality' => 0,
-                'bonus' => $bonus,
-            ];
-            $equipSlot[$eType] = $eqItem;
-            if ($eType >= 1 && $eType <= 4) {
-                $eids[$eType] = $eqItem;
-            }
-        }
-
-        return [
-            'id' => $gid,
-            'uid' => $uid,
-            'generalid' => (int)($g['generalid'] ?? 1),
-            'name' => $name,
-            'level' => $level,
-            'exp' => (int)$g['exp'],
-            'levelupexp' => self::getLevelUpExp($level),
-            'image' => $image,
-            'quality' => $quality,
-            'type' => $type,
-            'turn' => (int)($g['turn'] ?? 0),
-            'isturn' => ($level >= 100) ? 1 : 0,
-            'star' => (int)($g['star'] ?? 1),
-            'achID' => 0,
-            'achList' => [],
-            'pos' => (int)$g['pos'],
-            'goout' => (int)$g['pos'] > 0 ? 1 : 0,
-            'wuli' => $wuli,
-            'wuliup' => (int)($g['wuliup'] ?? 0),
-            'zhili' => $zhili,
-            'zhiliup' => (int)($g['zhiliup'] ?? 0),
-            'tili' => $tili,
-            'tiliup' => (int)($g['tiliup'] ?? 0),
-            'hp' => $stats['hp'],
-            'allblood' => $stats['allblood'],
-            'attack' => $stats['attack'],
-            'defense' => $stats['defense'],
-            'speed' => $stats['speed'],
-            'skillid' => (int)($g['skillid'] ?? 1),
-            'talentid' => (int)($g['talentid'] ?? 1),
-            'talent' => self::getGeneralTalent($g),
-            'skill' => self::getGeneralSkill($g),
-            'eid1' => $eids[1],
-            'eid2' => $eids[2],
-            'eid3' => $eids[3],
-            'eid4' => $eids[4],
-            'mid0' => 0,
-            'mid1' => 0,
-            'mid2' => 0,
-            'mid3' => 0,
-            'mid4' => 0,
-            'equip' => $equipSlot,
-            'stats' => $stats,
-        ];
-    }
-
-    /**
-     * @param array<string, mixed> $g
-     * @return array{id: int, name: string, blood: int, description: string}
-     */
-    public static function getGeneralTalent(array $g): array
-    {
-        $talents = [
-            1 => ['id' => 1, 'name' => '坚强', 'blood' => 1, 'description' => '受到直接物理伤害降低5%'],
-            2 => ['id' => 2, 'name' => '勇猛', 'blood' => 1, 'description' => '普通物理攻击伤害提升10%'],
-            3 => ['id' => 3, 'name' => '神速', 'blood' => 1, 'description' => '出手先攻速度提升15点'],
-            4 => ['id' => 4, 'name' => '智囊', 'blood' => 1, 'description' => '策略攻击防御综合提升10%'],
-            5 => ['id' => 5, 'name' => '破军', 'blood' => 1, 'description' => '无双暴击概率提升10%'],
-            6 => ['id' => 6, 'name' => '百战', 'blood' => 1, 'description' => '气血生命值上限提升15%'],
-        ];
-
-        $name = (string)($g['name'] ?? '');
-        $id = match ($name) {
-            '张飞' => 2,
-            '赵云' => 3,
-            '关羽' => 5,
-            '诸葛亮' => 4,
-            default => (int)($g['talentid'] ?? 1),
-        };
-
-        return $talents[$id] ?? $talents[1];
-    }
-
-    /**
-     * @param array<string, mixed> $g
-     * @return array{id: int, name: string, description: string}
-     */
-    public static function getGeneralSkill(array $g): array
-    {
-        $skills = [
-            1 => ['id' => 1, 'name' => '会心一击', 'description' => '积攒怒气释放强力一击，造成150%战法伤害'],
-            2 => ['id' => 2, 'name' => '万夫莫敌', 'description' => '咆哮怒吼横扫千军，对横排敌方造成160%群体震慑'],
-            3 => ['id' => 3, 'name' => '龙胆穿心', 'description' => '白马银枪直刺中路，必定暴击并破除敌军格挡'],
-            4 => ['id' => 4, 'name' => '青龙偃月', 'description' => '神刀劈砍降下雷霆万钧，重创敌将并提升自身韧性'],
-            5 => ['id' => 5, 'name' => '卧龙天火', 'description' => '借东风降下神火天降，对敌军全阵型进行法术覆盖'],
-        ];
-
-        $name = (string)($g['name'] ?? '');
-        $id = match ($name) {
-            '张飞' => 2,
-            '赵云' => 3,
-            '关羽' => 4,
-            '诸葛亮' => 5,
-            default => (int)($g['skillid'] ?? 1),
-        };
-
-        return $skills[$id] ?? $skills[1];
-    }
-
-    /**
-     * 穿装备: c=general&m=equip
+     * 状态码：-5 武器类型与将领职业不符，-4 装备不存在，-3 装配失败（已被穿戴 / 碎片 / 非装备），-2 等级不足，-1 将领不存在
      */
     public static function equip(Context $ctx): array
     {
@@ -438,90 +136,49 @@ final class GeneralHandler
         $gid = (int)$ctx->input('gid', 0);
         $eid = (int)$ctx->input('eid', 0);
 
-        if ($gid <= 0 || $eid <= 0) {
-            return [
-                'status' => 0,
-                'message' => '参数错误',
-            ];
+        $row = self::ownGeneral($uid, $gid);
+        if ($row === null) {
+            // 旧版此处只设 -1 不输出（直接 return），这里照旧版状态码输出
+            return ['status' => -1];
         }
 
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->first();
-        if ($general === null) {
-            return [
-                'status' => -1,
-                'message' => '武将不存在',
-            ];
+        // 旧版 get_info 不按 uid 过滤，随后的 update 带 uid，他人装备最终 affected_rows 为 0 → 0 → -4；这里直接按不存在处理
+        $item = DB::table('equipment')->where('uid', $uid)->where('id', $eid)->whereNull('deleted_at')->first();
+        if ($item === null) {
+            return ['status' => -4];
         }
 
-        $equip = DB::table('equipment')->where('uid', $uid)->where('id', $eid)->first();
-        if ($equip === null) {
-            return [
-                'status' => -4,
-                'message' => '装备不存在',
-            ];
+        $type = (int)$item['type'];
+        if ($type < 3 && (int)$row['type'] !== $type) {
+            return ['status' => -5];
+        }
+        if ((int)$item['generalid'] > 0 || (int)$item['chip'] > 0 || $type > 5) {
+            return ['status' => -3];
+        }
+        if ((int)$item['needlevel'] > (int)$row['level']) {
+            return ['status' => -2];
         }
 
-        // 检查武将该槽位是否已有穿戴中的同类型装备，有则自动卸下
-        $equipType = (int)$equip['type'];
-        $alreadyEquipped = DB::table('equipment')
-            ->where('uid', $uid)
-            ->where('generalid', $gid)
-            ->where('type', $equipType)
-            ->get();
-
-        foreach ($alreadyEquipped as $old) {
-            DB::table('equipment')->where('id', (int)$old['id'])->update(['generalid' => 0]);
+        // 该装配位置已有装备则先卸下（旧版 equipment_model::equip → unequip）
+        $site = (int)LegacyStats::itemSite($type);
+        $eids = self::equippedIds($uid, $gid);
+        if ($eids[$site] !== 0) {
+            DB::table('equipment')->where('uid', $uid)->where('id', $eids[$site])->update(['generalid' => 0]);
         }
 
-        // 装配新装备
-        DB::table('equipment')->where('id', $eid)->update(['generalid' => $gid]);
-
-        // 获取最新穿戴属性与背包装备
-        $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
-        $equipped = [];
-        $unequipped = [];
-        $eqIdx = 1;
-        foreach ($allEquips as $item) {
-            if ((int)$item['generalid'] === $gid) {
-                $equipped[] = $item;
-            } elseif ((int)$item['generalid'] === 0) {
-                $bonus = self::calculateEquipBonus($item);
-                $unequipped[(string)$eqIdx] = array_merge($item, [
-                    'id' => (int)$item['id'],
-                    'equipid' => (int)$item['equipid'],
-                    'etype' => (int)$item['type'],
-                    'name' => $item['name'],
-                    'type' => (int)$item['type'],
-                    'level' => (int)$item['level'],
-                    'quality' => (int)$item['quality'],
-                    'gid' => 0,
-                    'needlevel' => 1,
-                    'available' => 1,
-                    'hammer' => 0,
-                    'hammer_quality' => 0,
-                    'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
-                    'bonus' => $bonus,
-                ]);
-                $eqIdx++;
-            }
+        $affected = DB::table('equipment')->where('uid', $uid)->where('id', $eid)->whereNull('deleted_at')->update(['generalid' => $gid]);
+        if ($affected <= 0) {
+            return ['status' => -4];
         }
 
-        $stats = self::calculateGeneralStats($general, $equipped);
-        $heroData = self::formatHeroData($general, $equipped, $uid);
-
-        return [
-            'status' => 1,
-            'message' => '穿戴成功',
-            'gid' => $gid,
-            'eid' => $eid,
-            'stats' => $stats,
-            'info' => $heroData,
-            'equipments' => $unequipped,
-        ];
+        $eids[$site] = $eid;
+        return self::reloadInfo($uid, self::legacyRow($row, $eids));
     }
 
     /**
-     * 卸装备: c=general&m=unequip
+     * 卸装备: c=general&m=unequip（旧版 controllers/general.php:unequip + models/equipment_model.php:unequip）
+     *
+     * 状态码：-3 装备不属于该武将，-2 将领不存在，-1 卸下失败
      */
     public static function unequip(Context $ctx): array
     {
@@ -529,72 +186,421 @@ final class GeneralHandler
         $gid = (int)$ctx->input('gid', 0);
         $eid = (int)$ctx->input('eid', 0);
 
-        if ($gid <= 0 || $eid <= 0) {
-            return [
-                'status' => 0,
-                'message' => '参数错误',
-            ];
+        $row = self::ownGeneral($uid, $gid);
+        if ($row === null) {
+            return ['status' => -2];
         }
 
-        $equip = DB::table('equipment')->where('uid', $uid)->where('id', $eid)->first();
-        if ($equip === null) {
-            return [
-                'status' => -1,
-                'message' => '装备不存在',
-            ];
+        $eids = self::equippedIds($uid, $gid);
+        $site = 0;
+        for ($i = 1; $i <= 4; $i++) {
+            if ($eids[$i] === $eid && $eid > 0) {
+                $site = $i;
+            }
+        }
+        if ($site === 0) {
+            return ['status' => -3];
         }
 
-        if ((int)$equip['generalid'] !== $gid) {
-            return [
-                'status' => -3,
-                'message' => '该装备未穿戴在指定武将身上',
-            ];
+        $affected = DB::table('equipment')->where('uid', $uid)->where('id', $eid)->where('generalid', $gid)->update(['generalid' => 0]);
+        if ($affected <= 0) {
+            return ['status' => -1];
         }
 
-        // 卸下装备
-        DB::table('equipment')->where('id', $eid)->update(['generalid' => 0]);
+        $eids[$site] = 0;
+        return self::reloadInfo($uid, self::legacyRow($row, $eids));
+    }
 
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->first();
-        $allEquips = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at')->get();
-        $equipped = [];
-        $unequipped = [];
-        $eqIdx = 1;
-        foreach ($allEquips as $item) {
-            if ((int)$item['generalid'] === $gid) {
-                $equipped[] = $item;
-            } elseif ((int)$item['generalid'] === 0) {
-                $bonus = self::calculateEquipBonus($item);
-                $unequipped[(string)$eqIdx] = array_merge($item, [
-                    'id' => (int)$item['id'],
-                    'equipid' => (int)$item['equipid'],
-                    'etype' => (int)$item['type'],
-                    'name' => $item['name'],
-                    'type' => (int)$item['type'],
-                    'level' => (int)$item['level'],
-                    'quality' => (int)$item['quality'],
-                    'gid' => 0,
-                    'needlevel' => 1,
-                    'available' => 1,
-                    'hammer' => 0,
-                    'hammer_quality' => 0,
-                    'powerup' => $bonus['attack'] ?: ($bonus['defense'] ?: $bonus['hp']),
-                    'bonus' => $bonus,
-                ]);
-                $eqIdx++;
+    /**
+     * 出征将领列表（旧版 models/general_model.php:get_battle_list），键从 1 开始
+     *
+     * 旧版 index 按主公等级传 type 1/2，但 get_battle_list 用 in_array($type, [0, 1]) 校验，2 会被改回 1，
+     * 所以实际总是按转生降序、等级降序排列；同序时按 id（旧版 SQL 无 ORDER BY，即主键顺序）。
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    public static function battleList(int $uid): array
+    {
+        $rows = DB::table('general')->where('uid', $uid)->where('pos', '>', 0)->whereNull('deleted_at')->get();
+        if ($rows === []) {
+            return [];
+        }
+        usort($rows, static fn (array $a, array $b): int =>
+            [(int)$b['turn'], (int)$b['level'], (int)$a['id']] <=> [(int)$a['turn'], (int)$a['level'], (int)$b['id']]);
+
+        $eidsByGeneral = self::equippedIdsByGeneral($uid);
+        $list = [];
+        foreach ($rows as $i => $row) {
+            $gid = (int)$row['id'];
+            $list[$i + 1] = self::legacyRow($row, $eidsByGeneral[$gid] ?? [1 => 0, 2 => 0, 3 => 0, 4 => 0]);
+        }
+        return $list;
+    }
+
+    /**
+     * 旧版界面详情（get_info 的 info 字段 + hp），供其他界面复用（如 information）
+     *
+     * @param array<string, mixed> $row 新版 general 表行
+     * @return array<string, mixed>|null
+     */
+    public static function legacyInfo(int $uid, array $row): ?array
+    {
+        $general = self::enrich($uid, self::legacyRow($row, self::equippedIds($uid, (int)$row['id'])));
+        return $general === null ? null : self::infoFields($general);
+    }
+
+    /**
+     * 技能信息（旧版 controllers/general.php:get_skill_by_id）：id / name / description，不存在时三项为 null
+     *
+     * @return array{id: mixed, name: mixed, description: mixed}
+     */
+    public static function skillById(int $skillid): array
+    {
+        $skill = Skill::ROWS[$skillid] ?? [];
+        return [
+            'id' => $skill['id'] ?? null,
+            'name' => $skill['name'] ?? null,
+            'description' => $skill['description'] ?? null,
+        ];
+    }
+
+    /**
+     * 天赋信息（旧版 controllers/general.php:get_talent_by_id）：id / name / blood / description，不存在时各项为 null
+     *
+     * @return array{id: mixed, name: mixed, blood: mixed, description: mixed}
+     */
+    public static function talentById(int $talentid): array
+    {
+        $talent = Talent::ROWS[$talentid] ?? [];
+        return [
+            'id' => $talent['id'] ?? null,
+            'name' => $talent['name'] ?? null,
+            'blood' => $talent['blood'] ?? null,
+            'description' => $talent['description'] ?? null,
+        ];
+    }
+
+    /**
+     * 装配 / 卸下后的返回（旧版 controllers/general.php:_get_info）
+     *
+     * @param array<string, mixed> $general 旧版 own_general 形状的行
+     * @return array<string, mixed>
+     */
+    private static function reloadInfo(int $uid, array $general): array
+    {
+        $return = ['status' => 0, 'info' => [], 'equipments' => []];
+        $enriched = self::enrich($uid, $general);
+        if ($enriched === null) {
+            $return['status'] = -4;
+            return $return;
+        }
+        $return['info'] = self::infoFields($enriched);
+        $return['equipments'] = self::unequipList($uid, (int)$enriched['level'], (int)$enriched['type']);
+        $return['status'] = 1;
+        return $return;
+    }
+
+    /**
+     * 补齐技能、天赋、装备（含精炼 / 强化成就加成）、精炼成就与界面血量
+     * （旧版 index / get_info / _get_info 共用的流程；三处的差别只在依赖未移植的加成上）
+     *
+     * @param array<string, mixed> $general 旧版 own_general 形状的行
+     * @return array<string, mixed>|null 装备查询失败（旧版 general_refine_add 返回 -4）时为 null
+     */
+    private static function enrich(int $uid, array $general): ?array
+    {
+        $baseHp = LegacyStats::baseHp((int)$general['level'], (int)$general['turn']);
+
+        $general['skill'] = self::skillById((int)$general['skillid']);
+        $talent = self::talentById((int)$general['talentid']);
+        $talentBlood = (float)($talent['blood'] ?? 0);
+        unset($talent['blood']);
+        $general['talent'] = $talent;
+
+        $general = self::generalRefineAdd($uid, $general);
+        if ($general === null) {
+            return null;
+        }
+
+        // 兵符加血：eid4 powerup（已含精炼 / 强化成就）；兵符宝石依赖未移植
+        $eid4Powerup = is_array($general['eid4']) ? (int)$general['eid4']['powerup'] : 0;
+
+        $general['hp'] = LegacyStats::infoHp(
+            $baseHp,
+            $eid4Powerup,
+            0,
+            0,
+            (int)$general['tili'],
+            (int)$general['tiliup'],
+            $talentBlood,
+        );
+        return $general;
+    }
+
+    /**
+     * 装备精炼加成、强化成就加成、精炼成就（旧版 models/refine_model.php:general_refine_add）
+     *
+     * eid1~eid4 由装备 id 替换成装备对象（字段同旧版 item_refine_add），没有装备为 0；
+     * 4 件装备都有精炼等级时按最低等级的 refine_promote.type 设 achID，并按 refine_achieve 累加 wuliup / zhiliup。
+     *
+     * @param array<string, mixed> $general
+     * @return array<string, mixed>|null
+     */
+    private static function generalRefineAdd(int $uid, array $general): ?array
+    {
+        $general['achID'] = 0;
+        $general['achList'] = [];
+
+        $eidarr = [];
+        for ($i = 1; $i <= 4; $i++) {
+            if ((int)$general['eid' . $i] !== 0) {
+                $eidarr[] = (int)$general['eid' . $i];
+            }
+        }
+        if ($eidarr === []) {
+            return $general;
+        }
+
+        $rows = DB::table('equipment')->where('uid', $uid)->whereIn('id', $eidarr)->whereNull('deleted_at')->get();
+        if ($rows === []) {
+            return null;
+        }
+        $equipArr = [];
+        foreach ($rows as $item) {
+            $equipArr[(int)$item['id']] = self::refineEquipFields($item);
+        }
+
+        $harmarr = [];
+        for ($i = 1; $i <= 4; $i++) {
+            $id = (int)$general['eid' . $i];
+            if (isset($equipArr[$id])) {
+                $general['eid' . $i] = $equipArr[$id];
+                $harmarr[$id] = $equipArr[$id]['hammer'];
+            } else {
+                // 旧版此处 repair_equipment 把将领的 eid 清零；新版 eid 由 equipment 派生，不会出现
+                $general['eid' . $i] = 0;
             }
         }
 
-        $stats = $general ? self::calculateGeneralStats($general, $equipped) : [];
-        $heroData = $general ? self::formatHeroData($general, $equipped, $uid) : [];
+        // 精炼成就：4 件装备都有精炼等级
+        if (!in_array(0, $harmarr, true) && count($harmarr) >= 4) {
+            sort($harmarr);
+            $refine = LegacyStats::refinePromote((int)$harmarr[0]);
+            // 旧版 refine_promote 不存在时返回 -1，调用方未处理（输出空 info）；这里不加精炼成就
+            if ($refine !== null) {
+                $refineType = (int)$refine['type'];
+                $general['achID'] = $refineType;
+                $wuliup = 0;
+                $zhiliup = 0;
+                foreach (RefineAchieve::ROWS as $achadd) {
+                    if ($refineType >= (int)$achadd['id']) {
+                        $wuliup += (int)$achadd['add_type_val1'];
+                        $zhiliup += (int)$achadd['add_type_val2'];
+                    }
+                }
+                if ($refineType > 0) {
+                    $general['wuliup'] = (int)$general['wuliup'] + $wuliup;
+                    $general['zhiliup'] = (int)$general['zhiliup'] + $zhiliup;
+                }
+            }
+        }
 
+        return $general;
+    }
+
+    /**
+     * 将领身上装备的输出字段（旧版 models/refine_model.php:item_refine_add 的 equip_field）
+     *
+     * @param array<string, mixed> $item equipment 表行
+     * @return array<string, mixed>
+     */
+    private static function refineEquipFields(array $item): array
+    {
+        $display = LegacyStats::displayPowerup(
+            (int)$item['power'],
+            (int)$item['powerup'],
+            (int)$item['type'],
+            (int)$item['hammer'],
+            (string)$item['aid'],
+        );
         return [
-            'status' => 1,
-            'message' => '卸下成功',
-            'gid' => $gid,
-            'eid' => $eid,
-            'stats' => $stats,
-            'info' => $heroData,
-            'equipments' => $unequipped,
+            'id' => (int)$item['id'],
+            'equipid' => (int)$item['equipid'],
+            'name' => (string)$item['name'],
+            'type' => (int)$item['type'],
+            'quality' => (int)$item['quality'],
+            'needlevel' => (int)$item['needlevel'],
+            'power' => (int)$item['power'],
+            'powerup' => $display['powerup'],
+            'level' => (int)$item['level'],
+            'saleprice' => (int)$item['saleprice'],
+            'hammer' => (int)$item['hammer'],
+            'aid' => (string)$item['aid'],
+            'hammer_quality' => $display['hammer_quality'],
+            'number' => (int)$item['number'],
+            'newquality' => (int)$item['newquality'],
         ];
+    }
+
+    /**
+     * 未穿戴的可装配列表（旧版 controllers/general.php:get_unequip_list），键从 1 开始
+     *
+     * 条件：未穿戴、非碎片、类型为将领职业武器或 3/4/5；needlevel 高于将领等级的 available = 0。
+     * 排序同旧版 get_own_list(power, needlevel)：type ASC, quality DESC, hammer DESC, level DESC, powerup DESC, needlevel ASC。
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private static function unequipList(int $uid, int $level, int $equiptype): array
+    {
+        $rows = DB::table('equipment')
+            ->where('uid', $uid)
+            ->where('generalid', 0)
+            ->where('chip', 0)
+            ->whereIn('type', [$equiptype, 3, 4, 5])
+            ->whereNull('deleted_at')
+            ->orderBy('type', 'ASC')
+            ->orderBy('quality', 'DESC')
+            ->orderBy('hammer', 'DESC')
+            ->orderBy('level', 'DESC')
+            ->orderBy('powerup', 'DESC')
+            ->orderBy('needlevel', 'ASC')
+            ->orderBy('id', 'ASC')
+            ->get();
+
+        $result = [];
+        $i = 0;
+        foreach ($rows as $v) {
+            $i++;
+            $type = (int)$v['type'];
+            $display = LegacyStats::displayPowerup((int)$v['power'], (int)$v['powerup'], $type, (int)$v['hammer'], (string)$v['aid']);
+            $result[$i] = [
+                'id' => (int)$v['id'],
+                'equipid' => (int)$v['equipid'],
+                'type' => $type,
+                'name' => (string)$v['name'],
+                'quality' => (int)$v['quality'],
+                'needlevel' => (int)$v['needlevel'],
+                'power' => (int)$v['power'],
+                'powerup' => $display['powerup'],
+                'level' => (int)$v['level'],
+                'saleprice' => (int)$v['saleprice'],
+                'hammer' => (int)$v['hammer'],
+                'aid' => (string)$v['aid'],
+                'newquality' => (int)$v['newquality'],
+                'available' => (int)$v['needlevel'] > $level ? 0 : 1,
+                'etype' => match ($type) {
+                    1, 2 => 1,
+                    3 => 2,
+                    4 => 3,
+                    default => 4,
+                },
+                'hammer_quality' => $display['hammer_quality'],
+            ];
+        }
+        return $result;
+    }
+
+    /**
+     * @param array<string, mixed> $general
+     * @return array<string, mixed>
+     */
+    private static function infoFields(array $general): array
+    {
+        $info = [];
+        foreach (self::INFO_FIELD as $field) {
+            $info[$field] = $general[$field];
+        }
+        $info['hp'] = $general['hp'];
+        return $info;
+    }
+
+    /**
+     * 旧版 get_own_by_id：本人、未删除的将领
+     *
+     * @return array<string, mixed>|null
+     */
+    private static function ownGeneral(int $uid, int $gid): ?array
+    {
+        if ($gid <= 0) {
+            return null;
+        }
+        return DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
+    }
+
+    /**
+     * 新版 general 行 → 旧版 own_general 字段（eid1~eid4 由装备派生，goout 由阵位派生，disable 恒 0）
+     *
+     * @param array<string, mixed> $row
+     * @param array<int, int> $eids 装配位置 1~4 => 装备 id（0 为空）
+     * @return array<string, mixed>
+     */
+    private static function legacyRow(array $row, array $eids): array
+    {
+        return [
+            'id' => (int)$row['id'],
+            'uid' => (int)$row['uid'],
+            'generalid' => (int)$row['generalid'],
+            'name' => (string)$row['name'],
+            'level' => (int)$row['level'],
+            'exp' => (int)$row['exp'],
+            'levelupexp' => (int)$row['levelupexp'],
+            'image' => (int)$row['image'],
+            'type' => (int)$row['type'],
+            'wuli' => (int)$row['wuli'],
+            'zhili' => (int)$row['zhili'],
+            'tili' => (int)$row['tili'],
+            'wuliup' => (int)$row['wuliup'],
+            'zhiliup' => (int)$row['zhiliup'],
+            'tiliup' => (int)$row['tiliup'],
+            'talentid' => (int)$row['talentid'],
+            'skillid' => (int)$row['skillid'],
+            'star' => (int)$row['star'],
+            'eid1' => $eids[1] ?? 0,
+            'eid2' => $eids[2] ?? 0,
+            'eid3' => $eids[3] ?? 0,
+            'eid4' => $eids[4] ?? 0,
+            'mid0' => (int)$row['mid0'],
+            'mid1' => (int)$row['mid1'],
+            'mid2' => (int)$row['mid2'],
+            'mid3' => (int)$row['mid3'],
+            'mid4' => (int)$row['mid4'],
+            'addtype' => (int)$row['addtype'],
+            'addvalue' => (int)$row['addvalue'],
+            'goout' => (int)$row['pos'] > 0 ? 1 : 0,
+            'turn' => (int)$row['turn'],
+            'disable' => 0,
+            'quality' => (int)$row['quality'],
+        ];
+    }
+
+    /**
+     * 将领各装配位置上的装备 id
+     *
+     * @return array<int, int>
+     */
+    private static function equippedIds(int $uid, int $gid): array
+    {
+        return self::equippedIdsByGeneral($uid, $gid)[$gid] ?? [1 => 0, 2 => 0, 3 => 0, 4 => 0];
+    }
+
+    /**
+     * @return array<int, array<int, int>> 将领 id => [装配位置 => 装备 id]
+     */
+    private static function equippedIdsByGeneral(int $uid, ?int $gid = null): array
+    {
+        $query = DB::table('equipment')->where('uid', $uid)->whereNull('deleted_at');
+        $query = $gid === null ? $query->where('generalid', '>', 0) : $query->where('generalid', $gid);
+
+        $result = [];
+        foreach ($query->get() as $item) {
+            $site = LegacyStats::itemSite((int)$item['type']);
+            if ($site === null) {
+                continue;
+            }
+            $owner = (int)$item['generalid'];
+            $result[$owner] ??= [1 => 0, 2 => 0, 3 => 0, 4 => 0];
+            $result[$owner][$site] = (int)$item['id'];
+        }
+        return $result;
     }
 }

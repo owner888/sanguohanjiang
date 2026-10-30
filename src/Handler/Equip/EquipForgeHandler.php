@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Equip;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Model\Equipment;
 
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -13,10 +14,15 @@ use OmniPHP\WebSocket\Broadcaster;
 
 final class EquipForgeHandler
 {
+    /**
+     * 依赖未移植：旧版打造走 newequip_* / materials_temp 体系，图纸与价格不是旧版数据。
+     * equipid 为产物对应的 MasterData Equip 模板：只有「青龙偃月刀」能按名称、类型、品质对上（22），
+     * 另两张图纸的产物在 MasterData 中不存在，equipid 为 null，不可锻造。
+     */
     public const array RECIPES = [
-        1 => ['id' => 1, 'name' => '神兵·青龙偃月刀', 'type' => 1, 'quality' => 5, 'cost_silver' => 50000, 'cost_iron' => 10],
-        2 => ['id' => 2, 'name' => '宝甲·兽面连环铠', 'type' => 2, 'quality' => 5, 'cost_silver' => 40000, 'cost_iron' => 8],
-        3 => ['id' => 3, 'name' => '仙衣·八卦紫绶袍', 'type' => 3, 'quality' => 5, 'cost_silver' => 40000, 'cost_iron' => 8],
+        1 => ['id' => 1, 'name' => '神兵·青龙偃月刀', 'type' => 1, 'quality' => 5, 'cost_silver' => 50000, 'cost_iron' => 10, 'equipid' => 22],
+        2 => ['id' => 2, 'name' => '宝甲·兽面连环铠', 'type' => 2, 'quality' => 5, 'cost_silver' => 40000, 'cost_iron' => 8, 'equipid' => null],
+        3 => ['id' => 3, 'name' => '仙衣·八卦紫绶袍', 'type' => 3, 'quality' => 5, 'cost_silver' => 40000, 'cost_iron' => 8, 'equipid' => null],
     ];
 
     /**
@@ -48,6 +54,9 @@ final class EquipForgeHandler
         }
 
         $cfg = self::RECIPES[$recipeId];
+        if ($cfg['equipid'] === null) {
+            return ['status' => 0, 'message' => '该铸造图纸尚未开放'];
+        }
         $costSilver = (int)$cfg['cost_silver'];
         $costIron = (int)$cfg['cost_iron'];
 
@@ -64,18 +73,8 @@ final class EquipForgeHandler
         $newIron = $iron - $costIron;
         Redis::set('forge_iron:' . $uid, (string)$newIron, 86400 * 30);
 
-        // 铸造成品直接写入背包
-        DB::table('equipment')->insert([
-            'uid' => $uid,
-            'equipid' => 100 + $cfg['id'],
-            'name' => $cfg['name'],
-            'type' => $cfg['type'],
-            'quality' => $cfg['quality'],
-            'level' => 1,
-            'generalid' => 0,
-            'number' => 1,
-            'saleprice' => 1000,
-        ]);
+        // 铸造成品写入背包（入库走唯一入口，属性取 MasterData Equip 模板）
+        Equipment::addFromTemplate($uid, (int)$cfg['equipid']);
 
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
         $pName = $member['nickname'] ?? ('主公' . $uid);

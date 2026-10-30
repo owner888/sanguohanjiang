@@ -46,7 +46,8 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   ├── Battle/              # Deterministic 9-grid combat engine
 │   │   ├── BattleEngine.php # Core simulation logic (ported from battle_model.php)
 │   │   ├── Hero.php         # Combat entity model
-│   │   └── Position.php     # 9-grid tactical positions (1-9) enum
+│   │   ├── Position.php     # 9-grid tactical positions (1-9) enum
+│   │   └── LegacyStats.php  # Legacy general/equipment formulas (pure functions, each cites its legacy source)
 │   ├── MasterData/          # Legacy config tables as const arrays (generated, do not edit)
 │   ├── Middleware/          # Middleware pipeline (aligned with smart-book)
 │   │   ├── MiddlewareInterface.php
@@ -100,6 +101,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
    mysql -uroot -proot -e "CREATE DATABASE IF NOT EXISTS zc_sanguo;"
    mysql -uroot -proot zc_sanguo < database/schema.sql
    ```
+   Upgrading an existing database instead: apply the files in `database/migrations/` that are newer than your schema, in filename order (each file header says what it does). `20261031_general_equip_legacy_cols.sql` assumes general/equipment rows are test data: it truncates both tables and re-issues every player the legacy starting general.
 
 4. Start server:
    ```bash
@@ -133,7 +135,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 The HTTP gateway seamlessly bridges original client requests mapped through `?c={controller}&m={method}`:
 
 - `c=ios&m=update_world_common`: Client environment handshake & resource validation
-- `c=register&m=guest`: Instant trial / guest account initialization
+- `c=register&m=guest`: Instant trial / guest account initialization (legacy start: general template 1 廖化 in formation 1 slot 2, no starter equipment)
 - `c=register&m=reg`: User registration
 - `c=user&m=login`: Account authentication & server selection
 - `c=login&m=guest`: Server-side trial session token issuance
@@ -146,18 +148,18 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=map&m=get_scene_list`: Campaign scene list (e.g., Daxing Mountain)
 - `c=map&m=get_mission_list`: Enemy nodes and warlord defense lineups
 - `c=map&m=mission`: Pre-battle enemy intelligence and lineup preparation dialog
-- `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation
+- `c=map&m=action`: Battle trigger & in-memory deterministic 9-grid combat report generation; on victory the legacy `Mission` probabilistic drop (`getrate` / `gettype` / `getvalue`) is rolled and granted
 - `c=map&m=get_newreward_index|get_newreward|get_newresult`: Campaign node milestone chests & chapter clear grand reward claims
-- `c=general&m=index`: Player hero inventory, equipment, and attribute calculations
+- `c=general&m=index|get_info|equip|unequip`: Hero panel ported from the legacy `general.php` (deployed heroes only, legacy `info_field`, equipment display power with refine / enhancement-achievement bonuses, legacy HP formula, legacy equip validations and status codes)
 - `c=matrix&m=index`: 9-grid tactical battle formation & hero slot updates
-- `c=pack&m=index`: Bag items, consumables, and gear management
-- `c=strengthen&m=index`: Equipment blacksmith enhancement & rate checking
+- `c=pack&m=index|sale`: Bag ported from the legacy `pack.php` (unequipped items only, chip / scroll pricing, VIP 11 refund, daily sale limit for items enhanced to level 10+)
+- `c=strengthen&m=index|strengthen_info|strengthen_start|clear_cd`: Blacksmith ported from the legacy `strengthen.php` (`EquipLevel` cost and success rate, VIP 5 critical +2 levels, writes level / powerup / sale price; legacy servers never applied an enhancement cooldown)
 - `c=tavern&m=index`: General recruitment tavern & guest trade
 - `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`: Martial training grounds, rapid leaps & sweeps, 8-slot unlocks & reincarnation
 - `c=activity&m=index`: Daily special activities overview, schedule windows, and sign-in/boss popo notifications
 - `c=chat&m=read|send`: World and country real-time messaging
 - `c=mainquest&m=index`: Main storyline quest milestones and rewards
-- `c=shop&m=index`: Item mall & stamina purchasing
+- `c=shop&m=index`: Item mall (legacy `Shop` table: army tallies, equip 7, 9–15, 53–56) & stamina purchasing
 - `c=arena&m=index|action|buy_pk_num|get_reward|clear_cd`: Military ranking arena & PVP duels, rank swaps, challenge purchases, and daily salaries
 - `c=tower&m=index|action|sweep`: Trial Soul Tower climbing, boss encounters, floor sweeps, and soul rewards
 - `c=pass_general&m=index|action|reset`: Six-Stage Pass General campaign, legendary warlord duels, and milestone chests
@@ -181,7 +183,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=gvg&m=index|betting|sync_info`: Guild vs Guild (GVG) cross-server tournament brackets, championship betting, and victory dividends
 - `c=general_inherit&m=index|preview|go_inherit`: Martial inheritance, experience & cultivate stat transfers (Normal 80% & Flawless 100%)
 - `c=blackmarket&m=index|buy|lock|refresh`: Western exotic black market, rare artifact locks, and shelf refreshes
-- `c=first_recharge&m=index|get_reward`: First-recharge celebration, god-tier Zhao Yun, silver spear, and VIP perks
+- `c=first_recharge&m=index|get_reward|lottery|action`: First-recharge rebate tiers and the Fate Wheel, ported from the legacy `first_recharge.php` with `FirstRecharge` / `FirstRechargeLottery` data; state lives in `first_recharge_log` and `member_field.first_recharge`
 - `c=overseastrade&m=index|goout|trade`: Maritime silk road, fleet sailings, exotic spices, and merchant profit claims
 - `c=studfarm&m=index|action`: Bole stud farm, legendary steed appraisals, bloodline enhancements, and mount acquisitions
 - `c=jadegamble&m=index|mining|gambling|harvest`: Rough jade ore mining, high-stakes stone cutting, and imperial emerald harvests
@@ -233,10 +235,11 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 
 ## 🧪 Automated Testing
 
-All core API endpoints and combat simulation loops are covered by PHPUnit integration tests:
+All core API endpoints and combat simulation loops are covered by PHPUnit integration tests (`tests/Feature`); legacy formulas in `LegacyStats` are checked against real legacy database rows (`tests/Unit`):
 
 ```bash
-./vendor/bin/phpunit
+./vendor/bin/phpunit                      # all suites
+./vendor/bin/phpunit --testsuite Unit     # formulas only, no DB / Redis needed
 ```
 
 ---
@@ -255,7 +258,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] End-to-end combat loop with deterministic battle report playback
 - [x] All 16 core game systems migrated to stateless Handlers
 - [x] Equipment equip/unequip system with real-time dynamic attribute calculation
-- [x] Blacksmith enhancement system (`strengthen`) with silver cost scaling & success rate
+- [x] Blacksmith enhancement system (`strengthen`) with legacy `EquipLevel` cost, success rate, and VIP critical enhancement
 - [x] Tavern warlord recruitment (`tavern`) with persistent silver deductions & anti-duplicate checks
 - [x] Martial practice grounds (`practice`) with idle time exp accumulation & rapid leap leveling
 - [x] Full combat integration linking dynamic hero stats and equipment bonuses into 9-grid simulation
@@ -276,7 +279,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), celestial stargazing (`heaven`), and server-wide Dong Zhuo World Boss crusade (`worldboss`)
 - [x] Legion territorial siege warfare (`siege`), GVG cross-server championship tournament betting (`gvg`)
 - [x] Built-in golden flowing marquee banner UI renderer in `ws_client.js` with hardware-accelerated broadcast animations
-- [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge celebration (`first_recharge`), and maritime silk road (`overseastrade`)
+- [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge rebate & Fate Wheel (`first_recharge`), and maritime silk road (`overseastrade`)
 - [x] High-tier diversion mechanics: Bole stud farm (`studfarm`), rough jade gambling (`jadegamble`), tomb raiding maps (`treasuremap`), and weaponry workshop (`workshop`)
 - [x] Four Divine Beast Sanctums (`sanctum`), cross-server martial tournaments (`compete`), national altar sacrifices (`countrysacrifice`), and imperial court expostulations (`expostulation`)
 - [x] Leisure & social festivity systems: Heroic banquets (`banquet`), plum wine deliberations (`drink`), celestial dice shaking (`dice`), and money sacred tree (`sacredtree`)
@@ -292,7 +295,7 @@ All core API endpoints and combat simulation loops are covered by PHPUnit integr
 - [x] Operational giftings & achievement telemetry: Universal CDKeys (`activationcode`), military drills (`exercise`), lord combat overview (`information`), and brotherhood recruitment (`invitation`)
 - [x] Lightweight domain thin models (`src/Model/`) with native `SoftDeletes`, automatic type casting, and encapsulated domain methods (`Member`, `General`, `Equipment`, `GeneralSoul`, `SiegeCity`)
 - [x] High-concurrency debouncing & anti-cheat: Atomic request reentrancy protection via `ThrottleMiddleware`
-- [x] PHPUnit end-to-end integration test suite (91/91 100% passing, 1202 assertions)
+- [x] PHPUnit Unit + Feature suites (112 tests, 1967 assertions)
 
 ---
 

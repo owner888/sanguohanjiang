@@ -104,6 +104,38 @@ final class GameApiTest extends TestCase
         $this->assertSame(-4, $this->request('login', 'guest', ['token' => '', 'uid' => '', 'guestkey' => $reg['guestkey']])['status']);
     }
 
+    public function testRegistrationInitialState(): void
+    {
+        // 旧版 login.php：init_general(1, uid) + init_matrix(1, uid, 2, gid)，不送初始装备
+        $generals = DB::table('general')->where('uid', self::$uid)->whereNull('deleted_at')->get();
+        $this->assertCount(1, $generals);
+        $g = $generals[0];
+        $tpl = \Hanjiang\MasterData\General::ROWS[1];
+        $this->assertSame('廖化', $tpl['name']);
+        $this->assertSame(1, (int)$g['generalid']);
+        foreach (['name', 'image', 'type', 'wuli', 'zhili', 'tili', 'talentid', 'skillid', 'star'] as $col) {
+            $this->assertEquals($tpl[$col], $g[$col], "初始武将 {$col} 必须取自模板");
+        }
+        $this->assertSame(1, (int)$g['level']);
+        $this->assertSame(0, (int)$g['exp']);
+        $this->assertSame(0, (int)$g['levelupexp'], 'init_general 的 levelupexp 为 0');
+        $this->assertSame(1, (int)$g['goout']);
+        $this->assertSame(2, (int)$g['pos']);
+        $this->assertSame(1, (int)$g['matrix_id']);
+        $this->assertSame(0, (int)$g['wuliup'] + (int)$g['zhiliup'] + (int)$g['tiliup']);
+
+        $matrix = DB::table('matrix')->where('uid', self::$uid)->whereNull('deleted_at')->get();
+        $this->assertCount(1, $matrix);
+        $this->assertSame(1, (int)$matrix[0]['mid']);
+        $this->assertSame((int)$g['id'], (int)$matrix[0]['position2']);
+        foreach ([1, 3, 4, 5, 6, 7, 8, 9] as $p) {
+            $this->assertSame(0, (int)$matrix[0]['position' . $p]);
+        }
+
+        $this->assertSame([], DB::table('equipment')->where('uid', self::$uid)->whereNull('deleted_at')->get(), '注册不送装备');
+        $this->assertSame([], $this->request('pack', 'index')['list'], '背包为空时不自动补装备');
+    }
+
     public function testMemberProfileAndRoleSelection(): void
     {
         $member = $this->request('member', 'index');
@@ -202,6 +234,9 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('item', $shiliReward);
         $this->assertArrayHasKey('name', $shiliReward['item']);
         $this->assertSame(1, $shiliReward['gettype']);
+        // 旧版 MasterData Map 1（黄巾势力）通关奖励：装备 6 狮心锁环甲
+        $this->assertSame(6, $shiliReward['item']['id']);
+        $this->assertSame('狮心锁环甲', $shiliReward['item']['name']);
     }
 
     public function testBattleSimulationAction(): void
@@ -249,16 +284,107 @@ final class GameApiTest extends TestCase
         $this->assertSame('strong', $funcData['levelFunc']['func_mark']);
     }
 
+    public function testMissionEquipmentDrop(): void
+    {
+        $this->withFreshPlayer(function (int $uid): void {
+            $silver = (int)DB::table('member')->where('uid', $uid)->first()['silver'];
+
+            // 1-1-1 长枪兵：MasterData Mission 1 无掉落
+            $plain = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
+            $this->assertSame(1, $plain['info']['win']);
+            $this->assertSame(0, $plain['info']['gettype']);
+            $this->assertSame(0, $plain['info']['get_number']);
+            $this->assertSame('', $plain['info']['itemname']);
+            $this->assertArrayNotHasKey('silver', $plain['info'], '胜利不再送新版自定的 500 银币');
+            $this->assertSame($silver, (int)DB::table('member')->where('uid', $uid)->first()['silver']);
+
+            // 1-1-2 裴元绍：Mission 2 gettype 1（装备）getvalue 1（赤铜刀）getrate 100
+            $before = count(DB::table('equipment')->where('uid', $uid)->where('equipid', 1)->whereNull('deleted_at')->get());
+            $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 2]);
+            $this->assertSame(1, $res['info']['win']);
+            $tpl = \Hanjiang\MasterData\Equip::ROWS[1];
+            $this->assertSame(1, $res['info']['get_number']);
+            $this->assertSame(1, $res['info']['gettype']);
+            $this->assertSame(0, $res['info']['getvalue']);
+            $this->assertSame(1, $res['info']['itemtype']);
+            $this->assertSame($tpl['id'], $res['info']['itemid']);
+            $this->assertSame($tpl['quality'], $res['info']['quality']);
+            $this->assertSame($tpl['name'], $res['info']['itemname']);
+            $items = DB::table('equipment')->where('uid', $uid)->where('equipid', 1)->whereNull('deleted_at')->get();
+            $this->assertCount($before + 1, $items);
+            $new = end($items);
+            $this->assertSame($tpl['power'], (int)$new['powerup']);
+            $this->assertSame(0, (int)$new['generalid']);
+
+            // 重刷同一关照样按 getrate 掉落（旧版不区分首杀）
+            $this->assertSame(1, $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 2])['info']['gettype']);
+        });
+    }
+
+    /**
+     * 临时切换到一个新注册的游客账号执行 $fn（新号：1 级、VIP 1、银币 88888、元宝 9999、廖化在 1 号阵 2 号位）
+     */
+    private function withFreshPlayer(callable $fn): void
+    {
+        [$oldToken, $oldUid] = [self::$token, self::$uid];
+        self::$token = null;
+        self::$uid = 0;
+        try {
+            $reg = $this->request('register', 'guest');
+            self::$uid = (int)$reg['uid'];
+            $login = $this->request('login', 'guest', ['uid' => self::$uid, 'guestkey' => $reg['guestkey']]);
+            self::$token = (string)$login['token'];
+            $fn(self::$uid);
+        } finally {
+            self::$token = $oldToken;
+            self::$uid = $oldUid;
+        }
+    }
+
     public function testGeneralSystem(): void
     {
+        // 旧版 general.php:index 只列出征将领（新版以阵位 pos > 0 为出征），键从 1 开始
         $res = $this->request('general', 'index');
         $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
+        $goout = DB::table('general')->where('uid', self::$uid)->where('pos', '>', 0)->whereNull('deleted_at')->get();
+        $this->assertSame(range(1, count($goout)), array_keys($res['list']));
+        $this->assertSame(0, $res['tree']);
+        $gid = (int)$res['list'][1]['id'];
+        $row = DB::table('general')->where('id', $gid)->first();
 
-        $info = $this->request('general', 'get_info', ['gid' => 1]);
+        $info = $this->request('general', 'get_info', ['gid' => $gid]);
         $this->assertSame(1, $info['status']);
-        $this->assertGreaterThan(0, $info['info']['attack']);
-        $this->assertGreaterThan(0, $info['info']['defense']);
+        $this->assertSame(
+            ['id', 'uid', 'quality', 'name', 'level', 'image', 'type', 'wuli', 'zhili', 'tili', 'wuliup', 'zhiliup', 'tiliup',
+                'star', 'turn', 'goout', 'skill', 'talent', 'eid1', 'eid2', 'eid3', 'eid4', 'mid0', 'mid1', 'mid2', 'mid3', 'mid4',
+                'achID', 'achList', 'hp'],
+            array_keys($info['info']),
+            'get_info.info 必须正好是旧版 info_field + hp',
+        );
+        $this->assertSame((int)$row['star'], $info['info']['star']);
+        $this->assertSame(1, $info['info']['goout']);
+
+        // 技能 / 天赋取自 MasterData（旧版 get_skill_by_id / get_talent_by_id），天赋不带 blood
+        $skill = \Hanjiang\MasterData\Skill::ROWS[(int)$row['skillid']];
+        $talent = \Hanjiang\MasterData\Talent::ROWS[(int)$row['talentid']];
+        $this->assertSame(['id' => $skill['id'], 'name' => $skill['name'], 'description' => $skill['description']], $info['info']['skill']);
+        $this->assertSame(['id' => $talent['id'], 'name' => $talent['name'], 'description' => $talent['description']], $info['info']['talent']);
+
+        // 没穿兵符：hp = intval((80 + 50 * (等级-1) * 转生系数) * (1 + (体力+体力培养) * 0.002) * 天赋血量系数)
+        $baseHp = 80 + 50 * ((int)$row['level'] - 1) * \Hanjiang\Battle\LegacyStats::turnCoefficient((int)$row['turn']);
+        $this->assertSame(0, $info['info']['eid4']);
+        $this->assertSame(
+            (int)($baseHp * (1 + ((int)$row['tili'] + (int)$row['tiliup']) * 0.002) * $talent['blood']),
+            $info['info']['hp'],
+        );
+
+        // 参数错误 -1；不存在或未出征 2
+        $this->assertSame(-1, $this->request('general', 'get_info', ['gid' => 0])['status']);
+        $this->assertSame(2, $this->request('general', 'get_info', ['gid' => 999999999])['status']);
+        $rest = General::createFromTemplate(self::$uid, 2);
+        $this->assertSame(2, $this->request('general', 'get_info', ['gid' => $rest])['status']);
+        $this->assertNotContains($rest, array_column($this->request('general', 'index')['list'], 'id'), '未出征将领不在 index 列表');
+        DB::table('general')->where('id', $rest)->update(['deleted_at' => date('Y-m-d H:i:s')]);
     }
 
     public function testMatrixSystem(): void
@@ -295,147 +421,290 @@ final class GameApiTest extends TestCase
 
     public function testPackSystem(): void
     {
-        $res = $this->request('pack', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertArrayHasKey('list', $res);
-        $this->assertNotEmpty($res['list']);
+        $this->withFreshPlayer(function (int $uid): void {
+            $empty = $this->request('pack', 'index');
+            $this->assertSame(1, $empty['status']);
+            $this->assertSame([], $empty['list'], '背包为空时 status 1、空列表');
+
+            [$knife] = Equipment::addFromTemplate($uid, 1);    // 赤铜刀 售价 220
+            [$armor] = Equipment::addFromTemplate($uid, 2);    // 赤铜甲 售价 100
+            DB::table('equipment')->where('id', $armor)->update(['hammer' => 1, 'level' => 3, 'powerup' => 23]);
+            [$chip] = Equipment::addFromTemplate($uid, 20);    // 帝王铠 紫 5 → 10 片合成
+            DB::table('equipment')->where('id', $chip)->update(['chip' => 3, 'saleprice' => 1001]);
+            $scroll = (int)DB::table('equipment')->insert(['uid' => $uid, 'equipid' => 1, 'name' => '物攻天赋卷轴', 'type' => 6, 'quality' => 1, 'number' => 3, 'saleprice' => 1000]);
+            $empty = (int)DB::table('equipment')->insert(['uid' => $uid, 'equipid' => 2, 'name' => '空卷轴', 'type' => 6, 'quality' => 1, 'number' => 0]);
+            $gid = (int)$this->request('general', 'index')['list'][1]['id'];
+            [$worn] = Equipment::addFromTemplate($uid, 1);
+            $this->assertSame(1, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $worn])['status']);
+
+            $res = $this->request('pack', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertArrayNotHasKey('maxnum', $res);
+            $list = array_column($res['list'], null, 'id');
+            $this->assertArrayNotHasKey($worn, $list, '背包只列未穿戴');
+            $this->assertArrayNotHasKey($empty, $list, 'type > 5 且 number = 0 的不列');
+            // 排序 quality DESC, type ASC, ...
+            $this->assertSame([$chip, $knife, $armor, $scroll], array_column($res['list'], 'id'));
+
+            $this->assertSame(220, $list[$knife]['saleprice']);
+            $this->assertSame(\Hanjiang\MasterData\Equip::ROWS[1]['description'], $list[$knife]['description']);
+            $this->assertSame(0, $list[$knife]['is_equipped']);
+            // 背包不做精炼加成（旧版累加在局部变量上），只给 hammer_quality
+            $this->assertSame(23, $list[$armor]['powerup']);
+            $this->assertSame(\Hanjiang\MasterData\RefinePromote::ROWS[0]['type'], $list[$armor]['hammer_quality']);
+            // 碎片：ceil(1001 / 10) * 3，full_num「3/10」
+            $this->assertSame(101 * 3, $list[$chip]['saleprice']);
+            $this->assertSame('3/10', $list[$chip]['full_num']);
+            // 卷轴：售价 * 个数
+            $this->assertSame(3000, $list[$scroll]['saleprice']);
+
+            // VIP 11 及以上整件装备售价 = 模板售价 + 累计强化花费
+            DB::table('member')->where('uid', $uid)->update(['vip' => 11]);
+            $vipList = array_column($this->request('pack', 'index')['list'], null, 'id');
+            $this->assertSame(100 + \Hanjiang\Battle\LegacyStats::strengthenTotalCost(3, 1, 3), $vipList[$armor]['saleprice']);
+            DB::table('member')->where('uid', $uid)->update(['vip' => 1]);
+        });
     }
 
-    public function testEquipmentEquipAndUnequipAttributes(): void
+    public function testGeneralInfoHpAndEquipmentDisplay(): void
     {
-        // 1. 获取当前武将初始属性
-        $genList = $this->request('general', 'index');
-        $this->assertSame(1, $genList['status']);
-        $mainGeneral = $genList['list'][1];
-        $gid = (int)$mainGeneral['id'];
-        $baseAttack = (int)$mainGeneral['attack'];
-        $baseDefense = (int)$mainGeneral['defense'];
+        $this->withFreshPlayer(function (int $uid): void {
+            $gid = (int)$this->request('general', 'index')['list'][1]['id'];
+            $row = DB::table('general')->where('id', $gid)->first();
 
-        // 2. 获取背包中的青铜剑 (type 1) 与 青铜甲 (type 2)
-        $pack = $this->request('pack', 'index');
-        $weapon = null;
-        $armor = null;
-        foreach ($pack['list'] as $item) {
-            if ($item['type'] === 1 && $weapon === null) {
-                $weapon = $item;
-            } elseif ($item['type'] === 2 && $armor === null) {
-                $armor = $item;
+            // 帝皇印（兵符 type 5、紫 5、初始 5000）强化 10 级 + 精炼 1 级 + 强化成就 1
+            [$seal] = Equipment::addFromTemplate($uid, 54);
+            DB::table('equipment')->where('id', $seal)->update([
+                'level' => 10,
+                'powerup' => \Hanjiang\Battle\LegacyStats::powerup(5000, 10, 5, 5),
+                'hammer' => 1,
+                'aid' => '1',
+            ]);
+            [$armor] = Equipment::addFromTemplate($uid, 2);
+
+            $res = $this->request('general', 'equip', ['gid' => $gid, 'eid' => $seal]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(['status', 'info', 'equipments'], array_values(array_diff(array_keys($res), ['message', 'msg'])), '信封外的字段同旧版');
+
+            // 显示能力：5840 + round(840 * 20%) = 6008，再 + round(6008 * 强化成就1 add_per5 5%) = 6308；锤子类型取 refine_promote.type
+            $eid4 = $res['info']['eid4'];
+            $this->assertSame(
+                ['id', 'equipid', 'name', 'type', 'quality', 'needlevel', 'power', 'powerup', 'level', 'saleprice', 'hammer', 'aid', 'hammer_quality', 'number', 'newquality'],
+                array_keys($eid4),
+            );
+            $this->assertSame(5840 + 168 + 300, $eid4['powerup']);
+            $this->assertSame(\Hanjiang\MasterData\RefinePromote::ROWS[0]['type'], $eid4['hammer_quality']);
+
+            // 血量 = intval((成长血量 + 兵符显示能力) * (1 + (体力+体力培养) * 0.002) * 天赋血量系数)
+            $blood = \Hanjiang\MasterData\Talent::ROWS[(int)$row['talentid']]['blood'];
+            $expectedHp = (int)((80 + 6308) * (1 + ((int)$row['tili'] + (int)$row['tiliup']) * 0.002) * $blood);
+            $this->assertSame($expectedHp, $res['info']['hp']);
+            $this->assertSame($expectedHp, $this->request('general', 'get_info', ['gid' => $gid])['info']['hp']);
+
+            // 未穿戴列表（get_unequip_list）字段与 etype
+            $list = $res['equipments'];
+            $this->assertSame([1], array_keys($list));
+            $this->assertSame(
+                ['id', 'equipid', 'type', 'name', 'quality', 'needlevel', 'power', 'powerup', 'level', 'saleprice', 'hammer', 'aid', 'newquality', 'available', 'etype', 'hammer_quality'],
+                array_keys($list[1]),
+            );
+            $this->assertSame($armor, $list[1]['id']);
+            $this->assertSame(2, $list[1]['etype']);
+            $this->assertSame(1, $list[1]['available']);
+
+            // needlevel 高于将领等级的装备照样列出，available = 0；谋士武器不在猛将的列表里
+            [$blade] = Equipment::addFromTemplate($uid, 3);
+            [$fan] = Equipment::addFromTemplate($uid, 23);
+            $ids = array_column($this->request('general', 'get_info', ['gid' => $gid])['equipments'], 'available', 'id');
+            $this->assertSame(0, $ids[$blade]);
+            $this->assertArrayNotHasKey($fan, $ids);
+
+            // 4 件都有精炼等级时触发精炼成就：achID = 最低精炼等级的 refine_promote.type，武力/智力培养加 refine_achieve
+            foreach ([1, 2, 21] as $tplId) {
+                [$eq] = Equipment::addFromTemplate($uid, $tplId);
+                DB::table('equipment')->where('id', $eq)->update(['hammer' => 1]);
+                $this->assertSame(1, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $eq])['status']);
             }
-        }
-        $this->assertNotNull($weapon, '背包中必须存在初始武器');
-        $this->assertNotNull($armor, '背包中必须存在初始防具');
+            $full = $this->request('general', 'get_info', ['gid' => $gid])['info'];
+            $achType = \Hanjiang\MasterData\RefinePromote::ROWS[0]['type'];
+            $this->assertSame($achType, $full['achID']);
+            $this->assertSame((int)$row['wuliup'] + \Hanjiang\MasterData\RefineAchieve::ROWS[1]['add_type_val1'], $full['wuliup']);
+            $this->assertSame((int)$row['zhiliup'] + \Hanjiang\MasterData\RefineAchieve::ROWS[1]['add_type_val2'], $full['zhiliup']);
+        });
+    }
 
-        // 3. 穿戴武器 (青铜剑): 验证攻击力加成
-        $equipWeapon = $this->request('general', 'equip', ['gid' => $gid, 'eid' => $weapon['id']]);
-        $this->assertSame(1, $equipWeapon['status']);
-        $this->assertGreaterThan($baseAttack, $equipWeapon['stats']['attack']);
+    public function testEquipValidationsAndUnequip(): void
+    {
+        $this->withFreshPlayer(function (int $uid): void {
+            $gid = (int)$this->request('general', 'index')['list'][1]['id'];
+            [$knife] = Equipment::addFromTemplate($uid, 1);   // 赤铜刀 猛将武器 1 级
+            [$blade] = Equipment::addFromTemplate($uid, 3);   // 劈山刀 7 级
+            [$fan] = Equipment::addFromTemplate($uid, 23);    // 七星琉璃扇 谋士武器
+            [$blood] = Equipment::addFromTemplate($uid, 52);  // 血祭 猛将武器 1 级
+            [$chip] = Equipment::addFromTemplate($uid, 2);
+            DB::table('equipment')->where('id', $chip)->update(['chip' => 1]);
+            $scroll = (int)DB::table('equipment')->insert(['uid' => $uid, 'equipid' => 1, 'name' => '卷轴', 'type' => 6, 'quality' => 1]);
+            [$gone] = Equipment::addFromTemplate($uid, 2);
+            DB::table('equipment')->where('id', $gone)->update(['deleted_at' => date('Y-m-d H:i:s')]);
+            [$others] = Equipment::addFromTemplate(990003, 1);
+            $zhoucang = General::createFromTemplate($uid, 2);
+            [$worn] = Equipment::addFromTemplate($uid, 2);
+            DB::table('equipment')->where('id', $worn)->update(['generalid' => $zhoucang]);
 
-        // 4. 穿戴防具 (青铜甲): 验证防御力加成
-        $equipArmor = $this->request('general', 'equip', ['gid' => $gid, 'eid' => $armor['id']]);
-        $this->assertSame(1, $equipArmor['status']);
-        $this->assertGreaterThan($baseDefense, $equipArmor['stats']['defense']);
+            // 旧版 equipment_model::equip 的校验顺序与 general.php:equip 的状态码映射
+            $this->assertSame(-1, $this->request('general', 'equip', ['gid' => 999999999, 'eid' => $knife])['status']);
+            $this->assertSame(-4, $this->request('general', 'equip', ['gid' => $gid, 'eid' => 999999999])['status']);
+            $this->assertSame(-4, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $others])['status'], '他人装备');
+            $this->assertSame(-4, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $gone])['status'], '已删除装备');
+            $this->assertSame(-5, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $fan])['status'], '猛将不能装谋士武器');
+            $this->assertSame(-3, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $chip])['status'], '碎片');
+            $this->assertSame(-3, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $scroll])['status'], 'type > 5');
+            $this->assertSame(-3, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $worn])['status'], '已穿在别的将领身上');
+            $this->assertSame(-2, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $blade])['status'], '装配等级不足');
+            $this->assertSame(0, (int)DB::table('equipment')->where('id', $blade)->first()['generalid']);
 
-        // 5. 验证已穿戴装备尝试出售被拦截
-        $saleBlocked = $this->request('pack', 'sale', ['id' => $weapon['id']]);
-        $this->assertSame(-2, $saleBlocked['status']);
+            // 同一装配位置先卸下旧装备
+            $this->assertSame(1, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $knife])['status']);
+            $res = $this->request('general', 'equip', ['gid' => $gid, 'eid' => $blood]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame($blood, $res['info']['eid1']['id']);
+            $this->assertSame(0, (int)DB::table('equipment')->where('id', $knife)->first()['generalid']);
+            $this->assertContains($knife, array_column($res['equipments'], 'id'));
 
-        // 6. 卸下武器: 验证攻击力回退
-        $unequip = $this->request('general', 'unequip', ['gid' => $gid, 'eid' => $weapon['id']]);
-        $this->assertSame(1, $unequip['status']);
-        $this->assertSame($baseAttack, $unequip['stats']['attack']);
+            // 卸下：-2 将领不存在，-3 装备不在该将领身上，成功后 eid1 = 0
+            $this->assertSame(-2, $this->request('general', 'unequip', ['gid' => 999999999, 'eid' => $blood])['status']);
+            $this->assertSame(-3, $this->request('general', 'unequip', ['gid' => $gid, 'eid' => $knife])['status']);
+            $this->assertSame(-3, $this->request('general', 'unequip', ['gid' => $gid, 'eid' => $worn])['status']);
+            $un = $this->request('general', 'unequip', ['gid' => $gid, 'eid' => $blood]);
+            $this->assertSame(1, $un['status']);
+            $this->assertSame(0, $un['info']['eid1']);
+            $this->assertSame(0, (int)DB::table('equipment')->where('id', $blood)->first()['generalid']);
 
-        // 重新穿回武器，便于后续强化和战斗验证
-        $this->request('general', 'equip', ['gid' => $gid, 'eid' => $weapon['id']]);
+            DB::table('equipment')->where('uid', 990003)->delete();
+        });
     }
 
     public function testPackEquipmentSale(): void
     {
-        // 1. 获取当前武将与装备
-        $genList = $this->request('general', 'index');
-        $gid = (int)$genList['list'][1]['id'];
+        $this->withFreshPlayer(function (int $uid): void {
+            $silver = (int)DB::table('member')->where('uid', $uid)->first()['silver'];
+            $gid = (int)$this->request('general', 'index')['list'][1]['id'];
+            [$worn] = Equipment::addFromTemplate($uid, 1);
+            $this->request('general', 'equip', ['gid' => $gid, 'eid' => $worn]);
+            [$armor] = Equipment::addFromTemplate($uid, 2);
+            [$chip] = Equipment::addFromTemplate($uid, 20);
+            DB::table('equipment')->where('id', $chip)->update(['chip' => 3, 'saleprice' => 1001]);
 
-        // 2. 找到防具并卸下
-        $pack = $this->request('pack', 'index');
-        $armorId = 0;
-        foreach ($pack['list'] as $item) {
-            if ($item['type'] === 2 && $item['is_equipped'] === 1) {
-                $armorId = (int)$item['id'];
-                break;
-            }
-        }
+            $this->assertSame(-1, $this->request('pack', 'sale', ['id' => 999999999])['status']);
+            $this->assertSame(-2, $this->request('pack', 'sale', ['id' => $worn])['status']);
 
-        if ($armorId > 0) {
-            $this->request('general', 'unequip', ['gid' => $gid, 'eid' => $armorId]);
-        } else {
-            // 从背包中挑一件未穿戴装备
-            foreach ($pack['list'] as $item) {
-                if ($item['is_equipped'] === 0) {
-                    $armorId = (int)$item['id'];
-                    break;
-                }
-            }
-        }
+            $sale = $this->request('pack', 'sale', ['id' => $armor]);
+            $this->assertSame(1, $sale['status']);
+            $this->assertSame(100, $sale['silver']);
+            $this->assertSame($silver + 100, $sale['all_silver']);
+            $raw = DB::table('equipment')->where('id', $armor)->first();
+            $this->assertNotNull($raw['deleted_at'], '出售为软删除');
+            $this->assertSame(0, (int)$raw['sale_site']);
+            $this->assertNotContains($armor, array_column($this->request('pack', 'index')['list'], 'id'));
+            $this->assertSame(-1, $this->request('pack', 'sale', ['id' => $armor])['status'], '不能重复出售');
 
-        $this->assertGreaterThan(0, $armorId);
+            // 碎片出售：1001 / 10 * 3 = 300.3（旧版不取整），入账 intval
+            $chipSale = $this->request('pack', 'sale', ['id' => $chip]);
+            $this->assertSame(1, $chipSale['status']);
+            $this->assertEqualsWithDelta(300.3, $chipSale['silver'], 0.0001);
+            $this->assertSame($silver + 100 + 300, (int)DB::table('member')->where('uid', $uid)->first()['silver']);
 
-        // 3. 出售未穿戴装备
-        $sale = $this->request('pack', 'sale', ['id' => $armorId]);
-        $this->assertSame(1, $sale['status']);
-        $this->assertGreaterThan(0, $sale['sale_price']);
-        $this->assertArrayHasKey('silver', $sale);
-
-        // 4. 再次查询背包，确认已删除 (底层数据库 deleted_at 软删除留存)
-        $newPack = $this->request('pack', 'index');
-        foreach ($newPack['list'] as $item) {
-            $this->assertNotSame($armorId, (int)$item['id'], '已出售装备不应继续出现在背包中');
-        }
-
-        // 验证数据库底层软删除字段生效
-        $rawItem = \OmniPHP\Database\DB::table('equipment')->where('id', $armorId)->first();
-        $this->assertNotNull($rawItem);
-        $this->assertNotNull($rawItem['deleted_at'], '软删除字段 deleted_at 必须被正确填充为删除时间戳');
+            // 强化 10 级以上的装备每日限售 10 件
+            [$strong] = Equipment::addFromTemplate($uid, 1);
+            DB::table('equipment')->where('id', $strong)->update(['level' => 10]);
+            Redis::set('equip_sale_' . date('ymd') . '_' . $uid, 10, 86400);
+            $this->assertSame(-3, $this->request('pack', 'sale', ['id' => $strong])['status']);
+            Redis::set('equip_sale_' . date('ymd') . '_' . $uid, 9, 86400);
+            $this->assertSame(1, $this->request('pack', 'sale', ['id' => $strong])['status']);
+            $this->assertSame(10, Redis::get('equip_sale_' . date('ymd') . '_' . $uid));
+        });
     }
 
     public function testStrengthenSystem(): void
     {
-        $res = $this->request('strengthen', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertSame(100, $res['rate']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('info', $res);
-        $this->assertArrayHasKey('info', $res['info']);
-        $this->assertGreaterThan(0, $res['info']['info']['quality']);
-        $this->assertArrayHasKey('rule', $res['info']);
-        $this->assertArrayHasKey('cd', $res['info']);
+        $this->withFreshPlayer(function (int $uid): void {
+            $this->assertSame(-1, $this->request('strengthen', 'index')['status'], '没有装备');
+            DB::table('member')->where('uid', $uid)->update(['level' => 20, 'silver' => 100000]);
+            [$knife] = Equipment::addFromTemplate($uid, 1); // 赤铜刀：猛将武器 白 1，初始 10，售价 220
 
-        $firstEquip = $res['list'][1];
-        $eid = (int)$firstEquip['id'];
-        $oldLevel = (int)$firstEquip['level'];
+            $res = $this->request('strengthen', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(['status', 'list', 'info'], array_values(array_diff(array_keys($res), ['message', 'msg'])), '信封外的字段同旧版');
+            $this->assertSame(['id', 'gid', 'type', 'level', 'equipid', 'quality', 'hammer', 'hammer_quality'], array_keys($res['list'][1]));
+            $info = $res['info'];
+            $this->assertSame(1, $info['status']);
+            $this->assertSame(['status' => 0, 'cd' => 0], $info['cd']);
+            // 下一级规则：ceil(2.2 * 1 * equip_level[1].silver 30) = 66，成功率 100，强化后 10 + 1 * 12 = 22，暴击率 15
+            $this->assertSame(['silver' => 66, 'gold' => 0, 'rate' => 100, 'power' => 22, 'baoji' => 15], $info['rule']);
 
-        // 契约断言：必须具备 hammer 与 hammer_quality (防客户端显示 undefined)，未穿戴时不暴露 generalname
-        $this->assertArrayHasKey('hammer', $firstEquip);
-        $this->assertArrayHasKey('hammer_quality', $firstEquip);
-        $this->assertSame(0, $firstEquip['hammer']);
-        $this->assertSame(0, $firstEquip['hammer_quality']);
-        if ((int)$firstEquip['gid'] === 0) {
-            $this->assertArrayNotHasKey('generalname', $firstEquip, '未穿戴装备严禁输出 generalname 键，防客户端多余渲染');
-        }
+            $start = $this->request('strengthen', 'strengthen_start', ['id' => $knife]);
+            $this->assertSame(1, $start['status']);
+            $this->assertSame(1, $start['newlevel']);
+            $this->assertSame(22, $start['newpower']);
+            $this->assertSame(0, $start['baoji']);
+            $this->assertSame(0, $start['cd']);
+            // 返回下一级规则：ceil(2.2 * 120) = 264，强化后 10 + 2 * 12 = 34
+            $this->assertSame(264, $start['silver']);
+            $this->assertSame(34, $start['power']);
+            $this->assertSame(100000 - 66, $start['all_silver']);
+            $row = DB::table('equipment')->where('id', $knife)->first();
+            $this->assertSame(1, (int)$row['level']);
+            $this->assertSame(22, (int)$row['powerup']);
+            // 售价 = 模板 220 + round(2.2 * 30) * 0.6 = 259.6，写入 INT 列四舍五入
+            $this->assertSame(260, (int)$row['saleprice']);
 
-        // 查询单件装备强化预览
-        $info = $this->request('strengthen', 'strengthen_info', ['id' => $eid]);
-        $this->assertSame(1, $info['status']);
-        $this->assertArrayHasKey('cost_silver', $info['info']);
-        $this->assertArrayHasKey('hammer', $info['info']);
+            // VIP 5 暴击（当前强化等级 > 0 才可能），ratetype = 1 用元宝补满概率时不掷成功率骰
+            DB::table('member')->where('uid', $uid)->update(['vip' => 5]);
+            $seed = 1;
+            while (true) {
+                mt_srand($seed);
+                if (mt_rand(1, 100) <= 15) {
+                    break;
+                }
+                $seed++;
+            }
+            mt_srand($seed);
+            $crit = $this->request('strengthen', 'strengthen_start', ['id' => $knife, 'ratetype' => 1]);
+            $this->assertSame(1, $crit['status']);
+            $this->assertSame(1, $crit['baoji']);
+            $this->assertSame(3, $crit['newlevel']);
+            $this->assertSame(10 + 3 * 12, (int)DB::table('equipment')->where('id', $knife)->first()['powerup']);
 
-        // 执行铁匠铺装备强化
-        $start = $this->request('strengthen', 'strengthen_start', ['id' => $eid]);
-        $this->assertSame(1, $start['status']);
-        $this->assertSame($oldLevel + 1, $start['level']);
-        $this->assertSame($oldLevel + 1, $start['newlevel']);
-        $this->assertGreaterThan(0, $start['newpower']);
-        $this->assertGreaterThan(0, $start['cost_silver']);
-        $this->assertArrayHasKey('silver', $start);
-        $this->assertArrayHasKey('all_silver', $start);
+            // 成功率 < 100 的等级（equip_level[11].rate = 98）失败：-6，照扣银币，等级不变
+            DB::table('member')->where('uid', $uid)->update(['vip' => 1]);
+            DB::table('equipment')->where('id', $knife)->update(['level' => 10]);
+            $seed = 1;
+            while (true) {
+                mt_srand($seed);
+                if (mt_rand(1, 100) > 98) {
+                    break;
+                }
+                $seed++;
+            }
+            $before = (int)DB::table('member')->where('uid', $uid)->first()['silver'];
+            mt_srand($seed);
+            $fail = $this->request('strengthen', 'strengthen_start', ['id' => $knife]);
+            $this->assertSame(-6, $fail['status']);
+            $this->assertSame($before - (int)ceil(2.2 * 3630), $fail['all_silver']);
+            $this->assertSame(10, (int)DB::table('equipment')->where('id', $knife)->first()['level']);
+
+            // -3 强化等级已达主公等级，-4 银币不足，-2 装备不存在
+            DB::table('equipment')->where('id', $knife)->update(['level' => 20]);
+            $this->assertSame(-3, $this->request('strengthen', 'strengthen_start', ['id' => $knife])['status']);
+            DB::table('equipment')->where('id', $knife)->update(['level' => 5]);
+            DB::table('member')->where('uid', $uid)->update(['silver' => 0]);
+            $this->assertSame(-4, $this->request('strengthen', 'strengthen_start', ['id' => $knife])['status']);
+            $this->assertSame(-2, $this->request('strengthen', 'strengthen_start', ['id' => 999999999])['status']);
+            $this->assertSame(-1, $this->request('strengthen', 'strengthen_info', ['id' => 999999999])['status']);
+
+            // 旧版免 CD：clear_cd 总是「不需要清除」
+            $this->assertSame(-1, $this->request('strengthen', 'clear_cd', ['type' => 1])['status']);
+        });
     }
 
     public function testTavernSystem(): void
@@ -458,7 +727,13 @@ final class GameApiTest extends TestCase
         $this->assertSame('张飞', $buy['name']);
         $this->assertSame(5000, $buy['cost_silver']);
         $this->assertArrayHasKey('general', $buy);
-        $this->assertSame(10, $buy['general']['generalid']);
+        // 池 id 10 的「张飞」入库为 MasterData General 52（张飞，形象 54）
+        $this->assertSame(52, $buy['general']['generalid']);
+        $zhangfei = DB::table('general')->where('uid', self::$uid)->where('generalid', 52)->whereNull('deleted_at')->first();
+        $this->assertNotNull($zhangfei);
+        $this->assertSame('张飞', $zhangfei['name']);
+        $this->assertSame(123, (int)$zhangfei['wuli']);
+        $this->assertSame(80, (int)$zhangfei['levelupexp']);
         $this->assertArrayHasKey('jade', $buy);
 
         // 测试商贾会客贸易
@@ -471,16 +746,10 @@ final class GameApiTest extends TestCase
         $duplicateBuy = $this->request('tavern', 'buy', ['id' => 10]);
         $this->assertSame(4, $duplicateBuy['status']);
 
-        // 验证武将列表中已包含新招募的张飞
+        // 新招募的张飞未出征（旧版 add_general goout = 0），不在 general.index 的出征列表里
         $generals = $this->request('general', 'index');
-        $hasZhangFei = false;
-        foreach ($generals['list'] as $g) {
-            if ($g['name'] === '张飞') {
-                $hasZhangFei = true;
-                break;
-            }
-        }
-        $this->assertTrue($hasZhangFei, '武将列表中应包含成功招募的张飞');
+        $this->assertNotContains('张飞', array_column($generals['list'], 'name'));
+        $this->assertSame(2, $this->request('general', 'get_info', ['gid' => (int)$zhangfei['id']])['status']);
     }
 
     public function testPracticeSystem(): void
@@ -498,15 +767,8 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('leap', $res);
         $this->assertArrayHasKey('mop', $res);
 
-        // 获取张飞的 ID
-        $generals = $this->request('general', 'index');
-        $zfId = 0;
-        foreach ($generals['list'] as $g) {
-            if ($g['name'] === '张飞') {
-                $zfId = (int)$g['id'];
-                break;
-            }
-        }
+        // 获取张飞的 ID（未出征，不在 general.index 列表里）
+        $zfId = (int)DB::table('general')->where('uid', self::$uid)->where('generalid', 52)->whereNull('deleted_at')->value('id');
         $this->assertGreaterThan(0, $zfId);
 
         // 1. 将张飞加入 1 号训练位
@@ -540,17 +802,9 @@ final class GameApiTest extends TestCase
 
     public function testMultiHeroFormationAndBattleAction(): void
     {
-        // 1. 获取主公与张飞的将领 ID
-        $generals = $this->request('general', 'index');
-        $mainId = 0;
-        $zfId = 0;
-        foreach ($generals['list'] as $g) {
-            if ($g['name'] === '张飞') {
-                $zfId = (int)$g['id'];
-            } else {
-                $mainId = (int)$g['id'];
-            }
-        }
+        // 1. 获取主公（初始武将廖化）与张飞的将领 ID
+        $mainId = (int)DB::table('general')->where('uid', self::$uid)->where('generalid', General::INITIAL_GENERALID)->whereNull('deleted_at')->value('id');
+        $zfId = (int)DB::table('general')->where('uid', self::$uid)->where('generalid', 52)->whereNull('deleted_at')->value('id');
         $this->assertGreaterThan(0, $mainId);
         $this->assertGreaterThan(0, $zfId);
 
@@ -701,12 +955,25 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('totals', $res);
         $this->assertArrayHasKey('log_list', $res);
 
-        $detail = $this->request('shop', 'get_info', ['id' => 31]);
+        // 旧版商城 1 号位：MasterData Shop → 装备 7 青玉兵符，元宝 50
+        $this->assertSame(7, $res['list'][1]['id']);
+        $this->assertSame('青玉兵符', $res['list'][1]['name']);
+        $this->assertSame(50, $res['list'][1]['price']);
+
+        $detail = $this->request('shop', 'get_info', ['id' => 7]);
         $this->assertSame(1, $detail['status']);
         $this->assertArrayHasKey('info', $detail);
 
-        $buyItem = $this->request('shop', 'buy', ['id' => 31]);
+        $before = count(DB::table('equipment')->where('uid', self::$uid)->where('equipid', 7)->whereNull('deleted_at')->get());
+        $buyItem = $this->request('shop', 'buy', ['id' => 7]);
         $this->assertSame(1, $buyItem['status']);
+        $bought = DB::table('equipment')->where('uid', self::$uid)->where('equipid', 7)->whereNull('deleted_at')->get();
+        $this->assertCount($before + 1, $bought);
+        $this->assertSame('青玉兵符', $bought[0]['name']);
+        $this->assertSame(5, (int)$bought[0]['type']);
+        $this->assertSame(100, (int)$bought[0]['power']);
+
+        $this->assertSame(-1, $this->request('shop', 'buy', ['id' => 31])['status'], '非旧版商城商品不可购买');
 
         $buyAct = $this->request('shop', 'buy_act');
         $this->assertSame(1, $buyAct['status']);
@@ -1545,21 +1812,97 @@ final class GameApiTest extends TestCase
 
     public function testFirstRechargeSystem(): void
     {
-        // 1. 查看首充面板
-        $res = $this->request('first_recharge', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertArrayHasKey('reward_preview', $res);
+        $this->withFreshPlayer(function (int $uid): void {
+            // member_field.first_recharge 默认 1；强制引导期间（guidestop = 0）有图标时为 3
+            $this->assertSame(3, $this->request('member', 'index')['first_recharge']);
 
-        // 2. 领取首充豪礼
-        $reward = $this->request('first_recharge', 'get_reward');
-        $this->assertSame(1, $reward['status']);
-        $this->assertSame('赵云', $reward['general']);
-        $this->assertSame('龙胆亮银枪', $reward['weapon']);
-        $this->assertSame(2, $reward['vip']);
+            $res = $this->request('first_recharge', 'index');
+            $this->assertSame(1, $res['status']);
+            $this->assertSame([1, 2, 3, 4, 5, 6], array_column($res['list'], 'id'), '按 gold 降序');
+            $this->assertSame([0, 0, 0, 0, 0, 0], array_column($res['list'], 'status'));
+            $this->assertSame('首充6480元宝，赠送<em class="red">6480</em>元宝(额度<em class="red">100%</em>)，可开启一次<em class="red">天命转盘</em>', $res['list'][0]['name']);
+            $this->assertSame('首充300元宝，赠送<em class="red">300</em>元宝(额度<em class="red">100%</em>)', $res['list'][4]['name']);
+            $android = $this->request('first_recharge', 'index', ['platform' => 'android']);
+            $this->assertSame('首充300元宝，赠送[color=ffff0000]300[/color]元宝(额度[color=ffff0000]100%[/color])', $android['list'][4]['name']);
 
-        // 3. 再次领取被拦截
-        $dup = $this->request('first_recharge', 'get_reward');
-        $this->assertSame(0, $dup['status']);
+            // 没有充值记录
+            $this->assertSame(2, $this->request('first_recharge', 'get_reward', ['id' => 5])['status']);
+            $this->assertSame(-2, $this->request('first_recharge', 'get_reward', ['id' => 0])['status']);
+            $this->assertSame(3, $this->request('first_recharge', 'action')['status']);
+
+            // 充值 30 元 → 首充 300 元宝（旧版 vip_model::first_recharge），图标状态 2
+            $this->assertTrue(\Hanjiang\Model\FirstRechargeLog::recordRecharge($uid, 30));
+            $this->assertFalse(\Hanjiang\Model\FirstRechargeLog::recordRecharge($uid, 648), '只记第一次');
+            $this->assertSame(2, (int)DB::table('member_field')->where('uid', $uid)->first()['first_recharge']);
+            $this->assertSame([0, 0, 0, 0, 1, 0], array_column($this->request('first_recharge', 'index')['list'], 'status'));
+
+            $this->assertSame(5, $this->request('first_recharge', 'get_reward', ['id' => 6])['status'], '档位错误');
+            Redis::set('first_reward_lock_' . $uid, 1, 30);
+            $this->assertSame(6, $this->request('first_recharge', 'get_reward', ['id' => 5])['status'], '操作太频繁');
+            Redis::del('first_reward_lock_' . $uid);
+
+            // 档位 5：元宝 300、银币 800000、突飞卡 100、黄宝石 100（MasterData FirstRecharge 5）
+            $member = DB::table('member')->where('uid', $uid)->first();
+            $field = DB::table('member_field')->where('uid', $uid)->first();
+            $jade = Redis::getJson('user_trader:' . $uid);
+            $reward = $this->request('first_recharge', 'get_reward', ['id' => 5]);
+            $this->assertSame(1, $reward['status']);
+            $this->assertSame([
+                'gold' => 300,
+                'all_gold' => (int)$member['gold'] + 300,
+                'silver' => 800000,
+                'all_silver' => (int)$member['silver'] + 800000,
+                'jadetype' => 2,
+                'jadenum' => 100,
+            ], $reward['info']);
+            $after = DB::table('member')->where('uid', $uid)->first();
+            $this->assertSame((int)$member['gold'] + 300, (int)$after['gold']);
+            $this->assertSame((int)$member['silver'] + 800000, (int)$after['silver']);
+            $this->assertSame((int)$field['freeleap'] + 100, (int)DB::table('member_field')->where('uid', $uid)->first()['freeleap']);
+            $this->assertSame((int)($jade['get2'] ?? 0) + 100, Redis::getJson('user_trader:' . $uid)['get2']);
+            $this->assertSame([0, 0, 0, 0, 2, 0], array_column($reward['list'], 'status'));
+            $this->assertSame(5, (int)DB::table('first_recharge_log')->where('uid', $uid)->first()['status']);
+            // 不是最高档：图标不再显示
+            $this->assertSame(0, (int)DB::table('member_field')->where('uid', $uid)->first()['first_recharge']);
+            $this->assertSame(3, $this->request('first_recharge', 'get_reward', ['id' => 5])['status'], '已领取');
+            $this->assertSame([], DB::table('general')->where('uid', $uid)->where('generalid', 6)->get(), '不再送赵云');
+
+            // 天命转盘：首充未达最高档不能抽
+            $lottery = $this->request('first_recharge', 'lottery');
+            $this->assertSame(1, $lottery['status']);
+            $this->assertSame(0, $lottery['lottery']);
+            $this->assertCount(12, $lottery['list']);
+            $tpl = \Hanjiang\MasterData\General::ROWS[7];
+            $this->assertSame($tpl['name'], $lottery['list'][0]['name']);
+            $this->assertSame(\Hanjiang\MasterData\Talent::ROWS[$tpl['talentid']]['name'], $lottery['list'][0]['talent']);
+            $this->assertSame(\Hanjiang\MasterData\Skill::ROWS[$tpl['skillid']]['description'], $lottery['list'][0]['skill_desc']);
+            $this->assertSame(4, $this->request('first_recharge', 'action')['status']);
+
+            // 首充达到最高档后可抽一次；抽中的格由 mt_rand(1, 总权重) 落点决定
+            DB::table('first_recharge_log')->where('uid', $uid)->update(['gold' => 6480]);
+            $this->assertSame(1, $this->request('first_recharge', 'lottery')['lottery']);
+            mt_srand(20261031);
+            $expected = \Hanjiang\Handler\Activity\FirstRechargeHandler::lotteryRow(mt_rand(1, \Hanjiang\Handler\Activity\FirstRechargeHandler::lotteryTotalRate()));
+            mt_srand(20261031);
+            $draw = $this->request('first_recharge', 'action');
+            $this->assertSame(1, $draw['status']);
+            $this->assertSame(1, $draw['info']['gettype']);
+            $this->assertSame($expected['getvalue'], $draw['info']['id']);
+            $this->assertNotNull(DB::table('general')->where('uid', $uid)->where('generalid', $expected['getvalue'])->whereNull('deleted_at')->first());
+            $this->assertSame(1, (int)DB::table('first_recharge_log')->where('uid', $uid)->first()['lottery']);
+            $this->assertSame(5, $this->request('first_recharge', 'action')['status'], '只能抽一次');
+
+            // 抽到已拥有的武将：按酒馆紫宝石价格 * 0.8 返还紫宝石
+            DB::table('first_recharge_log')->where('uid', $uid)->update(['lottery' => 0]);
+            $purple = (int)(Redis::getJson('user_trader:' . $uid)['get3'] ?? 0);
+            mt_srand(20261031);
+            $again = $this->request('first_recharge', 'action');
+            $this->assertSame(1, $again['status']);
+            $refund = (int)(\Hanjiang\MasterData\Pub::ROWS[$expected['getvalue']]['price'] * 0.8);
+            $this->assertSame(3, $again['info']['jadetype']);
+            $this->assertEquals($refund, $again['info']['jadenum']);
+            $this->assertSame($purple + $refund, Redis::getJson('user_trader:' . $uid)['get3']);
+        });
     }
 
     public function testOverseasTradeSystem(): void
@@ -2489,6 +2832,109 @@ final class GameApiTest extends TestCase
         $bonus = $firstEq->calculateBonus();
         $this->assertIsArray($bonus);
         $this->assertGreaterThan(0, $firstEq->getSite());
+    }
+
+    public function testGeneralCreationCopiesTemplate(): void
+    {
+        $uid = 990001;
+        DB::table('general')->where('uid', $uid)->delete();
+
+        // 旧版 add_general：模板字段复制成实列，1 级，levelupexp = 80，不出征
+        $id = General::createFromTemplate($uid, 2);
+        $this->assertNotNull($id);
+        $row = DB::table('general')->where('id', $id)->first();
+        $tpl = \Hanjiang\MasterData\General::ROWS[2];
+        foreach (['name', 'image', 'type', 'wuli', 'zhili', 'tili', 'talentid', 'skillid', 'star'] as $col) {
+            $this->assertEquals($tpl[$col], $row[$col], "createFromTemplate {$col}");
+        }
+        $this->assertSame(2, (int)$row['generalid']);
+        $this->assertSame(1, (int)$row['level']);
+        $this->assertSame(80, (int)$row['levelupexp']);
+        $this->assertSame(0, (int)$row['goout']);
+        $this->assertSame(0, (int)$row['pos']);
+        $this->assertSame(0, (int)$row['turn']);
+        $this->assertSame(1, (int)$row['quality']);
+
+        // 名将图鉴中有的武将写 addtype / addvalue（Book 6 赵云：1 / 4）；type != 1 时 30 级
+        $zhaoyun = General::createFromTemplate($uid, 6, 2);
+        $this->assertNotNull($zhaoyun);
+        $row = DB::table('general')->where('id', $zhaoyun)->first();
+        $this->assertSame(\Hanjiang\MasterData\Book::ROWS[6]['addtype'], (int)$row['addtype']);
+        $this->assertSame(\Hanjiang\MasterData\Book::ROWS[6]['addvalue'], (int)$row['addvalue']);
+        $this->assertSame(30, (int)$row['level']);
+        $this->assertSame(80, (int)$row['levelupexp']);
+
+        // 已拥有同模板（旧版 -3）与模板不存在（旧版 -1）都不入库
+        $this->assertNull(General::createFromTemplate($uid, 2));
+        $this->assertNull(General::createFromTemplate($uid, 999999));
+        $this->assertCount(2, DB::table('general')->where('uid', $uid)->get());
+
+        DB::table('general')->where('uid', $uid)->delete();
+    }
+
+    public function testEquipmentCreationAndSlotGuard(): void
+    {
+        $uid = 990002;
+        DB::table('equipment')->where('uid', $uid)->delete();
+
+        // 旧版 add_item：模板字段复制，powerup = power，强化 0 级，未穿戴
+        $ids = Equipment::addFromTemplate($uid, 3, 2);
+        $this->assertCount(2, $ids);
+        $tpl = \Hanjiang\MasterData\Equip::ROWS[3];
+        foreach ($ids as $id) {
+            $row = DB::table('equipment')->where('id', $id)->first();
+            foreach (['name', 'type', 'quality', 'needlevel', 'power', 'saleprice'] as $col) {
+                $this->assertEquals($tpl[$col], $row[$col], "addFromTemplate {$col}");
+            }
+            $this->assertSame($tpl['power'], (int)$row['powerup']);
+            $this->assertSame(0, (int)$row['level']);
+            $this->assertSame(0, (int)$row['generalid']);
+            $this->assertNull($row['site']);
+            $this->assertSame(0, (int)$row['hammer']);
+            $this->assertSame('', $row['aid']);
+        }
+        $this->assertSame([], Equipment::addFromTemplate($uid, 999999));
+
+        // 同一武将同一装配位置只能有一件：猛将武器(1)与谋士武器(2)同在 1 号位
+        [$a, $b] = $ids;
+        $mou = Equipment::addFromTemplate($uid, 35)[0]; // 军师之扇 type 2
+        DB::table('equipment')->where('id', $a)->update(['generalid' => 777]);
+        $this->assertSame(1, (int)DB::table('equipment')->where('id', $a)->first()['site']);
+        foreach ([$b, $mou] as $dup) {
+            try {
+                DB::table('equipment')->where('id', $dup)->update(['generalid' => 777]);
+                $this->fail('同一装配位置不应允许第二件装备');
+            } catch (\PDOException $e) {
+                $this->assertSame('23000', $e->getCode());
+            }
+        }
+        // 软删除后释放装配位置
+        DB::table('equipment')->where('id', $a)->update(['deleted_at' => date('Y-m-d H:i:s')]);
+        DB::table('equipment')->where('id', $mou)->update(['generalid' => 777]);
+        $this->assertSame(1, (int)DB::table('equipment')->where('id', $mou)->first()['site']);
+
+        DB::table('equipment')->where('uid', $uid)->delete();
+    }
+
+    public function testEquipSwapsWithinLegacySite(): void
+    {
+        $this->withFreshPlayer(function (int $uid): void {
+            $gid = (int)$this->request('general', 'index')['list'][1]['id'];
+            [$knife] = Equipment::addFromTemplate($uid, 1);  // 赤铜刀 type 1
+            [$blade] = Equipment::addFromTemplate($uid, 52); // 血祭 type 1
+            [$armor] = Equipment::addFromTemplate($uid, 2);  // 赤铜甲 type 3
+
+            $this->assertSame(1, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $knife])['status']);
+            $res = $this->request('general', 'equip', ['gid' => $gid, 'eid' => $blade]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame(0, (int)DB::table('equipment')->where('id', $knife)->first()['generalid'], '同位置旧装备应被卸下');
+            $this->assertSame($blade, (int)$res['info']['eid1']['id']);
+
+            // eid1~eid4 按旧版 get_item_site 派生：铠甲(type 3) 在 eid2
+            $res = $this->request('general', 'equip', ['gid' => $gid, 'eid' => $armor]);
+            $this->assertSame(1, $res['status']);
+            $this->assertSame($armor, (int)$res['info']['eid2']['id']);
+        });
     }
 
     public function testThrottleProtectionMiddleware(): void
