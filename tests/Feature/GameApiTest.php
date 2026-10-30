@@ -1179,29 +1179,413 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThanOrEqual(2, $nextRes['task']['id']);
     }
 
-    public function testTowerSystem(): void
+    /**
+     * 将魂星路玩家：主公 51 级（旧版 level > 50 开放）
+     *
+     * @return array{uid: int, auth: array<string, mixed>}
+     */
+    /**
+     * c=tower 请求，去掉响应信封补的 message / msg（旧版 api_return 只输出控制器给的字段）
+     *
+     * @param array<string, mixed> $params
+     * @return array<string, mixed>
+     */
+    private function towerRequest(string $method, array $params = []): array
     {
-        $this->withStrongFormation(function (): void {
-            $res = $this->request('tower', 'index');
-            $this->assertSame(1, $res['status']);
-            $this->assertSame(1, $res['floor']);
-            $this->assertNotEmpty($res['boss_name']);
+        $res = $this->request('tower', $method, $params);
+        unset($res['message'], $res['msg']);
+        return $res;
+    }
 
-            // 挑战试炼塔第 1 层
-            $action = $this->request('tower', 'action');
-            $this->assertSame(1, $action['status']);
-            $this->assertSame(1, $action['win']);
-            $this->assertSame(1, $action['cleared_floor']);
-            $this->assertSame(2, $action['next_floor']);
-            $this->assertGreaterThan(0, $action['silver']);
-            $this->assertGreaterThan(0, $action['soul']);
+    private function towerPlayer(int $level = 51): array
+    {
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => $level]);
+        return $p;
+    }
 
-            // 扫荡已通关层数
-            $sweep = $this->request('tower', 'sweep');
-            $this->assertSame(1, $sweep['status']);
-            $this->assertSame(1, $sweep['cleared_layers']);
-            $this->assertGreaterThan(0, $sweep['silver']);
-        });
+    /**
+     * 阵法里的武将提到远超守军的等级：旧版战斗有随机（闪避 / 暴击），这里让胜负不依赖随机数
+     */
+    private function towerOverpower(int $uid): void
+    {
+        DB::table('general')->where('uid', $uid)->update(['level' => 20000]);
+    }
+
+    /**
+     * @param array<string, int> $data
+     */
+    private function towerMap(int $uid, array $data): void
+    {
+        DB::table('soul_open_map')->where('uid', $uid)->update($data);
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function towerActivity(int $uid): array
+    {
+        return DB::table('member_activity')->where('uid', $uid)->first();
+    }
+
+    private function towerMember(int $uid, string $column): int
+    {
+        return (int)DB::table('member')->where('uid', $uid)->value($column);
+    }
+
+    public function testTowerSceneAndMissionLists(): void
+    {
+        // 旧版 level > 50 开放
+        $low = $this->towerPlayer(50);
+        foreach (['get_scene_list', 'get_mission_list', 'get_mission_info', 'get_mopup_price', 'pk', 'get_price', 'buy', 'reward_info', 'get_reward'] as $m) {
+            $this->assertSame(-1, $this->towerRequest($m, $low['auth'] + ['s' => 1, 'id' => 1, 'type' => 3])['status'], $m);
+        }
+        $this->assertNull(DB::table('soul_open_map')->where('uid', $low['uid'])->first());
+        // 新版自定的接口已删除（前端只调用旧版接口）
+        foreach (['index', 'action', 'sweep', 'getTowerProgress'] as $m) {
+            $this->assertFalse(method_exists(\Hanjiang\Handler\Campaign\TowerHandler::class, $m), $m);
+        }
+
+        $p = $this->towerPlayer();
+        $uid = $p['uid'];
+        $scene = $this->towerRequest('get_scene_list', $p['auth']);
+        $this->assertSame(1, $scene['status']);
+        $this->assertCount(7, $scene['scene']);
+        $this->assertSame(['id' => 1, 'name' => '北斗七星', 'openstatus' => 1, 'killed' => 0], $scene['scene'][0]);
+        $this->assertSame(['id' => 2, 'name' => '紫薇星域', 'openstatus' => 0, 'killed' => 0], $scene['scene'][1]);
+        // get_open_map 首次建档；get_scene_list 不建活动记录（update_activity_info 没有记录时不插入）
+        $map = DB::table('soul_open_map')->where('uid', $uid)->first();
+        $this->assertSame([1, 0, 0], [(int)$map['level'], (int)$map['stage'], (int)$map['mission']]);
+        $this->assertNull(DB::table('member_activity')->where('uid', $uid)->first());
+
+        $list = $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 1]);
+        $this->assertSame(1, $list['status']);
+        $this->assertSame(['status', 'now', 'list', 'times', 'get_reward'], array_keys($list));
+        $this->assertCount(25, $list['list']);
+        $this->assertSame(['id', 'level', 'name', 'type', 'image', 'openstatus', 'killed', 'firstkill'], array_keys($list['list'][0]));
+        $m1 = \Hanjiang\MasterData\SoulMission::ROWS[1];
+        $this->assertSame([1, $m1['level'], $m1['name'], $m1['type'], $m1['image'], 1, 0, 1], array_values($list['list'][0]));
+        $this->assertSame([0, 0, 1], [$list['list'][1]['openstatus'], $list['list'][1]['killed'], $list['list'][1]['firstkill']]);
+        $this->assertSame(['id' => 1, 'soul' => $m1['soul'], 'first_soul_num' => $m1['first_soul_num'], 'firstkill' => 1, 'hero_soul' => []], $list['now']);
+        // 首次读活动信息按旧版初始值建档：免费次数 12
+        $this->assertSame(12, $list['times']);
+        $this->assertSame(0, $list['get_reward']);
+        $act = $this->towerActivity($uid);
+        $this->assertSame([1, 1, 0, 12, 0, 0], [(int)$act['towerlevel'], (int)$act['towerstage'], (int)$act['towermission'], (int)$act['freetower'], (int)$act['towertimes'], (int)$act['souldate']]);
+
+        // 场景 2 未开启；场景 0 没有关卡
+        $this->assertSame(-4, $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 2])['status']);
+        $this->assertSame(-5, $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 0])['status']);
+
+        $info = $this->towerRequest('get_mission_info', $p['auth'] + ['id' => 1]);
+        $this->assertSame(['status' => 1, 'mission' => ['id' => 1, 'soul' => $m1['soul'], 'first_soul_num' => $m1['first_soul_num'], 'firstkill' => 1, 'hero_soul' => []], 'mop_up' => 0], $info);
+        $this->assertSame(1, (int)$this->towerActivity($uid)['towermission']);
+        $this->assertSame(-5, $this->towerRequest('get_mission_info', $p['auth'] + ['id' => 2])['status'], '关卡未开启');
+        $this->assertSame(-4, $this->towerRequest('get_mission_info', $p['auth'] + ['id' => 26])['status'], '场景未开启');
+        $this->assertSame(-2, $this->towerRequest('get_mission_info', $p['auth'] + ['id' => 999])['status']);
+
+        // 第 3 关掉落将魂（soulid 1、getrate 100）：模板 + 图片 type.quality + 0 级属性
+        $this->towerMap($uid, ['mission' => 2]);
+        $soul = \Hanjiang\MasterData\Soul::ROWS[1];
+        $heroSoul = $soul + ['image' => (int)($soul['type'] . $soul['quality']), 'addition' => (int)\Hanjiang\MasterData\SoulType::ROWS[$soul['type']]['lv0']];
+        $info = $this->towerRequest('get_mission_info', $p['auth'] + ['id' => 3]);
+        $this->assertSame($heroSoul, $info['mission']['hero_soul']);
+        $list = $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 1]);
+        $this->assertSame(3, $list['now']['id'], '当前关卡为已过关卡 + 1');
+        $this->assertSame($heroSoul, $list['now']['hero_soul']);
+        $this->assertSame([1, 1, 1, 0], [$list['list'][1]['killed'], $list['list'][2]['openstatus'], $list['list'][2]['firstkill'], $list['list'][2]['killed']]);
+    }
+
+    public function testTowerPkLoseAndGuards(): void
+    {
+        $p = $this->towerPlayer();
+        $uid = $p['uid'];
+        $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $soulBefore = $this->towerMember($uid, 'soul');
+
+        // 阵法里没有武将：旧版 battle_mission 按空队伍继续战斗，直接大败（assess -3），不消耗随机数
+        $this->emptyFormation($uid);
+        $res = $this->towerRequest('pk', $p['auth'] + ['id' => 1]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(['status', 'info', 'clear', 'battle'], array_keys($res));
+        $this->assertSame(['id' => 1, 'background' => 0, 'report' => 0, 'times' => 11, 'win' => -3, 'reward_soul' => 0, 'hero_soul' => [], 'soul' => $soulBefore], $res['info']);
+        $this->assertSame(0, $res['clear']);
+        $this->assertSame(['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff', 'left_role', 'right_role'], array_keys($res['battle']));
+        $this->assertSame([], $res['battle']['leftteam']);
+        $this->assertSame([], $res['battle']['process']);
+        $this->assertSame(-3, $res['battle']['assess']);
+        // 守军取 soul_mission 的 position1~9 → soul_monster
+        $this->assertSame(['1', '3', '5', '7', '9'], array_map('strval', array_keys($res['battle']['rightteam'])));
+        $this->assertSame((string)\Hanjiang\MasterData\SoulMission::ROWS[1]['position1'], $res['battle']['rightteam']['1']['heroid']);
+        $this->assertSame(['name' => $nickname, 'level' => 51], $res['battle']['left_role']);
+        $this->assertSame(['name' => '北斗力士', 'level' => 51], $res['battle']['right_role']);
+        $this->assertSame(11, (int)$this->towerActivity($uid)['freetower'], '战败也扣 1 次（先用免费次数）');
+        $this->assertSame(0, (int)DB::table('soul_open_map')->where('uid', $uid)->value('mission'));
+        $this->assertSame(0, DB::table('soul_log')->where('uid', $uid)->count());
+
+        // 没有阵法：旧版 battle_mission 返回 -1 → pk -7，不扣次数
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 0]);
+        $this->assertSame(-7, $this->towerRequest('pk', $p['auth'] + ['id' => 1])['status']);
+        $this->assertSame(11, (int)$this->towerActivity($uid)['freetower']);
+        DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 1]);
+
+        $this->assertSame(-6, $this->towerRequest('pk', $p['auth'] + ['id' => 2])['status'], '关卡未开启');
+        $this->assertSame(-5, $this->towerRequest('pk', $p['auth'] + ['id' => 26])['status'], '场景未开启');
+        $this->assertSame(-3, $this->towerRequest('pk', $p['auth'] + ['id' => 999])['status']);
+
+        // 免费次数用完后扣购买次数；都用完返回 3
+        DB::table('member_activity')->where('uid', $uid)->update(['freetower' => 0, 'towertimes' => 1]);
+        $res = $this->towerRequest('pk', $p['auth'] + ['id' => 1]);
+        $this->assertSame(0, $res['info']['times']);
+        $this->assertSame([0, 0], [(int)$this->towerActivity($uid)['freetower'], (int)$this->towerActivity($uid)['towertimes']]);
+        $this->assertSame(3, $this->towerRequest('pk', $p['auth'] + ['id' => 1])['status']);
+    }
+
+    public function testTowerPkWinFirstKillReportAndClear(): void
+    {
+        DB::execute('DELETE FROM `zc_sanguo_soul_log`');
+        DB::execute('DELETE FROM `zc_sanguo_soul_report`');
+        $p = $this->towerPlayer();
+        $uid = $p['uid'];
+        $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+        $this->towerOverpower($uid);
+        $m1 = \Hanjiang\MasterData\SoulMission::ROWS[1];
+        $soulBefore = $this->towerMember($uid, 'soul');
+
+        // 真实战斗：首杀
+        $res = $this->towerRequest('pk', $p['auth'] + ['id' => 1]);
+        $this->assertSame(1, $res['status']);
+        $battle = $res['battle'];
+        $this->assertNotEmpty($battle['leftteam']);
+        $this->assertNotEmpty($battle['rightteam']);
+        $this->assertNotEmpty($battle['process']);
+        $this->assertGreaterThanOrEqual(1, $battle['assess']);
+        $this->assertSame(['heroid', 'name', 'herotype', 'level', 'allblood', 'power', 'image', 'star', 'talent', 'skill', 'quality'], array_keys(reset($battle['rightteam'])));
+        $this->assertSame(['mingzhong', 'jingzhun', 'kangyun', 'tree', 'kcrit', 'mount'], array_keys($battle['leftbuff']));
+        $info = $res['info'];
+        $this->assertSame(['first_soul_num', 'firstkill', 'id', 'background', 'report', 'times', 'win', 'reward_soul', 'hero_soul', 'soul'], array_keys($info));
+        $this->assertSame([$m1['first_soul_num'], 1, 1, 11, $battle['assess'], $m1['soul'], []], [$info['first_soul_num'], $info['firstkill'], $info['id'], $info['times'], $info['win'], $info['reward_soul'], $info['hero_soul']]);
+        // 首杀只发首杀原魂
+        $this->assertSame($soulBefore + $m1['first_soul_num'], $info['soul']);
+        $this->assertSame($info['soul'], $this->towerMember($uid, 'soul'));
+        $this->assertSame(0, $res['clear']);
+        $this->assertSame(1, (int)DB::table('soul_open_map')->where('uid', $uid)->value('mission'));
+        $log = DB::table('soul_log')->where('uid', $uid)->first();
+        $this->assertSame($info['report'], (int)$log['id'], '战报 id 即首杀记录 id');
+        $this->assertSame([$nickname, 1, 1, 1, 51, 0, 1], [$log['nickname'], (int)$log['missionlevel'], (int)$log['missionstage'], (int)$log['missionid'], (int)$log['level'], (int)$log['tree'], (int)$log['first_reward']]);
+
+        // 战报回放：与 pk 返回的 battle 相同
+        $report = $this->towerRequest('get_report_info', $p['auth'] + ['id' => $info['report']]);
+        $this->assertSame(1, $report['status']);
+        $this->assertEquals($battle, $report['battle']);
+        $this->assertSame(['win' => $battle['assess'], 'background' => 0], $report['info']);
+        $this->assertSame(['status' => 2, 'battle' => [], 'info' => []], $this->towerRequest('get_report_info', $p['auth'] + ['id' => 999999]));
+        // 攻略列表：最近 7 条首杀记录，按记录 id 索引
+        $list = $this->towerRequest('get_report_list', $p['auth'] + ['id' => 1]);
+        $this->assertSame(1, $list['status']);
+        $this->assertSame([(string)$info['report'] => ['id' => $info['report'], 'uid' => $uid, 'level' => 51, 'nickname' => $nickname, 'tree' => 0]], $list['list']);
+        $this->assertSame(['status' => 2, 'list' => []], $this->towerRequest('get_report_list', $p['auth'] + ['id' => 175]));
+        // 已首杀的关卡在列表里 firstkill 为 0
+        $mlist = $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 1]);
+        $this->assertSame([1, 0], [$mlist['list'][0]['killed'], $mlist['list'][0]['firstkill']]);
+
+        // 再打一次：普通原魂，不再记战报
+        $soulBefore = $this->towerMember($uid, 'soul');
+        $res = $this->towerRequest('pk', $p['auth'] + ['id' => 1]);
+        $this->assertGreaterThanOrEqual(1, $res['info']['win']);
+        $this->assertArrayNotHasKey('firstkill', $res['info']);
+        $this->assertSame([0, $m1['soul'], $soulBefore + $m1['soul']], [$res['info']['report'], $res['info']['reward_soul'], $res['info']['soul']]);
+        $this->assertSame(1, DB::table('soul_log')->where('uid', $uid)->count());
+
+        // 打败场景最后一关：clear 1，开启下一场景
+        $this->towerMap($uid, ['mission' => 24]);
+        $res = $this->towerRequest('pk', $p['auth'] + ['id' => 25]);
+        $this->assertGreaterThanOrEqual(1, $res['info']['win']);
+        $this->assertSame(1, $res['clear']);
+        $map = DB::table('soul_open_map')->where('uid', $uid)->first();
+        $this->assertSame([1, 25], [(int)$map['stage'], (int)$map['mission']]);
+        $scene = $this->towerRequest('get_scene_list', $p['auth']);
+        $this->assertSame([1, 1], [$scene['scene'][0]['openstatus'], $scene['scene'][0]['killed']]);
+        $this->assertSame([1, 0], [$scene['scene'][1]['openstatus'], $scene['scene'][1]['killed']]);
+        $this->assertSame(1, $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 2])['status']);
+
+        // 旧版老玩家：有过关记录但未领首杀奖励（first_reward 0），胜利时补发首杀并标记
+        DB::table('soul_log')->insert(['uid' => $uid, 'nickname' => $nickname, 'missionlevel' => 1, 'missionstage' => 1, 'missionid' => 2, 'level' => 51, 'first_reward' => 0]);
+        $soulBefore = $this->towerMember($uid, 'soul');
+        $res = $this->towerRequest('pk', $p['auth'] + ['id' => 2]);
+        $this->assertSame(1, $res['info']['firstkill']);
+        $this->assertSame(0, $res['info']['report']);
+        $this->assertSame($soulBefore + \Hanjiang\MasterData\SoulMission::ROWS[2]['first_soul_num'], $res['info']['soul']);
+        $this->assertSame(1, (int)DB::table('soul_log')->where('uid', $uid)->where('missionid', 2)->value('first_reward'));
+    }
+
+    public function testTowerMopUpAndPrices(): void
+    {
+        $p = $this->towerPlayer();
+        $uid = $p['uid'];
+        $act = static fn (int $n): int => (int)\Hanjiang\MasterData\Price::ROWS[min(50, $n)]['act'];
+        $sum = static function (int $start, int $times) use ($act): int {
+            $total = 0;
+            for ($i = 1; $i <= $times; $i++) {
+                $total += $act($start + $i);
+            }
+            return $total;
+        };
+        $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 1]);
+        $this->towerMap($uid, ['mission' => 3]);
+        foreach ([1, 3] as $mid) {
+            DB::table('soul_log')->insert(['uid' => $uid, 'missionlevel' => 1, 'missionstage' => 1, 'missionid' => $mid, 'level' => 51, 'first_reward' => 1]);
+        }
+
+        // 已首杀的已过关卡可以扫荡；get_mission_info 按「今日购买次数 + 1」起算价格
+        $info = $this->towerRequest('get_mission_info', $p['auth'] + ['id' => 1]);
+        $this->assertSame(1, $info['mop_up']);
+        $this->assertSame([0, 0, $sum(1, 38), $sum(1, 88)], [$info['mission']['five_sub'], $info['mission']['ten_sub'], $info['mission']['fifty_sub'], $info['mission']['hundred_sub']]);
+        // 已过关但未首杀（没有记录）不显示扫荡
+        $this->assertSame(0, $this->towerRequest('get_mission_info', $p['auth'] + ['id' => 2])['mop_up']);
+
+        $price = $this->towerRequest('get_mopup_price', $p['auth'] + ['id' => 1]);
+        $this->assertSame(['status' => 1, 'info' => ['five_sub' => 0, 'ten_sub' => 0, 'fifty_sub' => $sum(0, 38), 'hundred_sub' => $sum(0, 88)]], $price);
+        $this->assertSame(-5, $this->towerRequest('get_mopup_price', $p['auth'] + ['id' => 4])['status'], '未击败的关卡无法扫荡');
+        $this->assertSame(-2, $this->towerRequest('get_mopup_price', $p['auth'] + ['id' => 999])['status']);
+
+        $this->assertSame(-7, $this->towerRequest('mop_up', $p['auth'] + ['id' => 1, 'times' => 7])['status']);
+        $this->assertSame(-6, $this->towerRequest('mop_up', $p['auth'] + ['id' => 4, 'times' => 5])['status']);
+
+        // 免费次数够：不花元宝
+        $gold = $this->towerMember($uid, 'gold');
+        $soul = $this->towerMember($uid, 'soul');
+        $m1 = \Hanjiang\MasterData\SoulMission::ROWS[1];
+        $res = $this->towerRequest('mop_up', $p['auth'] + ['id' => 1, 'times' => 10]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame(['status', 'info', 'times', 'gold'], array_keys($res));
+        $this->assertSame(['five_sub' => $sum(0, 3), 'ten_sub' => $sum(0, 8), 'fifty_sub' => $sum(0, 48), 'hundred_sub' => $sum(0, 98), 'soul' => $m1['soul'] * 10, 'hero_soul' => []], $res['info']);
+        $this->assertSame([2, $gold], [$res['times'], $res['gold']]);
+        $this->assertSame($soul + $m1['soul'] * 10, $this->towerMember($uid, 'soul'));
+        $this->assertSame([2, 0], [(int)$this->towerActivity($uid)['freetower'], (int)$this->towerActivity($uid)['towertimes']]);
+
+        // 次数不足：差额按今日购买次数逐次计价，计入 soultimes
+        $res = $this->towerRequest('mop_up', $p['auth'] + ['id' => 1, 'times' => 5]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame([0, $gold - $sum(0, 3)], [$res['times'], $res['gold']]);
+        $this->assertSame($sum(3, 5), $res['info']['five_sub']);
+        $this->assertSame(3, (int)DB::table('member_field')->where('uid', $uid)->value('soultimes'));
+        $this->assertSame([0, 0], [(int)$this->towerActivity($uid)['freetower'], (int)$this->towerActivity($uid)['towertimes']]);
+
+        // 元宝不足
+        DB::table('member')->where('uid', $uid)->update(['gold' => 0]);
+        $this->assertSame(3, $this->towerRequest('mop_up', $p['auth'] + ['id' => 1, 'times' => 5])['status']);
+        $this->assertSame(3, (int)DB::table('member_field')->where('uid', $uid)->value('soultimes'));
+
+        // 掉落将魂的关卡：掉落发放依赖未移植，hero_soul 为空
+        DB::table('member_activity')->where('uid', $uid)->update(['freetower' => 5]);
+        $res = $this->towerRequest('mop_up', $p['auth'] + ['id' => 3, 'times' => 5]);
+        $this->assertSame(1, $res['status']);
+        $this->assertSame([], $res['info']['hero_soul']);
+
+        // 旧版老玩家未领首杀的关卡不能扫荡
+        DB::table('soul_log')->where('uid', $uid)->where('missionid', 3)->update(['first_reward' => 0]);
+        $this->assertSame(-13, $this->towerRequest('mop_up', $p['auth'] + ['id' => 3, 'times' => 5])['status']);
+    }
+
+    public function testTowerBuyTimes(): void
+    {
+        $p = $this->towerPlayer();
+        $uid = $p['uid'];
+        $price = \Hanjiang\MasterData\Price::ROWS;
+        $this->assertSame(['status' => 1, 'price' => (int)$price[1]['act']], $this->towerRequest('get_price', $p['auth']));
+
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1000]);
+        $res = $this->towerRequest('buy', $p['auth']);
+        $this->assertSame(['status' => 1, 'times' => 13, 'gold' => 1000 - (int)$price[1]['act'], 'next' => (int)$price[2]['act']], $res);
+        $this->assertSame([12, 1], [(int)$this->towerActivity($uid)['freetower'], (int)$this->towerActivity($uid)['towertimes']]);
+        $this->assertSame(1, (int)DB::table('member_field')->where('uid', $uid)->value('soultimes'));
+        $this->assertSame((int)$price[2]['act'], $this->towerRequest('get_price', $p['auth'])['price']);
+
+        // 50 次起固定 50 元宝
+        DB::table('member_field')->where('uid', $uid)->update(['soultimes' => 60]);
+        $this->assertSame(50, $this->towerRequest('get_price', $p['auth'])['price']);
+
+        // 元宝不足
+        DB::table('member')->where('uid', $uid)->update(['gold' => 49]);
+        $this->assertSame(['status' => 2], $this->towerRequest('buy', $p['auth']));
+        $this->assertSame(1, (int)$this->towerActivity($uid)['towertimes']);
+    }
+
+    public function testTowerDailyReward(): void
+    {
+        $p = $this->towerPlayer();
+        $uid = $p['uid'];
+        $this->assertSame(['status' => 3], $this->towerRequest('reward_info', $p['auth']), '未击败关卡');
+        $this->assertSame(['status' => 3], $this->towerRequest('get_reward', $p['auth'] + ['type' => 3]));
+
+        // 奖励按已过的最大关卡，info 显示下一场景 / 下一关
+        $this->towerMap($uid, ['stage' => 1, 'mission' => 26]);
+        $m26 = \Hanjiang\MasterData\SoulMission::ROWS[26];
+        $rewards = \Hanjiang\MasterData\SoulReward::ROWS;
+        $info = $this->towerRequest('reward_info', $p['auth']);
+        $this->assertSame([
+            'status' => 1,
+            'effect' => 0,
+            'info' => ['stage' => \Hanjiang\MasterData\SoulScene::ROWS[2]['name'], 'mission' => 27],
+            'base_reward' => $m26['reward'],
+            'normal_reward' => ['gold' => $rewards[1]['gold'], 'multiple' => intdiv($rewards[1]['ratio'], 100)],
+            'best_reward' => ['gold' => $rewards[2]['gold'], 'multiple' => intdiv($rewards[2]['ratio'], 100)],
+        ], $info);
+
+        $this->assertSame(-3, $this->towerRequest('get_reward', $p['auth'] + ['type' => 0])['status']);
+        DB::table('member')->where('uid', $uid)->update(['gold' => $rewards[2]['gold'] - 1]);
+        $this->assertSame(4, $this->towerRequest('get_reward', $p['auth'] + ['type' => 2])['status'], '元宝不足');
+
+        // 元宝加倍
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1000]);
+        $soul = $this->towerMember($uid, 'soul');
+        $res = $this->towerRequest('get_reward', $p['auth'] + ['type' => 1]);
+        $gain = (int)($rewards[1]['ratio'] / 100 * $m26['reward']);
+        $this->assertSame(['status' => 1, 'effect' => 0, 'gold' => 1000 - $rewards[1]['gold'], 'soul' => $soul + $gain], $res);
+        $this->assertGreaterThanOrEqual(strtotime('today'), (int)$this->towerActivity($uid)['souldate']);
+        $this->assertSame(['status' => 2], $this->towerRequest('reward_info', $p['auth']), '今日已领取');
+        $this->assertSame(['status' => 2], $this->towerRequest('get_reward', $p['auth'] + ['type' => 3]));
+        $this->assertSame(1, $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 1])['get_reward']);
+
+        // 次日不加倍领取
+        DB::table('member_activity')->where('uid', $uid)->update(['souldate' => strtotime('yesterday')]);
+        $soul = $this->towerMember($uid, 'soul');
+        $res = $this->towerRequest('get_reward', $p['auth'] + ['type' => 3]);
+        $this->assertSame([1, 1000 - $rewards[1]['gold'], $soul + $m26['reward']], [$res['status'], $res['gold'], $res['soul']]);
+    }
+
+    public function testTowerDailyCronResets(): void
+    {
+        $p = $this->towerPlayer();
+        $uid = $p['uid'];
+        $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 1]);
+        DB::table('member_activity')->where('uid', $uid)->update(['freetower' => 0, 'towertimes' => 3]);
+        DB::table('member_field')->where('uid', $uid)->update(['soultimes' => 7, 'dateline' => strtotime('yesterday')]);
+        Redis::del("daily_cron:{$uid}");
+
+        // 旧版 daily_cron：soultimes 归零、freetower 重置为 10，购买的次数保留
+        $this->assertSame(13, $this->towerRequest('get_mission_list', $p['auth'] + ['s' => 1])['times']);
+        $this->assertSame([10, 3], [(int)$this->towerActivity($uid)['freetower'], (int)$this->towerActivity($uid)['towertimes']]);
+        $this->assertSame(0, (int)DB::table('member_field')->where('uid', $uid)->value('soultimes'));
+
+        // 没有活动记录的玩家不建档
+        $q = $this->towerPlayer();
+        DB::table('member_field')->where('uid', $q['uid'])->update(['dateline' => strtotime('yesterday')]);
+        Redis::del("daily_cron:{$q['uid']}");
+        $this->request('member', 'index', $q['auth']);
+        $this->assertNull(DB::table('member_activity')->where('uid', $q['uid'])->first());
+    }
+
+    public function testTowerSendToChat(): void
+    {
+        $p = $this->towerPlayer();
+        $this->assertSame(['status' => -1], $this->towerRequest('send_to_chat', $p['auth'] + ['id' => 1]));
+        $this->assertSame(['status' => -2], $this->towerRequest('send_to_chat', $p['auth'] + ['id' => 999, 'report' => 5]));
+        // 聊天室未移植：分享返回失败且不扣元宝
+        DB::table('member')->where('uid', $p['uid'])->update(['gold' => 10]);
+        $this->assertSame(['status' => 0], $this->towerRequest('send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5, 'win' => 3]));
+        $this->assertSame(10, $this->towerMember($p['uid'], 'gold'));
     }
 
     public function testPassGeneralSystem(): void
@@ -1614,13 +1998,11 @@ final class GameApiTest extends TestCase
         [$b, $a] = $this->freshArenaPlayers(2);
         $this->assertSame(-1, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid']])['status']);
         $this->assertSame(-3, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => 999999999, 'report' => 5])['status']);
-        DB::table('member')->where('uid', $a['uid'])->update(['gold' => 1]);
-        $this->assertSame(-2, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid'], 'report' => 5])['status']);
+        // 聊天室未移植：分享返回失败且不扣元宝
         DB::table('member')->where('uid', $a['uid'])->update(['gold' => 10]);
         $res = $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid'], 'report' => 5, 'win' => 3]);
-        $this->assertSame(1, $res['status']);
-        $this->assertSame(8, $res['all_gold']);
-        $this->assertSame(8, (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
+        $this->assertSame(0, $res['status']);
+        $this->assertSame(10, (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
     }
 
     public function testWebSocketAndBroadcasterSystem(): void

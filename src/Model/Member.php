@@ -88,8 +88,9 @@ class Member extends Model
      */
     public static function dailyCron(int $uid, int $now): void
     {
+        // 每日重置用户状态：soultimes 将魂星路今日购买次数归零
         $affected = DB::execute(
-            'UPDATE `zc_sanguo_member_field` SET `dateline` = :now
+            'UPDATE `zc_sanguo_member_field` SET `dateline` = :now, `soultimes` = 0
              WHERE `uid` = :uid AND `deleted_at` IS NULL AND `dateline` < :today',
             ['now' => $now, 'uid' => $uid, 'today' => strtotime(date('Y-m-d', $now))]
         );
@@ -97,10 +98,13 @@ class Member extends Model
             return;
         }
 
-        // 依赖未移植：member_field 每日计数归零（leaptimes / baijintimes / zhizuntimes / soultimes /
+        // 依赖未移植：member_field 每日计数归零（leaptimes / baijintimes / zhizuntimes /
         // stone1~3_times / treasure_free，新版 member_field 尚无这些字段）
-        // 依赖未移植：update_activity_info（islandtimes / sacrifice1~3 / freebusiness / freetower /
-        // freemooncake / task_number / flop* / elitetimes / generaltasktimes / freeheaven）
+
+        // update_activity_info：将魂星路免费次数重置为 10（没有记录时不插入，同旧版）
+        DB::table('member_activity')->where('uid', $uid)->whereNull('deleted_at')->update(['freetower' => 10]);
+        // 依赖未移植：update_activity_info 的其余字段（islandtimes / sacrifice1~3 / freebusiness /
+        // freemooncake / task_number / flop* / elitetimes / generaltasktimes / freeheaven，新版 member_activity 尚无这些字段）
         // 依赖未移植：lottery_model->update_day、logined_model->update_day 连续登录计数
         // 依赖未移植：member.dateline / version / appversion、insert_member_log 每日日志
 
