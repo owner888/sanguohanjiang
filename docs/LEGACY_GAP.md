@@ -1,9 +1,9 @@
 # 旧版接口缺口清单
 
-对比基线：前端 `public/static/js` 中写死的 `c`/`m` 调用 vs 新版 `src/Handler` 的 `public static` 方法 vs 旧版 CodeIgniter `wwwroot/s1`、`wwwroot/uc` 控制器。动态拼接的调用未覆盖。
+对比基线：前端 `public/static/js` 中写死的 `c`/`m` 调用（含单行对象、多行对象、`?c=…&m=…` URL、`x.c = …; x.m = …` 赋值四种写法）vs 新版 `src/Handler` 的 `public static` 方法 vs 旧版 CodeIgniter `wwwroot/{s1,uc,battle,war}/application/controllers/` 下全部控制器（含 `newequip/`、`lc/` 等子目录）。完全动态拼接的调用未覆盖。
 
-- 前端调用：653；已实现：328；缺失：325（旧版有 315，旧版也无 10）
-- 「旧版位置」为相对旧服务端 `HJServer/wwwroot/` 的路径；「—」表示旧版 s1/uc 中没有，需按前端字段反推（部分可能在 `battle`/`war` 服）。
+- 前端调用：665；已实现：330；缺失：335（旧版有 329，旧版也无 6）
+- 「旧版位置」为相对旧服务端 `HJServer/wwwroot/` 的路径；「—」表示四个旧服务里都没有对应方法（多为渠道 SDK 登录），需按前端字段反推。
 - 标记 🆕 的控制器在新版中整个 Handler 都不存在。
 
 ## 缺失接口（按控制器，缺口多的在前）
@@ -20,14 +20,14 @@
 | `c=god&m=get_reward_pre` | `s1/application/controllers/god.php:968` | `static/js/view/championsrewardpop.js:48` |
 | `c=god&m=get_support` | `s1/application/controllers/god.php:367` | `static/js/view/championsworld.js:907` |
 | `c=god&m=index` | `s1/application/controllers/god.php:32` | `static/js/view/championsworld.js:128`<br>`static/js/view/championsworld.js:82` |
-| `c=god&m=loading` | `s1/application/controllers/god.php:1088` | `static/js/view/loginworld.js:733` |
+| `c=god&m=loading` | `s1/application/controllers/god.php:1088` | `static/js/view/loginworld.js:736` |
 | `c=god&m=palace` | `s1/application/controllers/god.php:892` | `static/js/view/palaceheroworld.js:36` |
 | `c=god&m=palace_report` | `s1/application/controllers/god.php:926` | `static/js/view/palaceheroworld.js:267` |
-| `c=god&m=share_report` | `s1/application/controllers/god.php:818` | `static/js/view/miscpop.js:5515` |
+| `c=god&m=share_report` | `s1/application/controllers/god.php:818` | `static/js/view/miscpop.js:5516` |
 | `c=god&m=support` | `s1/application/controllers/god.php:341` | `static/js/view/championsworld.js:1103` |
 | `c=god&m=sync_battle_info` | `s1/application/controllers/god.php:297` | `static/js/view/championsworld.js:1051` |
 
-### beauty（11）
+### beauty（12）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
@@ -42,6 +42,7 @@
 | `c=beauty&m=loot_action` | `s1/application/controllers/beauty.php:1671` | `static/js/view/beautypop.js:2307` |
 | `c=beauty&m=loot_index` | `s1/application/controllers/beauty.php:1269` | `static/js/view/beautypop.js:1989` |
 | `c=beauty&m=loot_reflush` | `s1/application/controllers/beauty.php:1564` | `static/js/view/beautypop.js:2209` |
+| `c=beauty&m=send_to_chat` | `s1/application/controllers/beauty.php:2079` | `static/js/view/miscpop.js:7069` |
 
 ### soul（11）
 
@@ -85,11 +86,11 @@
 | `c=war&m=get_reward` | `s1/application/controllers/war.php:618` | `static/js/view/warworld.js:862` |
 | `c=war&m=get_reward_list` | `s1/application/controllers/war.php:469` | `static/js/view/warworld.js:813` |
 | `c=war&m=get_support` | `s1/application/controllers/war.php:356` | `static/js/view/warworld.js:1036` |
-| `c=war&m=share_report` | `s1/application/controllers/war.php:803` | `static/js/view/miscpop.js:5624` |
+| `c=war&m=share_report` | `s1/application/controllers/war.php:803` | `static/js/view/miscpop.js:5625` |
 | `c=war&m=support` | `s1/application/controllers/war.php:328` | `static/js/view/warworld.js:1231` |
 | `c=war&m=sync_battle_info` | `s1/application/controllers/war.php:282` | `static/js/view/warworld.js:1179` |
 
-### worldarena（9）
+### worldarena（10）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
@@ -102,6 +103,7 @@
 | `c=worldarena&m=get_report_list` | `s1/application/controllers/worldarena.php:1411` | `static/js/view/worldarenapop.js:390` |
 | `c=worldarena&m=get_server_reward` | `s1/application/controllers/worldarena.php:1734` | `static/js/core/player.js:799` |
 | `c=worldarena&m=pk` | `s1/application/controllers/worldarena.php:1151` | `static/js/view/worldarenapop.js:726` |
+| `c=worldarena&m=send_to_chat` | `s1/application/controllers/worldarena.php:1646` | `static/js/view/miscpop.js:4812` |
 
 ### act_moon 🆕（8）
 
@@ -115,6 +117,19 @@
 | `c=act_moon&m=get_reward` | `s1/application/controllers/act_moon.php:636` | `static/js/view/midautumnpop.js:836` |
 | `c=act_moon&m=give_moon` | `s1/application/controllers/act_moon.php:238` | `static/js/view/midautumnpop.js:659` |
 | `c=act_moon&m=index` | `s1/application/controllers/act_moon.php:91` | `static/js/view/midautumnpop.js:48` |
+
+### heaven（8）
+
+| 接口 | 旧版位置 | 前端调用 |
+|---|---|---|
+| `c=heaven&m=buy` | `s1/application/controllers/heaven.php:1005` | `static/js/view/heavenworld.js:504` |
+| `c=heaven&m=get_mopup_price` | `s1/application/controllers/heaven.php:233` | `static/js/view/heavenworld.js:555` |
+| `c=heaven&m=get_price` | `s1/application/controllers/heaven.php:1441` | `static/js/view/heavenworld.js:464` |
+| `c=heaven&m=get_report_info` | `s1/application/controllers/heaven.php:965` | `static/js/view/miscpop.js:2600` |
+| `c=heaven&m=get_report_list` | `s1/application/controllers/heaven.php:940` | `static/js/view/heavenworld.js:362` |
+| `c=heaven&m=get_reward` | `s1/application/controllers/heaven.php:1215` | `static/js/view/miscpop.js:2906` |
+| `c=heaven&m=reward_info` | `s1/application/controllers/heaven.php:1065` | `static/js/view/miscpop.js:2918` |
+| `c=heaven&m=send_to_chat` | `s1/application/controllers/heaven.php:1390` | `static/js/view/miscpop.js:1598` |
 
 ### newyearboss 🆕（8）
 
@@ -164,18 +179,6 @@
 | `c=gem&m=get_gem_info` | `s1/application/controllers/gem.php:680` | `static/js/view/gemworld.js:1855`<br>`static/js/view/gemworld.js:476` |
 | `c=gem&m=level_up` | `s1/application/controllers/gem.php:452` | `static/js/view/gemworld.js:1930`<br>`static/js/view/gemworld.js:550` |
 | `c=gem&m=mergegem_index` | `s1/application/controllers/gem.php:752` | `static/js/view/gemworld.js:277` |
-
-### heaven（7）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=heaven&m=buy` | `s1/application/controllers/heaven.php:1005` | `static/js/view/heavenworld.js:504` |
-| `c=heaven&m=get_mopup_price` | `s1/application/controllers/heaven.php:233` | `static/js/view/heavenworld.js:555` |
-| `c=heaven&m=get_price` | `s1/application/controllers/heaven.php:1441` | `static/js/view/heavenworld.js:464` |
-| `c=heaven&m=get_report_info` | `s1/application/controllers/heaven.php:965` | `static/js/view/miscpop.js:2600` |
-| `c=heaven&m=get_report_list` | `s1/application/controllers/heaven.php:940` | `static/js/view/heavenworld.js:362` |
-| `c=heaven&m=get_reward` | `s1/application/controllers/heaven.php:1215` | `static/js/view/miscpop.js:2906` |
-| `c=heaven&m=reward_info` | `s1/application/controllers/heaven.php:1065` | `static/js/view/miscpop.js:2918` |
 
 ### information（7）
 
@@ -228,11 +231,22 @@
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
 | `c=login&m=binding_91` | `s1/application/controllers/login.php:423` | `static/js/view/binding91pop.js:140` |
-| `c=login&m=user91` | `s1/application/controllers/login.php:58` | `static/js/view/loginworld.js:505` |
-| `c=login&m=userdj` | `s1/application/controllers/login.php:122` | `static/js/view/loginworld.js:529` |
-| `c=login&m=userdjn` | `s1/application/controllers/login.php:136` | `static/js/view/loginworld.js:541` |
-| `c=login&m=userkuaiyong` | `s1/application/controllers/login.php:110` | `static/js/view/loginworld.js:566` |
-| `c=login&m=userpp` | `s1/application/controllers/login.php:71` | `static/js/view/loginworld.js:517` |
+| `c=login&m=user91` | `s1/application/controllers/login.php:58` | `static/js/view/loginworld.js:507` |
+| `c=login&m=userdj` | `s1/application/controllers/login.php:122` | `static/js/view/loginworld.js:531` |
+| `c=login&m=userdjn` | `s1/application/controllers/login.php:136` | `static/js/view/loginworld.js:543` |
+| `c=login&m=userkuaiyong` | `s1/application/controllers/login.php:110` | `static/js/view/loginworld.js:568` |
+| `c=login&m=userpp` | `s1/application/controllers/login.php:71` | `static/js/view/loginworld.js:519` |
+
+### map（6）
+
+| 接口 | 旧版位置 | 前端调用 |
+|---|---|---|
+| `c=map&m=clear_cd` | `s1/application/controllers/map.php:1116` | `static/js/view/cd.js:50`<br>`static/js/view/cd.js:86` |
+| `c=map&m=get_mission_reward` | `s1/application/controllers/map.php:1369` | `static/js/view/rushpop.js:130` |
+| `c=map&m=get_reward_list` | `s1/application/controllers/map.php:1325` | `static/js/view/rushpop.js:33` |
+| `c=map&m=report` | `s1/application/controllers/map.php:1254` | `static/js/view/miscpop.js:613` |
+| `c=map&m=report_detail` | `s1/application/controllers/map.php:1296` | `static/js/view/miscpop.js:2377` |
+| `c=map&m=send_to_chat` | `s1/application/controllers/map.php:1455` | `static/js/view/miscpop.js:1040` |
 
 ### pass_general（6）
 
@@ -249,33 +263,44 @@
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=pay&m=create_91_order` | `s1/application/controllers/pay.php:1241` | `static/js/view/miscpop.js:5080` |
-| `c=pay&m=create_kuaiyong_order` | `s1/application/controllers/pay.php:1746` | `static/js/view/miscpop.js:5152` |
-| `c=pay&m=create_pp_order` | `s1/application/controllers/pay.php:1388` | `static/js/view/miscpop.js:5116` |
-| `c=pay&m=get_pay_info` | `s1/application/controllers/pay.php:512` | `static/js/view/miscpop.js:5041` |
+| `c=pay&m=create_91_order` | `s1/application/controllers/pay.php:1241` | `static/js/view/miscpop.js:5081` |
+| `c=pay&m=create_kuaiyong_order` | `s1/application/controllers/pay.php:1746` | `static/js/view/miscpop.js:5153` |
+| `c=pay&m=create_pp_order` | `s1/application/controllers/pay.php:1388` | `static/js/view/miscpop.js:5117` |
+| `c=pay&m=get_pay_info` | `s1/application/controllers/pay.php:512` | `static/js/view/miscpop.js:5042` |
 | `c=pay&m=get_product_list` | `s1/application/controllers/pay.php:470` | `static/js/view/iospaypop.js:196`<br>`static/js/view/iospaypop.js:265`<br>`static/js/view/iospaypop.js:330`<br>…共 10 处 |
-| `c=pay&m=szf_order` | `s1/application/controllers/pay.php:835` | `static/js/view/miscpop.js:5334` |
+| `c=pay&m=szf_order` | `s1/application/controllers/pay.php:835` | `static/js/view/miscpop.js:5335` |
+
+### sanctum（6）
+
+| 接口 | 旧版位置 | 前端调用 |
+|---|---|---|
+| `c=sanctum&m=buy_times` | `s1/application/controllers/sanctum.php:648` | `static/js/view/sanctumworld.js:476` |
+| `c=sanctum&m=get_mission_info` | `s1/application/controllers/sanctum.php:176` | `static/js/view/sanctumworld.js:393` |
+| `c=sanctum&m=get_mission_report_list` | `s1/application/controllers/sanctum.php:702` | `static/js/view/sanctumworld.js:225` |
+| `c=sanctum&m=get_report_info` | `s1/application/controllers/sanctum.php:740` | `static/js/view/miscpop.js:3111`<br>`static/js/view/miscpop.js:5683` |
+| `c=sanctum&m=select_map` | `s1/application/controllers/sanctum.php:72` | `static/js/view/sanctumworld.js:524`<br>`static/js/view/sanctumworld.js:531` |
+| `c=sanctum&m=send_to_chat` | `s1/application/controllers/sanctum.php:779` | `static/js/view/miscpop.js:5821` |
 
 ### siege（6）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
 | `c=siege&m=battle_prepare` | `s1/application/controllers/siege.php:581` | `static/js/view/countrybattleworld.js:235`<br>`static/js/view/countrybattleworld.js:268` |
-| `c=siege&m=capital_info` | `s1/application/controllers/siege.php:99` | `static/js/view/miscpop.js:4133` |
+| `c=siege&m=capital_info` | `s1/application/controllers/siege.php:99` | `static/js/view/miscpop.js:4134` |
 | `c=siege&m=get_report` | `s1/application/controllers/siege.php:1545` | `static/js/view/miscpop.js:3132` |
 | `c=siege&m=join_battle` | `s1/application/controllers/siege.php:788` | `static/js/view/countrybattleworld.js:360` |
-| `c=siege&m=occupy` | `s1/application/controllers/siege.php:216` | `static/js/view/miscpop.js:4067`<br>`static/js/view/miscpop.js:4075` |
+| `c=siege&m=occupy` | `s1/application/controllers/siege.php:216` | `static/js/view/miscpop.js:4068`<br>`static/js/view/miscpop.js:4076` |
 | `c=siege&m=siege_notice` | `s1/application/controllers/siege.php:1596` | `static/js/view/countrywarnoticepop.js:48` |
 
 ### act_sevenstar 🆕（5）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=act_sevenstar&m=action_light` | — | `static/js/view/sevenstarpop.js:464`<br>`static/js/view/sevenstarpop.js:472` |
-| `c=act_sevenstar&m=call_godgeneral` | — | `static/js/view/sevenstarpop.js:309` |
-| `c=act_sevenstar&m=get_rank_list` | — | `static/js/view/sevenstarpop.js:335` |
-| `c=act_sevenstar&m=get_rank_reward` | — | `static/js/view/sevenstarpop.js:498` |
-| `c=act_sevenstar&m=index` | — | `static/js/view/sevenstarpop.js:50` |
+| `c=act_sevenstar&m=action_light` | `s1/application/controllers/lc/act_sevenstar.php:414` | `static/js/view/sevenstarpop.js:464`<br>`static/js/view/sevenstarpop.js:472` |
+| `c=act_sevenstar&m=call_godgeneral` | `s1/application/controllers/lc/act_sevenstar.php:326` | `static/js/view/sevenstarpop.js:309` |
+| `c=act_sevenstar&m=get_rank_list` | `s1/application/controllers/lc/act_sevenstar.php:223` | `static/js/view/sevenstarpop.js:335` |
+| `c=act_sevenstar&m=get_rank_reward` | `s1/application/controllers/lc/act_sevenstar.php:647` | `static/js/view/sevenstarpop.js:498` |
+| `c=act_sevenstar&m=index` | `s1/application/controllers/lc/act_sevenstar.php:78` | `static/js/view/sevenstarpop.js:50` |
 
 ### advanced（5）
 
@@ -291,7 +316,7 @@
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=equip_forge&m=get_equip_attr` | `s1/application/controllers/newequip/equip_forge.php:1725` | `static/js/view/miscpop.js:6858` |
+| `c=equip_forge&m=get_equip_attr` | `s1/application/controllers/newequip/equip_forge.php:1725` | `static/js/view/miscpop.js:6860` |
 | `c=equip_forge&m=get_fabrication_info` | `s1/application/controllers/newequip/equip_forge.php:264` | `static/js/view/forgepop.js:686` |
 | `c=equip_forge&m=get_suit_attr` | `s1/application/controllers/newequip/equip_forge.php:1680` | `static/js/view/forgepop.js:965` |
 | `c=equip_forge&m=resolve_index` | `s1/application/controllers/newequip/equip_forge.php:1074` | `static/js/view/resolvepop.js:38` |
@@ -306,16 +331,6 @@
 | `c=gmmail&m=grade` | `s1/application/controllers/gmmail.php:149` | `static/js/view/mailboxpop.js:374` |
 | `c=gmmail&m=index` | `s1/application/controllers/gmmail.php:17` | `static/js/view/mailboxpop.js:887` |
 | `c=gmmail&m=send_message` | `s1/application/controllers/gmmail.php:103` | `static/js/view/mailboxpop.js:1013` |
-
-### map（5）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=map&m=clear_cd` | `s1/application/controllers/map.php:1116` | `static/js/view/cd.js:50`<br>`static/js/view/cd.js:86` |
-| `c=map&m=get_mission_reward` | `s1/application/controllers/map.php:1369` | `static/js/view/rushpop.js:130` |
-| `c=map&m=get_reward_list` | `s1/application/controllers/map.php:1325` | `static/js/view/rushpop.js:33` |
-| `c=map&m=report` | `s1/application/controllers/map.php:1254` | `static/js/view/miscpop.js:613` |
-| `c=map&m=report_detail` | `s1/application/controllers/map.php:1296` | `static/js/view/miscpop.js:2377` |
 
 ### message（5）
 
@@ -336,16 +351,6 @@
 | `c=refine&m=item_index` | `s1/application/controllers/refine.php:135` | `static/js/view/equiprefinepop.js:574`<br>`static/js/view/refineinheritpop.js:141` |
 | `c=refine&m=item_selected` | `s1/application/controllers/refine.php:252` | `static/js/view/equiprefinepop.js:663` |
 | `c=refine&m=master_refresh` | `s1/application/controllers/refine.php:392` | `static/js/view/equiprefinepop.js:822` |
-
-### sanctum（5）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=sanctum&m=buy_times` | `s1/application/controllers/sanctum.php:648` | `static/js/view/sanctumworld.js:476` |
-| `c=sanctum&m=get_mission_info` | `s1/application/controllers/sanctum.php:176` | `static/js/view/sanctumworld.js:393` |
-| `c=sanctum&m=get_mission_report_list` | `s1/application/controllers/sanctum.php:702` | `static/js/view/sanctumworld.js:225` |
-| `c=sanctum&m=get_report_info` | `s1/application/controllers/sanctum.php:740` | `static/js/view/miscpop.js:3111`<br>`static/js/view/miscpop.js:5682` |
-| `c=sanctum&m=select_map` | `s1/application/controllers/sanctum.php:72` | `static/js/view/sanctumworld.js:524`<br>`static/js/view/sanctumworld.js:531` |
 
 ### banquet（4）
 
@@ -374,6 +379,15 @@
 | `c=epic&m=refresh` | `s1/application/controllers/epic.php:172` | `static/js/view/epicpop.js:545` |
 | `c=epic&m=select_epic` | `s1/application/controllers/epic.php:109` | `static/js/view/epicpop.js:429` |
 
+### generaltask（4）
+
+| 接口 | 旧版位置 | 前端调用 |
+|---|---|---|
+| `c=generaltask&m=buy_number` | `s1/application/controllers/generaltask.php:395` | `static/js/view/generaltaskworld.js:541`<br>`static/js/view/generaltaskworld.js:579` |
+| `c=generaltask&m=get_list` | `s1/application/controllers/generaltask.php:79` | `static/js/view/generaltaskworld.js:420` |
+| `c=generaltask&m=get_report_list` | `s1/application/controllers/generaltask.php:350` | `static/js/view/generaltaskworld.js:375` |
+| `c=generaltask&m=send_to_chat` | — | `static/js/view/miscpop.js:4628` |
+
 ### herothrone（4）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -382,6 +396,15 @@
 | `c=herothrone&m=end_battle` | `s1/application/controllers/herothrone.php:905` | `static/js/view/herothroneworld.js:370` |
 | `c=herothrone&m=go_back` | `s1/application/controllers/herothrone.php:118` | `static/js/view/herothroneworld.js:636` |
 | `c=herothrone&m=start` | `s1/application/controllers/herothrone.php:185` | `static/js/view/herothroneworld.js:482` |
+
+### island（4）
+
+| 接口 | 旧版位置 | 前端调用 |
+|---|---|---|
+| `c=island&m=get_mission` | `s1/application/controllers/island.php:134` | `static/js/view/miscpop.js:1800` |
+| `c=island&m=get_report_info` | `s1/application/controllers/island.php:435` | `static/js/view/miscpop.js:2416`<br>`static/js/view/miscpop.js:3118` |
+| `c=island&m=get_report_list` | `s1/application/controllers/island.php:408` | `static/js/view/miscpop.js:1781` |
+| `c=island&m=send_to_chat` | `s1/application/controllers/island.php:473` | `static/js/view/miscpop.js:1924` |
 
 ### act_enrichment 🆕（3）
 
@@ -415,21 +438,13 @@
 | `c=act_thirty&m=action_reward` | `s1/application/controllers/act_thirty.php:225` | `static/js/view/chargegiftpop.js:125` |
 | `c=act_thirty&m=index` | `s1/application/controllers/act_thirty.php:86` | `static/js/view/chargegiftpop.js:35` |
 
-### generaltask（3）
+### compete（3）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=generaltask&m=buy_number` | `s1/application/controllers/generaltask.php:395` | `static/js/view/generaltaskworld.js:541`<br>`static/js/view/generaltaskworld.js:579` |
-| `c=generaltask&m=get_list` | `s1/application/controllers/generaltask.php:79` | `static/js/view/generaltaskworld.js:420` |
-| `c=generaltask&m=get_report_list` | `s1/application/controllers/generaltask.php:350` | `static/js/view/generaltaskworld.js:375` |
-
-### island（3）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=island&m=get_mission` | `s1/application/controllers/island.php:134` | `static/js/view/miscpop.js:1800` |
-| `c=island&m=get_report_info` | `s1/application/controllers/island.php:435` | `static/js/view/miscpop.js:2416`<br>`static/js/view/miscpop.js:3118` |
-| `c=island&m=get_report_list` | `s1/application/controllers/island.php:408` | `static/js/view/miscpop.js:1781` |
+| `c=compete&m=buy_pk_num` | `s1/application/controllers/compete.php:376` | `static/js/view/zhulupop.js:356`<br>`static/js/view/zhulupop.js:385` |
+| `c=compete&m=get_reward_list` | `s1/application/controllers/compete.php:294` | `static/js/view/zhulupop.js:291` |
+| `c=compete&m=send_to_chat` | `s1/application/controllers/compete.php:657` | `static/js/view/miscpop.js:1687` |
 
 ### mount（3）
 
@@ -520,12 +535,12 @@
 | `c=christmasgift&m=get_reward` | `s1/application/controllers/christmasgift.php:230` | `static/js/view/christmasgiftpop.js:359` |
 | `c=christmasgift&m=index` | `s1/application/controllers/christmasgift.php:41` | `static/js/view/christmasgiftpop.js:52`<br>`static/js/view/christmasgiftpop.js:86` |
 
-### compete（2）
+### countrymine（2）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=compete&m=buy_pk_num` | `s1/application/controllers/compete.php:376` | `static/js/view/zhulupop.js:356`<br>`static/js/view/zhulupop.js:385` |
-| `c=compete&m=get_reward_list` | `s1/application/controllers/compete.php:294` | `static/js/view/zhulupop.js:291` |
+| `c=countrymine&m=get_countrymine_info` | `s1/application/controllers/countrymine.php:164` | `static/js/view/countrymineworld.js:700` |
+| `c=countrymine&m=send_to_chat` | `s1/application/controllers/countrymine.php:784` | `static/js/view/miscpop.js:1215` |
 
 ### countryshop（2）
 
@@ -574,7 +589,7 @@
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
 | `c=ios&m=buylist` | `s1/application/controllers/ios.php:212` | `static/js/view/iospaypop.js:98`<br>`static/js/view/rebatepop.js:95` |
-| `c=ios&m=prepay` | `s1/application/controllers/ios.php:246` | `static/js/view/miscpop.js:4285` |
+| `c=ios&m=prepay` | `s1/application/controllers/ios.php:246` | `static/js/view/miscpop.js:4286` |
 
 ### limitedshop 🆕（2）
 
@@ -636,7 +651,7 @@
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=report&m=save` | `s1/application/controllers/report.php:20` | `static/js/view/miscpop.js:6287` |
+| `c=report&m=save` | `s1/application/controllers/report.php:20` | `static/js/view/miscpop.js:6289` |
 | `c=report&m=send` | — | `static/js/core/base.js:2686` |
 
 ### rolegift 🆕（2）
@@ -678,13 +693,7 @@
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=clickreward&m=index` | `s1/application/controllers/clickreward.php:25` | `static/js/view/miscpop.js:6121` |
-
-### countrymine（1）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=countrymine&m=get_countrymine_info` | `s1/application/controllers/countrymine.php:164` | `static/js/view/countrymineworld.js:700` |
+| `c=clickreward&m=index` | `s1/application/controllers/clickreward.php:25` | `static/js/view/miscpop.js:6122` |
 
 ### cultivate（1）
 
@@ -710,6 +719,12 @@
 |---|---|---|
 | `c=iostrack&m=trackall` | `uc/application/controllers/iostrack.php:293` | `static/js/core/gamestart.js:75` |
 
+### mine（1）
+
+| 接口 | 旧版位置 | 前端调用 |
+|---|---|---|
+| `c=mine&m=send_to_chat` | `s1/application/controllers/mine.php:514` | `static/js/view/miscpop.js:1136` |
+
 ### password 🆕（1）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -720,25 +735,25 @@
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=paydj&m=create_djpay_order` | `s1/application/controllers/paydj.php:152` | `static/js/view/miscpop.js:5175` |
+| `c=paydj&m=create_djpay_order` | `s1/application/controllers/paydj.php:152` | `static/js/view/miscpop.js:5176` |
 
 ### paydjn 🆕（1）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=paydjn&m=create_djpay_order` | `s1/application/controllers/paydjn.php:152` | `static/js/view/miscpop.js:5202` |
+| `c=paydjn&m=create_djpay_order` | `s1/application/controllers/paydjn.php:152` | `static/js/view/miscpop.js:5203` |
 
 ### register（1）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=register&m=binding` | `uc/application/controllers/register.php:185` | `static/js/view/miscpop.js:3666`<br>`static/js/view/regrewardpop.js:122` |
+| `c=register&m=binding` | `uc/application/controllers/register.php:185` | `static/js/view/miscpop.js:3667`<br>`static/js/view/regrewardpop.js:123` |
 
 ### regreward 🆕（1）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=regreward&m=get_reward` | `s1/application/controllers/regreward.php:46` | `static/js/view/regrewardpop.js:186` |
+| `c=regreward&m=get_reward` | `s1/application/controllers/regreward.php:46` | `static/js/view/regrewardpop.js:187` |
 
 ### talent（1）
 
@@ -750,25 +765,25 @@
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=user91&m=login_ios` | — | `static/js/view/loginworld.js:851` |
+| `c=user91&m=login_ios` | — | `static/js/view/loginworld.js:855` |
 
 ### userdj 🆕（1）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=userdj&m=login_ios` | — | `static/js/view/loginworld.js:879` |
+| `c=userdj&m=login_ios` | — | `static/js/view/loginworld.js:883` |
 
 ### userdjn 🆕（1）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=userdjn&m=login` | `uc/application/controllers/userdjn.php:17` | `static/js/view/loginworld.js:901` |
+| `c=userdjn&m=login` | `uc/application/controllers/userdjn.php:17` | `static/js/view/loginworld.js:905` |
 
 ### userkuaiyong 🆕（1）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=userkuaiyong&m=login` | — | `static/js/view/loginworld.js:936` |
+| `c=userkuaiyong&m=login` | — | `static/js/view/loginworld.js:940` |
 
 ### war_college（1）
 
@@ -780,7 +795,7 @@
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=weibocallback&m=index` | — | `static/js/view/miscpop.js:6258` |
+| `c=weibocallback&m=index` | — | `static/js/view/miscpop.js:6260` |
 
 ### workshop（1）
 
