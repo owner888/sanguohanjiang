@@ -41,7 +41,7 @@ final class LoginHandler
         return [
             'status' => 1,
             'token' => $token,
-            'vip' => (int)($member['vip'] ?? 1),
+            'vip' => (int)($member['vip'] ?? 0),
             'uid' => $uid,
             'temptoken' => $token,
             'message' => '登录成功',
@@ -78,7 +78,7 @@ final class LoginHandler
         return [
             'status' => 1,
             'token' => $token,
-            'vip' => (int)($member['vip'] ?? 1),
+            'vip' => (int)($member['vip'] ?? 0),
             'uid' => $uid,
             'temptoken' => $token,
             'message' => '登录成功',

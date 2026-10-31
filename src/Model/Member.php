@@ -302,7 +302,7 @@ class Member extends Model
     private static function counterColumn(string $column): string
     {
         return match ($column) {
-            'jade', 'gem', 'gemuse', 'refinestone', 'colorstone', 'bloodstone', 'souluse', 'soulpack' => $column,
+            'jade', 'gem', 'gemuse', 'refinestone', 'colorstone', 'bloodstone', 'soul', 'souluse', 'soulpack', 'reputation' => $column,
             default => throw new \InvalidArgumentException("member 计数列不支持：{$column}"),
         };
     }

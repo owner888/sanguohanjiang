@@ -25,6 +25,7 @@ use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\General;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberIntegral;
 use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\MemberStone;
 use Hanjiang\Model\OwnGem;
@@ -89,19 +90,6 @@ final class ArenaHandler
     private const string LANG_EXCHNUM_ERROR = '兑换次数不足';
     private const string LANG_EXCHINT_ERROR = '兑换积分不足';
     private const string LANG_GENERAL_ERROR = '武将已招募';
-
-    /** 积分表默认字段（旧版 member_model->get_memint_info 首次插入） */
-    private const array MEMINT_DEFAULT = [
-        'act_kemari_int' => 0,
-        'act_arena_int' => 0,
-        'beauty_rose' => 0,
-        'beauty_diamond' => 0,
-        'general' => 0,
-        'candy' => 0,
-        'hammer' => 0,
-        'medal' => 0,
-        'god_soul' => 0,
-    ];
 
     /** 装备精华奖励类型 → 精华模板 id（旧版 get_add_reward case 17 ~ 25） */
     private const array ESSENCE_ID = [17 => 1, 18 => 7, 19 => 13, 20 => 2, 21 => 8, 22 => 14, 23 => 3, 24 => 9, 25 => 15];
@@ -1331,36 +1319,23 @@ final class ArenaHandler
     }
 
     /**
-     * 玩家积分信息（移植 member_model->get_memint_info：没有时插入默认行）
+     * 玩家积分信息（移植 member_model->get_memint_info：没有时插入默认行；Model\MemberIntegral）
      *
      * @return array<string, mixed>
      */
     private static function getMemintInfo(int $uid): array
     {
-        $row = DB::table('member_integral')->where('uid', $uid)->whereNull('deleted_at')->first();
-        if ($row !== null) {
-            return $row;
-        }
-        $data = ['uid' => $uid] + self::MEMINT_DEFAULT;
-        DB::table('member_integral')->insert($data);
-        return $data;
+        return MemberIntegral::get($uid);
     }
 
     /**
-     * 积分变化（移植 member_model->change_memint：type 1 增加、2 消耗，写入成功才记日志）
+     * 积分变化（移植 member_model->change_memint：type 1 增加、2 消耗，写入成功才记日志；Model\MemberIntegral）
      *
      * @return array<string, int> 变化后的字段；没有写入时为空
      */
     private static function changeMemint(int $uid, int $num, string $arg, int $type, string $method, int $now): array
     {
-        $info = self::getMemintInfo($uid);
-        $data = [$arg => $type === 1 ? (int)$info[$arg] + $num : (int)$info[$arg] - $num];
-        $affected = DB::table('member_integral')->where('uid', $uid)->whereNull('deleted_at')->update($data);
-        if ($affected <= 0) {
-            return [];
-        }
-        self::addMemintLog($uid, $type, $num, $data[$arg], $arg, $method, $now);
-        return $data;
+        return MemberIntegral::change($uid, $num, $arg, $type, self::LOG_CLASS, $method, $now);
     }
 
     /**

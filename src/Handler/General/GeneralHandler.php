@@ -6,12 +6,18 @@ namespace Hanjiang\Handler\General;
 
 use Hanjiang\Battle\LegacyStats;
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\MasterData\RefineAchieve;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
+use Hanjiang\Model\Advanced;
 use Hanjiang\Model\General;
+use Hanjiang\Model\GeneralBook;
+use Hanjiang\Model\HeroTalent;
 use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnMount;
+use Hanjiang\Model\OwnSoul;
+use Hanjiang\Model\Beauty;
+use Hanjiang\Model\OwnStar;
+use Hanjiang\Model\Refine;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 
@@ -21,17 +27,34 @@ use OmniPHP\Database\DB;
  * 旧版 own_general.eid1~eid4 新版不存储，由 equipment.generalid + LegacyStats::itemSite 派生；
  * 出征名单为 general.goout（同旧版 own_general.goout，由 c=muster 的 go_battle / go_rest 维护）。
  *
- * 界面血量含兵符宝石（gem_model->get_gem_by_eid，OwnGem）与坐骑血量（_get_mount_info，主公 120 级起，OwnMount）。
+ * 界面血量含兵符宝石（gem_model->get_gem_by_eid，OwnGem）、坐骑血量（_get_mount_info，主公 120 级起，OwnMount）、
+ * 主公天赋生命（_hero_talent_hp，主公 91 级起，HeroTalent）、美人（_get_beauty_info，主公 60 级起，Beauty::addition 的三围）、
+ * 主公星魄（_get_star_info，主公 80 级起，OwnStar 命格加成的三围与血量）、
+ * 将魂（_get_soul_info，转生过或 50 级以上的将领，OwnSoul 的武力 / 智力 / 生命将魂）、
+ * 名将进阶（_get_advanced_info，主公 100 级起，Advanced）、名将成就（_get_achievement_info，主公 81 级起，GeneralBook 的名将谱加成）。
  *
  * 依赖未移植（界面血量 / 三围加成，均按 0 计入 LegacyStats::infoHp 与 wuliup/zhiliup/tiliup）：
- * 主公天赋 _hero_talent_hp（主公 91 级以上）、名将进阶 _get_advanced_info（100 级）、名将成就 _get_achievement_info（81 级）、美人 _get_beauty_info（60 级）、
- * 主公星魄 _get_star_info（80 级）、国家学院 _get_war_college_info（国家 30 级）、套装 _get_siut_info、
- * 将魂 _get_soul_info、神树活动 _get_sacredtree_info（index 的 tree 恒为 0）。
+ * 国家学院 _get_war_college_info（国家 30 级）、套装 _get_siut_info、神树活动 _get_sacredtree_info（index 的 tree 恒为 0）。
  */
 final class GeneralHandler
 {
     /** 坐骑加成开启的主公等级（旧版 _get_mount_info） */
     private const int MOUNT_OPEN_LEVEL = 120;
+
+    /** 美人加成开启的主公等级（旧版 _get_beauty_info） */
+    private const int BEAUTY_OPEN_LEVEL = 60;
+
+    /** 主公星魄加成开启的主公等级（旧版 _get_star_info） */
+    private const int STAR_OPEN_LEVEL = 80;
+
+    /** 主公天赋血量开启的主公等级（旧版 _hero_talent_hp） */
+    private const int HERO_TALENT_OPEN_LEVEL = 91;
+
+    /** 名将成就加成开启的主公等级（旧版 _get_achievement_info） */
+    private const int ACHIEVEMENT_OPEN_LEVEL = 81;
+
+    /** 名将进阶加成开启的主公等级（旧版 _get_advanced_info） */
+    private const int ADVANCED_OPEN_LEVEL = 100;
 
     /**
      * 旧版 get_info / _get_info 输出的将领字段（info_field），之后再追加 hp
@@ -298,10 +321,13 @@ final class GeneralHandler
      * 补齐技能、天赋、装备（含精炼 / 强化成就加成）、精炼成就与界面血量
      * （旧版 index / get_info / _get_info 共用的流程；三处的差别只在依赖未移植的加成上）
      *
+     * 名将进阶界面（advanced.php:get_general_info）的三围与血量是同一套加成（少了尚未移植的套装 _get_siut_info），
+     * 也用这里；以后移植套装时名将进阶界面不能计入套装。
+     *
      * @param array<string, mixed> $general 旧版 own_general 形状的行
      * @return array<string, mixed>|null 装备查询失败（旧版 general_refine_add 返回 -4）时为 null
      */
-    private static function enrich(int $uid, array $general): ?array
+    public static function enrich(int $uid, array $general): ?array
     {
         $baseHp = LegacyStats::baseHp((int)$general['level'], (int)$general['turn']);
 
@@ -311,7 +337,7 @@ final class GeneralHandler
         unset($talent['blood']);
         $general['talent'] = $talent;
 
-        $general = self::generalRefineAdd($uid, $general);
+        $general = Refine::generalRefineAdd($uid, $general);
         if ($general === null) {
             return null;
         }
@@ -326,15 +352,72 @@ final class GeneralHandler
             }
         }
 
+        $memberLevel = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('level') ?? 0);
+        // 主公天赋-值（_hero_talent_hp：主公 91 级起，生命天赋 type 5 的 power；不建档）
+        $heroTalentHp = $memberLevel >= self::HERO_TALENT_OPEN_LEVEL ? (HeroTalent::byType($uid, 5)['power'] ?? 0) : 0;
+        // 名将进阶-值（_get_advanced_info：主公 100 级起，进阶的三围加到 wuli / zhili / tili，血量加到 hp，
+        // 生命技能 skill4_value 加到天赋血量系数上；没有记录时按旧版 get_general_skill 建档；general.php:743）
+        $advancedBlood = 0.0;
+        $flatAdd = 0.0;
+        if ($memberLevel >= self::ADVANCED_OPEN_LEVEL) {
+            $advanced = Advanced::generalSkill((int)$general['id'], (int)$general['uid']);
+            $general['wuli'] = (int)$general['wuli'] + $advanced['wuli'];
+            $general['zhili'] = (int)$general['zhili'] + $advanced['zhili'];
+            $general['tili'] = (int)$general['tili'] + $advanced['tili'];
+            $flatAdd += $advanced['hp'];
+            $advancedBlood = (float)$advanced['skill4_value'];
+        }
+        // 坐骑-值
+        $flatAdd += self::mountHp($memberLevel, $uid, $general);
+        // 名将成就-值（_get_achievement_info：主公 81 级起，名将谱加成的三围加到 wuliup / zhiliup / tiliup，血量加到 hp；general.php:687）
+        if ($memberLevel >= self::ACHIEVEMENT_OPEN_LEVEL) {
+            $achievement = GeneralBook::ownAddition($uid);
+            if ($achievement !== []) {
+                $general['wuliup'] = (int)$general['wuliup'] + $achievement['wuli'];
+                $general['zhiliup'] = (int)$general['zhiliup'] + $achievement['zhili'];
+                $general['tiliup'] = (int)$general['tiliup'] + $achievement['tili'];
+                $flatAdd += $achievement['blood'];
+            }
+        }
+        // 美人-值（_get_beauty_info：主公 60 级起，美人加成的三围加到 wuliup / zhiliup / tiliup；general.php:706）
+        if ($memberLevel >= self::BEAUTY_OPEN_LEVEL) {
+            $beauty = Beauty::addition($uid, time());
+            $general['wuliup'] = (int)$general['wuliup'] + $beauty['wuli'];
+            $general['zhiliup'] = (int)$general['zhiliup'] + $beauty['zhili'];
+            $general['tiliup'] = (int)$general['tiliup'] + $beauty['tili'];
+        }
+        // 主公星魄-值（_get_star_info：主公 80 级起，命格加成的三围加到 wuliup / zhiliup / tiliup，血量加到 hp；没有记录时建一行全 0）
+        if ($memberLevel >= self::STAR_OPEN_LEVEL) {
+            $addition = OwnStar::addition($uid);
+            $general['wuliup'] = (int)$general['wuliup'] + $addition['wuli'];
+            $general['zhiliup'] = (int)$general['zhiliup'] + $addition['zhili'];
+            $general['tiliup'] = (int)$general['tiliup'] + $addition['tili'];
+            $flatAdd += $addition['blood'];
+        }
+        // 获取将魂加成（_get_soul_info：转生过或 50 级以上的将领，武力 / 智力将魂加到 wuliup / zhiliup，生命将魂按百分比乘到 hp 上）
+        $percentMultiplier = 1.0;
+        if ((int)$general['turn'] > 0 || (int)$general['level'] > 49) {
+            foreach (OwnSoul::equipList($uid, (int)$general['id'], [2, 3, 4]) as $soul) {
+                match ($soul['type']) {
+                    2 => $general['wuliup'] = (int)$general['wuliup'] + $soul['power'],
+                    3 => $general['zhiliup'] = (int)$general['zhiliup'] + $soul['power'],
+                    4 => $percentMultiplier *= 1 + $soul['power'] / 100,
+                    default => null,
+                };
+            }
+        }
+
         $general['hp'] = LegacyStats::infoHp(
             $baseHp,
             $eid4Powerup,
             $gemHp,
-            0,
+            (int)$heroTalentHp,
             (int)$general['tili'],
             (int)$general['tiliup'],
             $talentBlood,
-            flatAdd: self::mountHp($uid, $general),
+            advancedBlood: $advancedBlood,
+            flatAdd: $flatAdd,
+            percentMultiplier: $percentMultiplier,
         );
         return $general;
     }
@@ -344,9 +427,8 @@ final class GeneralHandler
      *
      * @param array<string, mixed> $general
      */
-    private static function mountHp(int $uid, array $general): float
+    private static function mountHp(int $level, int $uid, array $general): float
     {
-        $level = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('level') ?? 0);
         if ($level < self::MOUNT_OPEN_LEVEL) {
             return 0.0;
         }
@@ -367,111 +449,6 @@ final class GeneralHandler
             }
         }
         return $hp;
-    }
-
-    /**
-     * 装备精炼加成、强化成就加成、精炼成就（旧版 models/refine_model.php:general_refine_add）
-     *
-     * eid1~eid4 由装备 id 替换成装备对象（字段同旧版 item_refine_add），没有装备为 0；
-     * 4 件装备都有精炼等级时按最低等级的 refine_promote.type 设 achID，并按 refine_achieve 累加 wuliup / zhiliup。
-     *
-     * @param array<string, mixed> $general
-     * @return array<string, mixed>|null
-     */
-    private static function generalRefineAdd(int $uid, array $general): ?array
-    {
-        $general['achID'] = 0;
-        $general['achList'] = [];
-
-        $eidarr = [];
-        for ($i = 1; $i <= 4; $i++) {
-            if ((int)$general['eid' . $i] !== 0) {
-                $eidarr[] = (int)$general['eid' . $i];
-            }
-        }
-        if ($eidarr === []) {
-            return $general;
-        }
-
-        $rows = DB::table('equipment')->where('uid', $uid)->whereIn('id', $eidarr)->whereNull('deleted_at')->get();
-        if ($rows === []) {
-            return null;
-        }
-        $equipArr = [];
-        foreach ($rows as $item) {
-            $equipArr[(int)$item['id']] = self::refineEquipFields($item);
-        }
-
-        $harmarr = [];
-        for ($i = 1; $i <= 4; $i++) {
-            $id = (int)$general['eid' . $i];
-            if (isset($equipArr[$id])) {
-                $general['eid' . $i] = $equipArr[$id];
-                $harmarr[$id] = $equipArr[$id]['hammer'];
-            } else {
-                // 旧版此处 repair_equipment 把将领的 eid 清零；新版 eid 由 equipment 派生，不会出现
-                $general['eid' . $i] = 0;
-            }
-        }
-
-        // 精炼成就：4 件装备都有精炼等级
-        if (!in_array(0, $harmarr, true) && count($harmarr) >= 4) {
-            sort($harmarr);
-            $refine = LegacyStats::refinePromote((int)$harmarr[0]);
-            // 旧版 refine_promote 不存在时返回 -1，调用方未处理（输出空 info）；这里不加精炼成就
-            if ($refine !== null) {
-                $refineType = (int)$refine['type'];
-                $general['achID'] = $refineType;
-                $wuliup = 0;
-                $zhiliup = 0;
-                foreach (RefineAchieve::ROWS as $achadd) {
-                    if ($refineType >= (int)$achadd['id']) {
-                        $wuliup += (int)$achadd['add_type_val1'];
-                        $zhiliup += (int)$achadd['add_type_val2'];
-                    }
-                }
-                if ($refineType > 0) {
-                    $general['wuliup'] = (int)$general['wuliup'] + $wuliup;
-                    $general['zhiliup'] = (int)$general['zhiliup'] + $zhiliup;
-                }
-            }
-        }
-
-        return $general;
-    }
-
-    /**
-     * 将领身上装备的输出字段（旧版 models/refine_model.php:item_refine_add 的 equip_field）
-     *
-     * @param array<string, mixed> $item equipment 表行
-     * @return array<string, mixed>
-     */
-    private static function refineEquipFields(array $item): array
-    {
-        $display = LegacyStats::displayPowerup(
-            (int)$item['power'],
-            (int)$item['powerup'],
-            (int)$item['type'],
-            (int)$item['hammer'],
-            (string)$item['aid'],
-        );
-        return [
-            'id' => (int)$item['id'],
-            'equipid' => (int)$item['equipid'],
-            'name' => (string)$item['name'],
-            'type' => (int)$item['type'],
-            'quality' => (int)$item['quality'],
-            'needlevel' => (int)$item['needlevel'],
-            'power' => (int)$item['power'],
-            'powerup' => $display['powerup'],
-            'level' => (int)$item['level'],
-            'saleprice' => (int)$item['saleprice'],
-            'hammer' => (int)$item['hammer'],
-            'aid' => (string)$item['aid'],
-            'hammer_quality' => $display['hammer_quality'],
-            'number' => (int)$item['number'],
-            'newquality' => (int)$item['newquality'],
-        ];
     }
 
     /**

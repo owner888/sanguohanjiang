@@ -25,7 +25,7 @@ use OmniPHP\Http\Context;
  * 首充返利与天命转盘（移植旧版 controllers/first_recharge.php：index / get_reward / lottery / action）
  *
  * 玩家状态存 first_recharge_log（首充元宝、已领档位、是否已抽转盘）与 member_field.first_recharge（首充图标）；
- * 首充日志由充值流程写入（FirstRechargeLog::recordRecharge，依赖未移植：充值入口）。
+ * 首充日志由充值核心写入（Model\Pay::complete → Model\Vip::pay → FirstRechargeLog::recordRecharge）。
  * 首充紫装以上装备、天命转盘装备与 7 星以上武将发聊天室系统消息（get_message_str 33 / 34 / 35）与小喇叭。
  * 依赖未移植：酒馆获得日志 tavern_model->add_pub_log。
  */
@@ -73,10 +73,9 @@ final class FirstRechargeHandler
         $return = ['status' => 0, 'info' => []];
 
         $lockKey = self::REWARD_LOCK . $uid;
-        if (Redis::exists($lockKey)) {
+        if (!self::lock($lockKey)) {
             return ['status' => 6, 'info' => [], 'msg' => '操作不要太频繁'];
         }
-        Redis::set($lockKey, 1, 30);
 
         if ($id <= 0) {
             Redis::del($lockKey);
@@ -234,11 +233,10 @@ final class FirstRechargeHandler
         $return = ['status' => 0, 'info' => []];
 
         $lockKey = self::LOTTERY_LOCK . $uid;
-        if (Redis::exists($lockKey)) {
+        if (!self::lock($lockKey)) {
             $return['status'] = 2;
             return $return;
         }
-        Redis::set($lockKey, 1, 30);
 
         $maxInfo = self::maxInfo();
         $log = self::log($uid);
@@ -322,6 +320,15 @@ final class FirstRechargeHandler
 
         $return['status'] = 1;
         return $return;
+    }
+
+    /**
+     * 加锁（firstrecharge_model->get_lock / add_lock：30 秒；SET NX 原子加锁，多 Worker 并发只有一个拿到）
+     */
+    private static function lock(string $key): bool
+    {
+        $redis = Redis::instance();
+        return $redis !== null && (bool)$redis->set($key, '1', ['nx', 'ex' => 30]);
     }
 
     /**

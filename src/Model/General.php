@@ -7,6 +7,7 @@ namespace Hanjiang\Model;
 use Hanjiang\Battle\LegacyStats;
 use Hanjiang\MasterData\Book;
 use Hanjiang\MasterData\General as GeneralTemplate;
+use OmniPHP\Database\DB;
 use OmniPHP\Database\SoftDeletes;
 use OmniPHP\Model;
 
@@ -62,8 +63,9 @@ class General extends Model
      * - 模板字段（名称、形象、职业、三围、天赋、技能、星级）从 MasterData General 复制成实列；
      * - $type = 1 为 1 级，其他为 30 级（旧版同）；levelupexp 固定为 1 级所需经验（旧版同，即使 30 级）；
      * - 名将图鉴有该将时写入 addtype / addvalue；
-     * - 不出征（goout = 0），不在任何阵法上。
-     * 依赖未移植：获得武将气泡（member_field.ongeneral）、主公 80 级以上的名将成就加成重算、主线任务 19。
+     * - 不出征（goout = 0），不在任何阵法上；
+     * - 主公 80 级以上时重算名将谱加成（GeneralBook::refresh）。
+     * 依赖未移植：获得武将气泡（member_field.ongeneral）、主线任务 19。
      *
      * @return int|null 新武将 id；模板不存在（旧版 -1）或已拥有同模板武将（旧版 -3）时返回 null
      */
@@ -95,7 +97,15 @@ class General extends Model
             $data['addvalue'] = $book['addvalue'];
         }
 
-        return (int)static::query()->insert($data);
+        $id = (int)static::query()->insert($data);
+
+        // 主公 80 级以上：重算名将谱加成（get_own_achievement_list → get_addition → achievement_addition → 写 own_addition）
+        $heroLevel = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('level') ?? 0);
+        if ($heroLevel > 80) {
+            GeneralBook::refresh($uid);
+        }
+
+        return $id;
     }
 
     /**

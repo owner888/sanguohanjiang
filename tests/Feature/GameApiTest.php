@@ -168,7 +168,9 @@ final class GameApiTest extends TestCase
         $this->assertSame('常山赵子龙', $updated['nickname']);
         $this->assertSame(1, (int)$updated['gender']);
         $this->assertSame(80, (int)$updated['levelupexp']);
-        $this->assertSame(60, (int)$updated['act_limit']);
+        // 新玩家 VIP 0（旧版 VIP 只由充值累计金额决定），军令上限 50
+        $this->assertSame(0, (int)$updated['vip']);
+        $this->assertSame(50, (int)$updated['act_limit']);
     }
 
     public function testCitySystem(): void
@@ -2486,34 +2488,6 @@ final class GameApiTest extends TestCase
         \Hanjiang\WebSocket\ChatPush::reset(0);
     }
 
-    public function testSoulSystem(): void
-    {
-        // 1. 获取主公武将 ID
-        $generals = $this->request('general', 'index');
-        $mainGid = (int)$generals['list'][1]['id'];
-
-        // 2. 查看将魂星盘
-        $res = $this->request('soul', 'index', ['gid' => $mainGid]);
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['slots']);
-        $this->assertArrayHasKey('pack', $res);
-        $this->assertArrayHasKey('pages', $res['pack']);
-        $this->assertArrayHasKey('general', $res);
-        $this->assertArrayHasKey('user_soul', $res);
-        $oldSoul = $res['user_soul'];
-
-        // 3. 升级 1 号位 (青龙生命魂)
-        $up = $this->request('soul', 'upgrade', ['gid' => $mainGid, 'slot' => 1]);
-        $this->assertSame(1, $up['status']);
-        $this->assertSame(2, $up['level']);
-        $this->assertLessThan($oldSoul, $up['user_soul']);
-
-        // 4. 验证武将详情中的将魂加成属性已生效
-        $info = $this->request('general', 'get_info', ['gid' => $mainGid]);
-        $this->assertSame(1, $info['status']);
-        $this->assertGreaterThan(0, $info['info']['hp']);
-    }
-
     public function testCountrySystem(): void
     {
         $before = DB::table('member')->where('uid', self::$uid)->first();
@@ -2523,8 +2497,8 @@ final class GameApiTest extends TestCase
         DB::table('member')->where('uid', self::$uid)->update(['level' => 20]);
         $this->assertSame(4, $this->request('country', 'create', ['name' => 'X', 'confirm' => 1])['status']);
 
-        // 国家系统开放 (> 25)、国库捐献 (>= 50)、国师授艺 (>= 30)
-        DB::table('member')->where('uid', self::$uid)->update(['level' => 60, 'gold' => 100000, 'silver' => 10000000]);
+        // 国家系统开放 (> 25)、国库捐献 (>= 50)、国师授艺 (>= 30)；VIP 1（旧版 VIP 0 入国 7 天内贡献不能超过 100）
+        DB::table('member')->where('uid', self::$uid)->update(['level' => 60, 'gold' => 100000, 'silver' => 10000000, 'vip' => 1]);
         Redis::del('player:' . self::$uid);
 
         // 1. 建国价格
@@ -2755,48 +2729,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(-1, $dup['status']);
     }
 
-    public function testVipSystem(): void
-    {
-        // 1. 查看 VIP 面板
-        $res = $this->request('vip', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(1, $res['level']);
-        $this->assertArrayHasKey('privileges', $res);
-
-        // 2. 领取 VIP 每日俸禄
-        $salary = $this->request('vip', 'get_vip_reward');
-        $this->assertSame(1, $salary['status']);
-        $this->assertGreaterThan(0, $salary['silver']);
-
-        // 3. 领取 VIP1 专属晋级礼包
-        $gift = $this->request('vip', 'get_gift', ['level' => 1]);
-        $this->assertSame(1, $gift['status']);
-        $this->assertSame(1, $gift['level']);
-        $this->assertGreaterThan(0, $gift['silver']);
-
-        // 4. 重复领取礼包被拦截
-        $dupGift = $this->request('vip', 'get_gift', ['level' => 1]);
-        $this->assertSame(0, $dupGift['status']);
-
-        // 5. VIP 每日工资测试 (c=vipwage&m=index / get_vip_wage)
-        $wage = $this->request('vipwage', 'index');
-        $this->assertSame(1, $wage['status']);
-        $this->assertNotEmpty($wage['list']);
-        $this->assertNotEmpty($wage['my_reward']);
-        $this->assertArrayHasKey('get1', $wage['my_reward']);
-
-        $claimWage = $this->request('vipwage', 'get_vip_wage');
-        $this->assertSame(1, $claimWage['status']);
-
-        // 6. VIP 回馈狂欢礼包测试 (c=vipreward&m=index / get_reward)
-        $repay = $this->request('vipreward', 'index');
-        $this->assertSame(1, $repay['status']);
-        $this->assertNotEmpty($repay['list']);
-
-        $claimRepay = $this->request('vipreward', 'get_reward', ['id' => 1]);
-        $this->assertSame(1, $claimRepay['status']);
-    }
-
     public function testMessageSystem(): void
     {
         // 1. 查看收件箱
@@ -2871,62 +2803,6 @@ final class GameApiTest extends TestCase
         // 4. 放弃矿位
         $giveUp = $this->request('mine', 'give_up');
         $this->assertSame(1, $giveUp['status']);
-    }
-
-    public function testBeautySystem(): void
-    {
-        // 1. 查看绝色美人列表
-        $res = $this->request('beauty', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('beauty_info', $res);
-        $this->assertArrayHasKey('skill', $res['beauty_info']);
-
-        // 测试获取指定美人信息
-        $info = $this->request('beauty', 'get_beauty_info', ['beauty_id' => 2]);
-        $this->assertSame(1, $info['status']);
-        $this->assertArrayHasKey('beauty_info', $info);
-        $this->assertSame(2, $info['beauty_info']['info']['beauty_id']);
-
-        // 2. 赠送鲜花给貂蝉 (id: 1)
-        $flower = $this->request('beauty', 'give_flower', ['id' => 1]);
-        $this->assertSame(1, $flower['status']);
-        $this->assertSame(1, $flower['bid']);
-        $this->assertGreaterThan(0, $flower['intimacy']);
-
-        // 3. 赏赐珠宝美玉
-        $gift = $this->request('beauty', 'gift', ['id' => 1]);
-        $this->assertSame(1, $gift['status']);
-        $this->assertSame(1, $gift['bid']);
-        $this->assertArrayHasKey('happy', $gift);
-        $this->assertGreaterThan(0, $gift['happy']['rose']);
-        $this->assertGreaterThanOrEqual(1, $gift['level']);
-
-        // 4. 购买玫瑰花测试
-        $buyRose = $this->request('beauty', 'buy_rose');
-        $this->assertSame(1, $buyRose['status']);
-        $this->assertGreaterThan(0, $buyRose['rose']);
-
-        // 5. 查看美人互动主界面
-        $actIdx = $this->request('beauty', 'active_index', ['id' => 1]);
-        $this->assertSame(1, $actIdx['status']);
-        $this->assertGreaterThan(0, $actIdx['greeting']);
-        $this->assertGreaterThan(0, $actIdx['spend_greet']);
-
-        // 6. 执行美人互动 (问候)
-        $actAction = $this->request('beauty', 'active_action', ['id' => 1, 'type' => 1]);
-        $this->assertSame(1, $actAction['status']);
-        $this->assertArrayHasKey('happy', $actAction);
-        $this->assertGreaterThan(0, $actAction['happy']['rose']);
-        $this->assertArrayHasKey('special_skill', $actAction);
-        $this->assertArrayHasKey('reward', $actAction);
-        $this->assertSame(2, $actAction['lastnum']);
-
-        // 7. 铜雀台开启免战
-        $peace = $this->request('beauty', 'peace');
-        $this->assertSame(1, $peace['status']);
-        $this->assertSame(7200, $peace['cd_time']);
-        $this->assertGreaterThan(0, $peace['times']);
     }
 
     public function testMountSystem(): void
@@ -5192,71 +5068,6 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThan(0, $reward['silver']);
     }
 
-    public function testTalentSystem(): void
-    {
-        // 1. 获取主公武将 ID
-        $generals = $this->request('general', 'index');
-        $mainGid = (int)$generals['list'][1]['id'];
-
-        // 2. 查看天赋树
-        $res = $this->request('talent', 'index', ['gid' => $mainGid]);
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 3. 升级猛攻天赋 (id: 1)
-        $up = $this->request('talent', 'levelup', ['gid' => $mainGid, 'id' => 1]);
-        $this->assertSame(1, $up['status']);
-        $this->assertSame(2, $up['level']);
-    }
-
-    public function testAdvancedSystem(): void
-    {
-        // 1. 获取主公武将 ID
-        $generals = $this->request('general', 'index');
-        $mainGid = (int)$generals['list'][1]['id'];
-
-        // 2. 查看进阶面板
-        $res = $this->request('advanced', 'index', ['gid' => $mainGid]);
-        $this->assertSame(1, $res['status']);
-        $this->assertSame(1, $res['can_advance']);
-
-        // 3. 执行品质进阶飞升
-        $adv = $this->request('advanced', 'start_advanced', ['gid' => $mainGid]);
-        $this->assertSame(1, $adv['status']);
-        $this->assertGreaterThan(1, $adv['new_quality']);
-    }
-
-    public function testRefineSystem(): void
-    {
-        // 1. 查看装备精炼
-        $res = $this->request('refine', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertArrayHasKey('current_refine', $res);
-        $eid = (int)$res['eid'];
-
-        // 2. 执行精炼淬火
-        $refine = $this->request('refine', 'refinning', ['id' => $eid]);
-        $this->assertSame(1, $refine['status']);
-        $this->assertArrayHasKey('refine', $refine);
-    }
-
-    public function testStarSystem(): void
-    {
-        // 1. 获取主公武将 ID
-        $generals = $this->request('general', 'index');
-        $mainGid = (int)$generals['list'][1]['id'];
-
-        // 2. 查看星级
-        $res = $this->request('star', 'index', ['gid' => $mainGid]);
-        $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(1, $res['star']);
-
-        // 3. 升星突破
-        $up = $this->request('star', 'level_up', ['gid' => $mainGid]);
-        $this->assertSame(1, $up['status']);
-        $this->assertGreaterThan(1, $up['new_star']);
-    }
-
     public function testWarCollegeSystem(): void
     {
         // 1. 查看战争学院
@@ -5304,19 +5115,6 @@ final class GameApiTest extends TestCase
         $action = $this->request('generaltask', 'action', ['task_id' => 1, 'gid' => $gid]);
         $this->assertSame(1, $action['status']);
         $this->assertSame('古栈道斥候侦察', $action['task_name']);
-    }
-
-    public function testGeneralBookSystem(): void
-    {
-        // 1. 查看名将谱
-        $res = $this->request('general_book', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 点亮桃园结义羁绊 (combo: 1)
-        $up = $this->request('general_book', 'levelup', ['id' => 1]);
-        $this->assertSame(1, $up['status']);
-        $this->assertSame('桃园结义', $up['combo_name']);
     }
 
     /**

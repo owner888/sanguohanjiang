@@ -2,7 +2,7 @@
 
 对比基线：前端 `public/static/js` 中写死的 `c`/`m` 调用（含单行对象、多行对象、`?c=…&m=…` URL、`x.c = …; x.m = …` 赋值四种写法）vs 新版 `src/Handler` 的 `public static` 方法 vs 旧版 CodeIgniter `wwwroot/{s1,uc,battle,war}/application/controllers/` 下全部控制器（含 `newequip/`、`lc/` 等子目录）。完全动态拼接的调用未覆盖。
 
-- 前端调用：665；已实现：390；缺失：275（旧版有 269，旧版也无 6）
+- 前端调用：665；已实现：431；缺失：234（旧版有 228，旧版也无 6）
 - 「旧版位置」为相对旧服务端 `HJServer/wwwroot/` 的路径；「—」表示四个旧服务里都没有对应方法（多为渠道 SDK 登录），需按前端字段反推。
 - 标记 🆕 的控制器在新版中整个 Handler 都不存在。
 - 本节由 `tools/scan_legacy_gap.php` 生成，勿手改；其余章节手工维护。
@@ -27,38 +27,6 @@
 | `c=god&m=share_report` | `s1/application/controllers/god.php:818` | `static/js/view/miscpop.js:5516` |
 | `c=god&m=support` | `s1/application/controllers/god.php:341` | `static/js/view/championsworld.js:1103` |
 | `c=god&m=sync_battle_info` | `s1/application/controllers/god.php:297` | `static/js/view/championsworld.js:1051` |
-
-### beauty（11）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=beauty&m=advance_action` | `s1/application/controllers/beauty.php:2673` | `static/js/view/beautypop.js:1873` |
-| `c=beauty&m=advance_index` | `s1/application/controllers/beauty.php:2534` | `static/js/view/beautypop.js:1759` |
-| `c=beauty&m=buy_loot_times` | `s1/application/controllers/beauty.php:2174` | `static/js/view/beautypop.js:2254` |
-| `c=beauty&m=cancel_levelup` | `s1/application/controllers/beauty.php:3122` | `static/js/view/beautypop.js:1733` |
-| `c=beauty&m=conversion_chip` | `s1/application/controllers/beauty.php:4165` | `static/js/view/beautypop.js:1934` |
-| `c=beauty&m=get_say_info` | `s1/application/controllers/beauty.php:761` | `static/js/view/beautypop.js:1900` |
-| `c=beauty&m=level_up` | `s1/application/controllers/beauty.php:2876` | `static/js/view/beautypop.js:1508` |
-| `c=beauty&m=level_up_status` | `s1/application/controllers/beauty.php:3087` | `static/js/view/beautypop.js:909` |
-| `c=beauty&m=loot_action` | `s1/application/controllers/beauty.php:1671` | `static/js/view/beautypop.js:2307` |
-| `c=beauty&m=loot_index` | `s1/application/controllers/beauty.php:1269` | `static/js/view/beautypop.js:1989` |
-| `c=beauty&m=loot_reflush` | `s1/application/controllers/beauty.php:1564` | `static/js/view/beautypop.js:2209` |
-
-### soul（11）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=soul&m=convert` | `s1/application/controllers/soul.php:554` | `static/js/view/soulworld.js:770`<br>`static/js/view/soulworld.js:777` |
-| `c=soul&m=equip` | `s1/application/controllers/soul.php:667` | `static/js/view/soulworld.js:830` |
-| `c=soul&m=get_general_info` | `s1/application/controllers/soul.php:316` | `static/js/view/soulworld.js:915` |
-| `c=soul&m=get_pack_info` | `s1/application/controllers/soul.php:927` | `static/js/view/soulworld.js:1234` |
-| `c=soul&m=get_soul_info` | `s1/application/controllers/soul.php:224` | `static/js/view/soulworld.js:1004` |
-| `c=soul&m=get_unlock_price` | `s1/application/controllers/soul.php:804` | `static/js/view/soulworld.js:1108` |
-| `c=soul&m=levelup` | `s1/application/controllers/soul.php:455` | `static/js/view/soulworld.js:1068` |
-| `c=soul&m=merge_action` | `s1/application/controllers/soul.php:1012` | `static/js/view/soulworld.js:1718` |
-| `c=soul&m=merge_index` | `s1/application/controllers/soul.php:964` | `static/js/view/soulworld.js:1686` |
-| `c=soul&m=unequip` | `s1/application/controllers/soul.php:746` | `static/js/view/soulworld.js:870` |
-| `c=soul&m=unlock` | `s1/application/controllers/soul.php:852` | `static/js/view/soulworld.js:1160` |
 
 ### act_treasure 🆕（10）
 
@@ -155,18 +123,6 @@
 | `c=expostulation&m=refresh` | `s1/application/controllers/expostulation.php:745` | `static/js/view/expostulationpop.js:606` |
 | `c=expostulation&m=support` | `s1/application/controllers/expostulation.php:665` | `static/js/view/expostulationpop.js:374` |
 
-### information（7）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=information&m=get_all_beauty_info` | `s1/application/controllers/information.php:1112` | `static/js/view/infopop.js:378` |
-| `c=information&m=get_country_info` | `s1/application/controllers/information.php:984` | `static/js/view/infopop.js:675` |
-| `c=information&m=get_general_gem` | `s1/application/controllers/information.php:734` | `static/js/view/infopop.js:1162` |
-| `c=information&m=get_general_mount` | `s1/application/controllers/information.php:825` | `static/js/view/infopop.js:1289` |
-| `c=information&m=get_own_soul` | `s1/application/controllers/information.php:464` | `static/js/view/infopop.js:806` |
-| `c=information&m=get_star_info` | `s1/application/controllers/information.php:1059` | `static/js/view/infopop.js:491` |
-| `c=information&m=get_talent_list` | `s1/application/controllers/information.php:710` | `static/js/view/infopop.js:895` |
-
 ### worldcup 🆕（7）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -201,6 +157,17 @@
 | `c=chingming&m=get_rank_reward` | `s1/application/controllers/chingming.php:525` | `static/js/view/qingmingpop.js:425` |
 | `c=chingming&m=index` | `s1/application/controllers/chingming.php:43` | `static/js/view/qingmingpop.js:46` |
 
+### information（6）
+
+| 接口 | 旧版位置 | 前端调用 |
+|---|---|---|
+| `c=information&m=get_country_info` | `s1/application/controllers/information.php:984` | `static/js/view/infopop.js:675` |
+| `c=information&m=get_general_gem` | `s1/application/controllers/information.php:734` | `static/js/view/infopop.js:1162` |
+| `c=information&m=get_general_mount` | `s1/application/controllers/information.php:825` | `static/js/view/infopop.js:1289` |
+| `c=information&m=get_own_soul` | `s1/application/controllers/information.php:464` | `static/js/view/infopop.js:806` |
+| `c=information&m=get_star_info` | `s1/application/controllers/information.php:1059` | `static/js/view/infopop.js:491` |
+| `c=information&m=get_talent_list` | `s1/application/controllers/information.php:710` | `static/js/view/infopop.js:895` |
+
 ### login（6）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -212,17 +179,6 @@
 | `c=login&m=userkuaiyong` | `s1/application/controllers/login.php:110` | `static/js/view/loginworld.js:568` |
 | `c=login&m=userpp` | `s1/application/controllers/login.php:71` | `static/js/view/loginworld.js:519` |
 
-### pay 🆕（6）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=pay&m=create_91_order` | `s1/application/controllers/pay.php:1241` | `static/js/view/miscpop.js:5081` |
-| `c=pay&m=create_kuaiyong_order` | `s1/application/controllers/pay.php:1746` | `static/js/view/miscpop.js:5153` |
-| `c=pay&m=create_pp_order` | `s1/application/controllers/pay.php:1388` | `static/js/view/miscpop.js:5117` |
-| `c=pay&m=get_pay_info` | `s1/application/controllers/pay.php:512` | `static/js/view/miscpop.js:5042` |
-| `c=pay&m=get_product_list` | `s1/application/controllers/pay.php:470` | `static/js/view/iospaypop.js:196`<br>`static/js/view/iospaypop.js:265`<br>`static/js/view/iospaypop.js:330`<br>…共 10 处 |
-| `c=pay&m=szf_order` | `s1/application/controllers/pay.php:835` | `static/js/view/miscpop.js:5335` |
-
 ### act_sevenstar 🆕（5）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -232,16 +188,6 @@
 | `c=act_sevenstar&m=get_rank_list` | `s1/application/controllers/lc/act_sevenstar.php:223` | `static/js/view/sevenstarpop.js:335` |
 | `c=act_sevenstar&m=get_rank_reward` | `s1/application/controllers/lc/act_sevenstar.php:647` | `static/js/view/sevenstarpop.js:498` |
 | `c=act_sevenstar&m=index` | `s1/application/controllers/lc/act_sevenstar.php:78` | `static/js/view/sevenstarpop.js:50` |
-
-### advanced（5）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=advanced&m=advanced_inherit` | `s1/application/controllers/advanced.php:826` | `static/js/view/advancedpop.js:1122` |
-| `c=advanced&m=get_advanced_inherit_info` | `s1/application/controllers/advanced.php:973` | `static/js/view/advancedpop.js:1260` |
-| `c=advanced&m=get_general_info` | `s1/application/controllers/advanced.php:247` | `static/js/view/advancedpop.js:594` |
-| `c=advanced&m=get_skill_info` | `s1/application/controllers/advanced.php:140` | `static/js/view/advancedpop.js:635` |
-| `c=advanced&m=level_up` | `s1/application/controllers/advanced.php:470` | `static/js/view/advancedpop.js:705` |
 
 ### equip_forge（5）
 
@@ -283,15 +229,15 @@
 | `c=message&m=update_read_status` | `s1/application/controllers/message.php:542` | `static/js/view/mailpop.js:183` |
 | `c=message&m=update_trends_status` | `s1/application/controllers/message.php:148` | `static/js/view/trendspop.js:101` |
 
-### refine（5）
+### pay（5）
 
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
-| `c=refine&m=achieve_index` | `s1/application/controllers/refine.php:1022` | `static/js/view/refineachievepop.js:55` |
-| `c=refine&m=get_achieve_info` | `s1/application/controllers/refine.php:1089` | `static/js/view/refineachievepop.js:90` |
-| `c=refine&m=item_index` | `s1/application/controllers/refine.php:135` | `static/js/view/equiprefinepop.js:574`<br>`static/js/view/refineinheritpop.js:141` |
-| `c=refine&m=item_selected` | `s1/application/controllers/refine.php:252` | `static/js/view/equiprefinepop.js:663` |
-| `c=refine&m=master_refresh` | `s1/application/controllers/refine.php:392` | `static/js/view/equiprefinepop.js:822` |
+| `c=pay&m=create_91_order` | `s1/application/controllers/pay.php:1241` | `static/js/view/miscpop.js:5081` |
+| `c=pay&m=create_kuaiyong_order` | `s1/application/controllers/pay.php:1746` | `static/js/view/miscpop.js:5153` |
+| `c=pay&m=create_pp_order` | `s1/application/controllers/pay.php:1388` | `static/js/view/miscpop.js:5117` |
+| `c=pay&m=get_pay_info` | `s1/application/controllers/pay.php:512` | `static/js/view/miscpop.js:5042` |
+| `c=pay&m=szf_order` | `s1/application/controllers/pay.php:835` | `static/js/view/miscpop.js:5335` |
 
 ### banquet（4）
 
@@ -433,13 +379,6 @@
 | `c=countryshop&m=red_item_list` | `s1/application/controllers/countryshop.php:219` | `static/js/view/countrytreasurepop.js:297` |
 | `c=countryshop&m=sale_red_item` | `s1/application/controllers/countryshop.php:293` | `static/js/view/countrytreasurepop.js:481` |
 
-### general_book（2）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=general_book&m=get_achievement_list` | `s1/application/controllers/general_book.php:152` | `static/js/view/heromanualpop.js:416` |
-| `c=general_book&m=get_book_list` | `s1/application/controllers/general_book.php:109` | `static/js/view/heromanualpop.js:288` |
-
 ### general_only 🆕（2）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -517,13 +456,6 @@
 | `c=newyearpay&m=get_reward` | `s1/application/controllers/newyearpay.php:85` | `static/js/view/newyearpaypop.js:151` |
 | `c=newyearpay&m=pay_reward` | `s1/application/controllers/newyearpay.php:37` | `static/js/view/newyearpaypop.js:28` |
 
-### rebate 🆕（2）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=rebate&m=get_reward` | `s1/application/controllers/rebate.php:119` | `static/js/view/bearpop.js:161` |
-| `c=rebate&m=index` | `s1/application/controllers/rebate.php:71` | `static/js/view/bearpop.js:40` |
-
 ### report 🆕（2）
 
 | 接口 | 旧版位置 | 前端调用 |
@@ -558,13 +490,6 @@
 |---|---|---|
 | `c=springshop&m=buy` | `s1/application/controllers/springshop.php:186` | `static/js/view/springshoppop.js:252` |
 | `c=springshop&m=index` | `s1/application/controllers/springshop.php:53` | `static/js/view/springshoppop.js:37`<br>`static/js/view/springshoppop.js:96` |
-
-### star（2）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=star&m=refining` | `s1/application/controllers/star.php:499` | `static/js/view/soulrefinepop.js:99` |
-| `c=star&m=refining_index` | `s1/application/controllers/star.php:405` | `static/js/view/soulrefinepop.js:33` |
 
 ### clickreward 🆕（1）
 
@@ -625,12 +550,6 @@
 | 接口 | 旧版位置 | 前端调用 |
 |---|---|---|
 | `c=regreward&m=get_reward` | `s1/application/controllers/regreward.php:46` | `static/js/view/regrewardpop.js:187` |
-
-### talent（1）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=talent&m=get_info` | `s1/application/controllers/talent.php:288` | `static/js/view/talentpop.js:275` |
 
 ### user91 🆕（1）
 
@@ -695,11 +614,15 @@
 
 | 接口 / 位置 | 现状 |
 |---|---|
-| `c=star`（`StarHandler`） | 待按旧版重写。旧版武将没有逐将升星；星级存 Redis `general_star:{uid}:{gid}`。已不再给 `wuliup`/`tiliup` 加值（培养字段只属于 `cultivate`） |
-| `c=talent`（`TalentHandler`） | 待按旧版重写。天赋等级存 Redis `general_talents:{uid}:{gid}`，不是旧版 `talentid` 天赋体系 |
-| `c=refine`（`RefineHandler`） | 待按旧版重写。精炼词条存 Redis `equip_refine:{uid}:{eid}`；旧版写 `equipment.hammer`，加成见 `LegacyStats::refineAdd` |
+| `c=soul`（`SoulHandler`） | 依赖未移植：主线任务 16（将魂等级提升至 X 级）、元宝流水 `gold_log` 与消费统计 `stat_model->unlock_pack`（背包解锁） |
+| `c=star`（`StarHandler`） | 依赖未移植：元宝流水 `gold_log`（炼化炉的元宝消耗） |
+| `c=talent`（`TalentHandler`） | 依赖未移植：元宝流水 `gold_log` |
+| `c=beauty`（`BeautyHandler`、`Model\Beauty`） | 依赖未移植：信件战报 `pm_report`（`record_pk_report` / `get_pk_report_by_id`；掠夺信件存 Redis `user_messages`，`report_detail` 恒为 -1 没有指定的战报）、首次打开记录 `edifice_model->add_edifice_log(11)`、春节送福活动计数（`actnewyear_model->add_task_num`：掠夺 16、亲近 17）、元宝 / 银币 / 声望流水（`gold_log` / `silver_log` / `reputation_log`） |
+| `c=advanced`（`AdvancedHandler`、`Model\Advanced`） | 依赖未移植：国家学院加成 `_get_war_college_info`（国家 30 级，界面三围）、突飞卡流水 `leap_log` 与翻牌活动计数（`tavern_model->sub_freeleap`）、声望流水 `reputation_log`；计划任务 `cron::update_advanced_log`（改配置后同步技能加成，运维用）与后台恢复进阶传承（`recover_inherit`）不移植 |
+| `c=refine`（`RefineHandler`、`Model\Refine`） | 依赖未移植：元宝流水 `gold_log`、日常任务 5（元宝消费）与翻牌活动计数（刷新大师的 `member_model->sub_gold`） |
+| `c=general_book`（`GeneralBookHandler`、`Model\GeneralBook`） | 依赖未移植：首次打开记录 `edifice_model->add_edifice_log(7)`、武将折旧后的名将谱加成重算（随 `muster&m=sale_general` 移植）；计划任务 `cron::update_addition`（导入数据后全服重算，运维用）不移植 |
 | `c=chat`（`ChatHandler`、`Model\Chat`、`WebSocket\ChatPush`） | 按旧版移植，GameWS 鉴权后改为 ws 推送。依赖未移植：`index` 的战神上线公告（`god_login`，战神殿 god）、发言的神树 `tree`（恒 0）、`member.status` 3 / 4 封号的全局 403（只在发言时认禁言 1 / 2 与到期清除）、后台 / 计划任务喇叭（`horn` 表，`cron::date_horn` / `cron_horn` / `crontab_horn` / `send_horn`，运维功能）与计划任务 `cron::game_process` 的定时系统提示。不移植：`platform` = android / wp8 的原生客户端格式转换、`send_system_chat`（旧版不校验身份）、`clear_ban_key`（运维口令接口）、`illegal_chat` 记录（旧版调用已注释）。与旧版的差别：屏蔽字与重复发言按还原后的原文判断（旧版对 htmlspecialchars 后的内容判断，`&quot;` 含屏蔽字 q，带双引号的消息都被当成违规）；屏蔽玩家改为每人一个有序集合 `chat_ban_{uid}`（旧版每对一个键、`KEYS chat_ban__{uid}*` 会把 uid 前缀相同的玩家算进来）；`read` 过滤后重排下标（旧版 `unset` 留洞，JSON 变成对象） |
-| 聊天室广播（其余玩法） | 依赖未移植（所在玩法是新版自定的，随旧版玩法移植）：酒馆 / VIP 礼包 / 累计登录 / 砸金蛋 / 黑市 / 过图招募的 7 星以上武将小喇叭（`general_get` 等，砸金蛋 22、黑市 14、过图 10）、本服首杀守将 `general_pass`、通关奖励 `get_add_reward`（装备 / 武将 43 / 坐骑）、幸运大转盘 6 / 7、通商 / 切石 / 打造 / 暴打名将 / 铜雀台掠夺的小喇叭、国家祭祀 9、好友在线状态（`get_online_list`）；跨服 `worldarena&m=send_to_chat`（uc 战报缓存）与 `generaltask&m=send_to_chat`（旧版没有） |
+| 聊天室广播（其余玩法） | 依赖未移植（所在玩法是新版自定的，随旧版玩法移植）：酒馆 / 累计登录 / 砸金蛋 / 黑市 / 过图招募的 7 星以上武将小喇叭（`general_get` 等，砸金蛋 22、黑市 14、过图 10）、本服首杀守将 `general_pass`、通关奖励 `get_add_reward`（装备 / 武将 43 / 坐骑）、幸运大转盘 6 / 7、通商 / 切石 / 打造 / 暴打名将的小喇叭、国家祭祀 9、好友在线状态（`get_online_list`）；跨服 `worldarena&m=send_to_chat`（uc 战报缓存）与 `generaltask&m=send_to_chat`（旧版没有） |
 | `c=tavern`（`TavernHandler::HERO_POOL`） | 宝石与会客位置已存旧版 `trader_log`（`Model\TraderLog`，流水 `tavernjade_log`），但会客贸易的晋级 / 重置规则与价格是新版自定的（旧版走 `Trader` 表的 goto / get 概率）。依赖未移植：名将池、价格、展示数值不是旧版 Pub 数据；入库武将按名称+形象对上的模板（52 张飞、33 关羽、51 诸葛亮、6 赵云） |
 | `c=lottery&m=action` | 依赖未移植：旧版按 `Lottery` 分组概率抽奖；新版写死转盘的装备格「青钢名剑」在 MasterData 中不存在，抽中不发装备 |
 | `c=arena`（`ArenaHandler`） | 依赖未移植：信件战报 `pm_report`（信件存 Redis `user_messages`，`info.report` 为其 id）、主线任务 8 / 9、日常任务 10、`edifice` 首次打开记录、神树 `tree`（恒 0）、消费统计 `stat_model`；酒馆获得日志 `add_pub_log` |
@@ -709,7 +632,7 @@
 | `c=equip_forge&m=fabrication` | 依赖未移植：旧版打造走 newequip 体系；只有图纸 1 能对上模板（Equip 22 青龙偃月刀），图纸 2、3 不可锻造 |
 | `c=map&m=action` 关卡掉落 | `times` 刷图未移植（按单次攻击） |
 | `c=map&m=get_newresult` | 奖励已按旧版 `Map` 表四类发放；但领取标记存 Redis `user_shili_claimed:{uid}:{id}`，不校验请求的势力是否为 `member_field.newresult`（旧版不是则 -1，并以 `open_map.newresult` 判重复领取），领取后把 `newresult` 清 0 |
-| `General::createFromTemplate` | 依赖未移植：获得武将气泡（`ongeneral`）、主公 80 级以上名将成就加成重算、主线任务 19 |
+| `General::createFromTemplate` | 依赖未移植：获得武将气泡（`ongeneral`）、主线任务 19 |
 | `c=matrix`（`MatrixHandler`） | 依赖未移植：主线任务 5（阵法升级）/ 6（同时上阵 5 将）、消费统计 `stat_model->matrixlevelup` |
 | `c=muster&m=index` / `go_rest` | 依赖未移植：获得武将气泡 `member_field.ongeneral`、武将折旧 CD `member_field.general_sale`（`sale_cd` 按 0） |
 | `c=muster&m=sale_general` | 待按旧版重写。新版自定的遣散（按等级发银两、软删除）；旧版为 VIP 7 起的武将折旧（名将榜售价 × VIP 系数、7 天 CD、终止训练、下阵、卸装备 / 将魂 / 坐骑、重算名将成就） |
@@ -724,7 +647,11 @@
 | `c=island`（`IslandHandler`） | 依赖未移植：日常任务 9（主公 41 级以上）、军令 / 元宝 / 银两流水、翻牌活动计数；维护计划任务 `cron::clear_island_report`（只保留每关最近 7 条战报，旧版代码包里没有执行时间） |
 | `c=compete`（`CompeteHandler`、`CompeteCron`） | 活动时间取 `ActivityTime`（compete 2016-12-31 00:00 已结束，接口一律 -1）。依赖未移植：神树 `tree`（恒 0）、信件战报 `pm_report`（`record_pk_report`）、元宝流水。计划任务 `cron::get_compete_reward` 的执行时间旧版代码包里没有，按每小时执行（只在活动结束后 10 小时内发放） |
 | `c=countrymine`（`CountryMineHandler`） | 依赖未移植：好友 `friend_model`（`friend` 恒为 0）、信件战报 `pm_report`、日常任务 13、元宝流水 |
-| `c=siege`（`SiegeHandler`、`SiegeCron`） | 依赖未移植：都城效果 type 2 通商次数 `member_activity.freebusiness`；都城开放按全服 `map` 进度推算（旧版 `open_map` 未移植）。计划任务 `cron::siege_battle` / `clear_warstatus` 的执行时间旧版代码包里没有，按旧版逻辑推定为每分钟 / 每周六 00:00。都城效果只接入了将魂星路（4）、四象圣域（5）、通天塔（7）与征收次数（1，`getCityEffect` 内）；玉石作坊（3）、铜雀台（6）、通商（2）与 `member_model` 每日征收重置调用 `get_city_effect` 的玩法尚未按旧版移植 |
+| `c=siege`（`SiegeHandler`、`SiegeCron`） | 依赖未移植：都城效果 type 2 通商次数 `member_activity.freebusiness`；都城开放按全服 `map` 进度推算（旧版 `open_map` 未移植）。计划任务 `cron::siege_battle` / `clear_warstatus` 的执行时间旧版代码包里没有，按旧版逻辑推定为每分钟 / 每周六 00:00。都城效果只接入了将魂星路（4）、四象圣域（5）、铜雀台互动次数（6）、通天塔（7）与征收次数（1，`getCityEffect` 内）；玉石作坊（3）、通商（2）与 `member_model` 每日征收重置调用 `get_city_effect` 的玩法尚未按旧版移植 |
+| 支付渠道（`c=pay` 下单 / 回调） | 待定渠道（渠道待开发者确定）：客户端调用的 `get_pay_info`（支付宝下单签名）、`create_91_order`、`create_pp_order`、`create_kuaiyong_order`、`szf_order`，以及旧版只由渠道服务器回调的 `confirm_alipay_order` / `confirm_91_order` / `confirm_pp_order` / `szf_confirm` / `googlepay_order` / `googlepay_confirm` / `elex_*` / `*_sf_*` / `*_kuaiyong_order`、网站充值 `create_prepay_order` / `complete_alipay_order` / `index`，与 `paydj` / `paydjn` / `pay360n` / `payaz` / `paydk` / `payhw` / `paytstore*` / `payuc` / `payxiaomi` / `payyidongyun` / `payyolo` 各渠道控制器、`c=ios&m=buylist` / `prepay`（苹果内购）。接入时验签通过后调用 `Model\Pay::complete`；开发者测试用 `tools/pay_grant.php` |
+| `c=pay`（`PayHandler`、`Model\Pay`、`Model\Vip`） | 依赖未移植：充值类活动记账——圣诞 / 春节 `christmas_model->add_christmas_log`、暴打名将 `beatengod_model->add_beatengod_pay_order`、我爱世界杯 `worldcup_model->add_beatengod_pay_order`、充值送豪奖 `actthirty_model->add_thirty_pay_order`、`pay_act_init` 的七夕 `acttanabata`、国家庆典 `actcelebration`、中秋 `moon`、发工资 `actpaychecks`、貔貅聚财 `actenrichment`（旧版数据中均已结束）；`vip_model->pay` 的武将继承 cd（`member_field.free_inherit` / `inherit_dateline`，`general_inherit` 未按旧版移植）、赌石免费次数（`member_field.stone1~3_times`）、清 cd 的强征 / 征收状态（`qiangdateline` / `qiangstatus` / `levystatus`）；首充 `member_field.first_recharge_an`（安卓客户端标识，主城恒回 0） |
+| `c=vip`（`VipHandler`） | 依赖未移植：酒馆获得日志 `tavern_model->add_pub_log(generalid, 1, 4)` |
+| `c=vipwage`（`VipwageHandler`） | 依赖未移植：春节送福活动计数 `actnewyear_model->add_task_num(version, 25)`；军令 / 银币 / 声望流水 |
 | `c=practice&m=practice_stop` | 待按旧版重写。新版自定的结算（按训练位倍率发经验）；`c=muster&m=go_rest` 终止训练已用旧版 `practice_stop`（`PracticeHandler::legacyStop`） |
 
 ## 战斗
@@ -733,49 +660,47 @@
 
 | 位置 | 现状 |
 |---|---|
-| 组队加成（`TeamBuilder::forMember`） | 依赖未移植，按 0 计：锻造套装、将魂、主公天赋（91 级）、名将成就（81 级）、美人（60 级）、星魄（80 级）、国家学院（国家 30 级）、名将进阶（100 级）、神树 |
-| 推演加成（`BattleEngine`） | 依赖未移植，旧版对应分支不移植：将魂（暴击率 / 闪避 / 识破 / 暴击伤害 / 抗晕 / 生命）、名将成就 / 美人 / 星魄 / 国家学院（暴击率 / 闪避 / 识破 / 暴击伤害）、锻造套装（`suitbuff` 吸血 / 回气 / 偷气 / 清气 / 反伤，最终增伤 / 免伤、暴击伤害、血量伤害倍增、抗晕、血量%；坐骑模板的血量% / 抗晕 / 免伤 / 吸血已计入）、名将进阶（天赋攻防系数、血量）；`leftbuff` / `rightbuff` 的 `tree`（神树）恒为 0 |
+| 组队加成（`TeamBuilder::forMember`） | 依赖未移植，按 0 计：锻造套装、国家学院（国家 30 级）、神树 |
+| 推演加成（`BattleEngine`） | 依赖未移植，旧版对应分支不移植：国家学院（暴击率 / 闪避 / 识破 / 暴击伤害）、锻造套装（`suitbuff` 吸血 / 回气 / 偷气 / 清气 / 反伤，最终增伤 / 免伤、暴击伤害、血量伤害倍增、抗晕、血量%；坐骑模板的血量% / 抗晕 / 免伤 / 吸血已计入）；`leftbuff` / `rightbuff` 的 `tree`（神树）恒为 0 |
 | 技能 effect 30 / 31、攻击类型 16 | 旧版 `battle_model.php` 没有对应分支，按旧版照搬：655 袖里乾坤（type 16）没有受击位，656 飞花溅玉、668 地狱人间、669 逆命王轮只按 `ratio` 计伤害；技能描述里的偷气 / 眩晕 / 吸血 / 伤害上限等在这份旧版源码中没有实现 |
 | 守军 | 只有 `c=map&m=action` 按旧版取 `Mission` → `Monster`、`c=tower&m=pk` 按旧版取 `SoulMission` → `SoulMonster`、`c=copies&m=pk` 按旧版取 `CopiesInfo`（怪物行的 position1~9 → `CopiesInfo` 的行）、`c=elite&m=action` 按旧版团战取 `EliteMission` → `EliteMonster`，`c=sanctum&m=action` / `c=heaven&m=pk` / `c=herothrone&m=action` / `c=island&m=pk` 按旧版 `battle_mission` 取 `SanctumMission` → `SanctumMonster` / `HeavenMission` → `HeavenMonster` / `HerothroneMission` → `HerothroneMonster` / `Island` → `IslandMonster`。`c=worldboss&m=battle` / `c=countryboss&m=battle` 按旧版 `battle_worldboss` 取 `WorldBoss` 行 1 / 2 + 写死数值（`TeamBuilder::forBoss`）。`c=compete&m=action`、`c=countrymine&m=rob`、`c=siege&m=occupy`（至尊攻城）按旧版 `battle_pk` 打玩家，国战按旧版团战取玩家或 `CountryMission` → `CountryMonster` |
 | `c=map&m=mission` / `get_mission_list`，`c=map&m=action` 经验 | 据点名称、等级、经验仍取新版自定的 `MapHandler::getEnemyConfig`，与战斗中的旧版 `Mission` 守军不一致；`get_mission_by_id` 的场景 / 关卡开启校验、攻击 CD、强攻元宝未移植 |
 
 ## 数据结构缺口
 
-旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 77 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
+旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 108 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
 
 ### 已建表的缺失字段
 
 | 新表 ← 旧表 | 旧版有、新版无的字段 |
 |---|---|
-| `member` ← `member` | `newpm`、`newmail`、`status`、`statustime`、`rebate_firstpay`、`jointime`、`dateline`、`actdateline`、`levelupexp`、`missionworld`、`firstworld`、`server_reward`、`ndgift`、`channel`、`regchannel`、`guest`、`version`、`appversion`、`crontime`、`gift`、`bind91`、`bind360` |
+| `member` ← `member` | `newpm`、`newmail`、`status`、`statustime`、`jointime`、`dateline`、`actdateline`、`levelupexp`、`missionworld`、`firstworld`、`server_reward`、`ndgift`、`channel`、`regchannel`、`guest`、`version`、`appversion`、`crontime`、`gift`、`bind91`、`bind360` |
 | `general` ← `own_general` | `disable`（`eid1`~`eid4` 不存储，由 `equipment.generalid` + 旧版 `get_item_site` 派生；其余旧字段已补，获得时从模板复制） |
 | `equipment` ← `own_equip` | `glevel`、`disable`、`dateline`（`gid` 即 `generalid`；其余旧字段已补，同一武将同一装配位置由 `uk_general_site` 约束） |
-| `member_field` ← `member_field` | `levyall`、`levystatus`、`exercisetimes`、`imposetimes`、`baijintimes`、`zhizuntimes`、`qiangstatus`、`qiangdateline`、`shopdateline`、`actnumber`、`actdateline`、`vip_reward`、`devicetoken`、`onmine`、`onworkshop`、`ongeneral`、`trends_times`、`newyeardinner`、`free_inherit`、`rebate_dateline`、`rebate_version`、`general_sale`、`advanced_time`、`close_invitation`、`clickreward`、`inherit_dateline`、`stone1_times`~`stone3_times`、`login_day`、`login_dateline`、`levelgift`、`first_recharge_an`、`treasure_free`、`macaddr`、`start_time` |
-| `member_activity` ← `member_activity` | 只有将魂星路字段（`towerlevel`、`towerstage`、`towermission`、`freetower`、`towertimes`、`souldate`）、多人副本字段（`elitetimes`、`elitebuytimes`、`elitebuydateline`、`elitesurplustimes`）、金银岛字段（`islandid`、`islandtimes`、`islanddate`）、四象圣域 `sanctumdate` 与通天塔字段（`heavenstage`、`heavenmission`、`heavenlevel`、`heaventimes`、`freeheaven`、`heavendate`）；缺 `sacrifice1`~`sacrifice3`、`exercise_gift`、`exercise_level`、`drinktime`、`freebusiness`、`businesstimes`、`towersite`、`treasuremap`、`flopgold`、`flopleap`、`flopact`、`floptimes`、`flopgoldtimes`、`flopacttimes`、`flopleaptimes`、`freemooncake`、`mooncaketimes`、`mapreward`、`task_number`、`generaltasktimes`、`jadetype`、`jadenum`、`jadeturn`、`smashtime`、`vipwage_dateline`（`Member::dailyCron` 只重置 `islandtimes`、`freetower`、`elitetimes`、`freeheaven`） |
-| `general_soul` ← `own_general_soul` | 字段改名 `site1-8` → `slot1-8`（客户端若读 `site*` 需双写） |
+| `member_field` ← `member_field` | `levyall`、`levystatus`、`exercisetimes`、`imposetimes`、`baijintimes`、`zhizuntimes`、`qiangstatus`、`qiangdateline`、`shopdateline`、`actnumber`、`actdateline`、`vip_reward`、`devicetoken`、`onmine`、`onworkshop`、`ongeneral`、`trends_times`、`newyeardinner`、`free_inherit`、`general_sale`、`close_invitation`、`clickreward`、`inherit_dateline`、`stone1_times`~`stone3_times`、`login_day`、`login_dateline`、`levelgift`、`first_recharge_an`、`treasure_free`、`macaddr`、`start_time` |
+| `member_activity` ← `member_activity` | 只有将魂星路字段（`towerlevel`、`towerstage`、`towermission`、`freetower`、`towertimes`、`souldate`）、多人副本字段（`elitetimes`、`elitebuytimes`、`elitebuydateline`、`elitesurplustimes`）、金银岛字段（`islandid`、`islandtimes`、`islanddate`）、四象圣域 `sanctumdate`、通天塔字段（`heavenstage`、`heavenmission`、`heavenlevel`、`heaventimes`、`freeheaven`、`heavendate`）与 VIP 工资 `vipwage_dateline`；缺 `sacrifice1`~`sacrifice3`、`exercise_gift`、`exercise_level`、`drinktime`、`freebusiness`、`businesstimes`、`towersite`、`treasuremap`、`flopgold`、`flopleap`、`flopact`、`floptimes`、`flopgoldtimes`、`flopacttimes`、`flopleaptimes`、`freemooncake`、`mooncaketimes`、`mapreward`、`task_number`、`generaltasktimes`、`jadetype`、`jadenum`、`jadeturn`、`smashtime`（`Member::dailyCron` 只重置 `islandtimes`、`freetower`、`elitetimes`、`freeheaven`） |
 | `practice` ← `own_practice` | 字段改名 `gid` → `generalid` |
 | `map` | 含义不同：旧版是关卡配置表（`name`/`premise`/`reward*`），新版是玩家进度表 |
 
-部分字段可能已转存 Redis（如 `general_star`、`general_talents`），补字段前先确认是否已有替代存储，避免两处真相。
+部分字段可能已转存 Redis，补字段前先确认是否已有替代存储，避免两处真相。
 
 ### 新版无对应存储的旧实体
 
 | 领域 | 旧表 |
 |---|---|
-| 将魂 | `own_soul_mergelog` |
-| 其他玩家资产 | `own_stone`（赌石玩法的原石记录，与精炼石等三种石头无关）、`own_achievement(_log)`、`own_addition`、`own_star_addition` |
+| 其他玩家资产 | `own_stone`（赌石玩法的原石记录，与精炼石等三种石头无关） |
 | 邮件 / 私信 | `pm`、`pm_report`、`notice` |
-| 货币流水 | `gold_log`、`silver_log`、`reputation_log`、`usesoul_log`、`act_log` |
+| 货币流水 | `gold_log`、`silver_log`、`reputation_log`、`act_log` |
 | 跨服（battle 库） | `god_*`、`war_*`、`gvg_*`、`world_arena`、`world_report(_log)`、`world_shop_log` |
 
 ### 存储风险
 
-大量玩家资产仅存于 Redis（将星、天赋、精炼词条、背包状态等）。若 Redis 未开启 AOF / RDB 持久化，重启即丢档。
+大量玩家资产仅存于 Redis（背包状态等）。若 Redis 未开启 AOF / RDB 持久化，重启即丢档。
 
 ## 建议补齐顺序
 
 0. 旧版配置表已生成到 `src/MasterData/`（`tools/gen_master_data.php`），补玩法时数值一律取自这里，不再手写配置。
 1. 战斗：各玩法改用旧版怪物表（`TeamBuilder::forMonsters`）与旧版控制器的响应结构（`res.battle` / `res.info`）。
 2. 军团体系的外围依赖：税金、谏言、国家庆典等（代码中 `依赖未移植` 注释标出）。
-3. 将魂、beauty 等缺口大的玩法。
+3. 其余缺口大的玩法（见「缺失接口」）。
 4. 跨服 god / war / worldarena（含 `pack.use_item`），节日活动。

@@ -31,10 +31,16 @@ use Random\Randomizer;
  * 默认 new Randomizer(new Mt19937())（随机种子），getInt / pickArrayKeys 与 mt_rand / array_rand 在同种子下逐个相同；
  * 测试注入固定种子或脚本化的 Engine。
  *
+ * 将魂 _general_soul[ugid]、美人 _beauty_arr[uuid]、星魄 _star_arr[uuid]、名将成就 _addition_arr[uuid] 与名将进阶 _advanced_arr[ugid]
+ * 由 TeamBuilder 记在玩家单位的 soul（[类型 => 属性]）/ beauty_arr（美人加成）/ star_arr（命格加成行）/ addition_arr（名将谱加成行）/
+ * advanced（进阶行）上，这里照旧版计算：将魂生命(4) / 闪避(5) / 识破(6) / 暴击率(7) / 暴击伤害(8) / 抗晕(12)，
+ * 美人闪避 / 识破 / 暴击伤害，星魄暴击率 / 闪避 / 识破 / 暴击伤害 / 抗晕，名将成就暴击率 / 闪避 / 识破，
+ * 名将进阶技能 1 ~ 3 加到天赋攻防系数、技能 4 加到天赋血量系数。
+ *
  * 依赖未移植（旧版对应数组在新版恒为空，相关分支不移植）：
- * 将魂 _general_soul、名将成就 _addition_arr、美人 _beauty_arr、星魄 _star_arr、国家学院 _warcollege_arr、
+ * 国家学院 _warcollege_arr、
  * 锻造套装 _suit_arr 与单位上的 suitbuff（回气 / 偷气 / 清气 / 反伤 / 最终增伤 / 暴击伤害 / 血量伤害倍增）、
- * 名将进阶 _advanced_arr（天赋攻防系数加成）、神树 _tree_info（buff 里的 tree）。
+ * 神树 _tree_info（buff 里的 tree）。
  * 坐骑的特殊属性（血量% / 抗晕 / 最终免伤 / 吸血，旧版也记在 _suit_arr 与 suitbuff）与 buff 里的 mount 由 TeamBuilder 记在单位的
  * suit / suitbuff / mountinfo 上，这里照旧版计算。
  *
@@ -158,7 +164,7 @@ final class BattleEngine
     }
 
     /**
-     * battle() 开头的单位初始化（左右两侧同一套；旧版右侧的星魄 / 套装 / 将魂抗晕只对玩家将领（有 tili）生效，星魄 / 将魂依赖未移植）
+     * battle() 开头的单位初始化（左右两侧同一套；旧版右侧的星魄 / 套装 / 将魂抗晕只对玩家将领（有 tili）生效）
      *
      * @param array<int, array<string, mixed>> $team
      * @return array<int, array<string, mixed>>
@@ -189,9 +195,15 @@ final class BattleEngine
             if (isset($value['mountinfo'])) {
                 $buff['mount'] = ['id' => $value['mountinfo']['mid'], 'name' => $value['mountinfo']['name'], 'quality' => $value['mountinfo']['quality']];
             }
-            // 抗晕：单位附加值 + 天赋抗晕 + 套装 / 坐骑抗晕（旧版 _suit_arr[ugid]['kangyun']，记在单位的 suit 上）
-            // 依赖未移植：星魄 / 将魂(12) 抗晕
-            $kangyun = ($value['kangyun'] ?? 0) + self::talent($value['talentid'], 'kangyun') + ($value['suit']['kangyun'] ?? 0);
+            // 抗晕：单位附加值 + 天赋抗晕 + 星魄抗晕（大于 0 时）+ 套装 / 坐骑抗晕（旧版 _suit_arr[ugid]['kangyun']，记在单位的 suit 上）+ 将魂(12)；
+            // 右侧只对玩家将领（有 tili）加星魄 / 套装 / 将魂
+            $kangyun = ($value['kangyun'] ?? 0) + self::talent($value['talentid'], 'kangyun');
+            if ($side === 'left' || isset($value['tili'])) {
+                if (($value['star_arr']['kangyun'] ?? 0) > 0) {
+                    $kangyun += $value['star_arr']['kangyun'];
+                }
+                $kangyun += ($value['suit']['kangyun'] ?? 0) + ($value['soul'][12] ?? 0);
+            }
             if ($buff['kangyun'] < $kangyun) {
                 $buff['kangyun'] = $kangyun;
             }
@@ -232,11 +244,11 @@ final class BattleEngine
      */
     private static function generalAllBlood(array $general): int
     {
-        // 依赖未移植：名将进阶血量加成 skill4_value（主公 100 级）
-        $advancedBlood = 0.0;
-        // ptblood = 套装 / 坐骑血量%（旧版 _suit_arr[ugid]['ptblood']，记在单位的 suit 上）
-        // 依赖未移植：将魂生命(4)、神树 buff
-        $ptblood = (float)($general['suit']['ptblood'] ?? 0);
+        // 名将进阶血量加成（和天赋的数值加起来再一起计算）
+        $advancedBlood = (float)($general['advanced']['skill4_value'] ?? 0);
+        // ptblood = 将魂生命(4) + 套装 / 坐骑血量%（旧版 _suit_arr[ugid]['ptblood']，记在单位的 suit 上）
+        // 依赖未移植：神树 buff
+        $ptblood = (float)(($general['soul'][4] ?? 0) + ($general['suit']['ptblood'] ?? 0));
         return LegacyStats::battleAllBlood(
             (float)($general['all_blood'] ?? 0),
             (int)($general['tili'] ?? 0),
@@ -391,7 +403,10 @@ final class BattleEngine
         // 天赋暴击率
         $this->attackLog['hit'] = 0;
         $critRate = self::talent($attack['talentid'], 'crit');
-        // 依赖未移植：玩家的将魂(7) / 名将成就 / 星魄 / 套装暴击率加成
+        // 玩家（有体力字段）的将魂(7) / 名将成就 / 星魄暴击率加成；依赖未移植：套装暴击率加成
+        if (isset($attack['tili'])) {
+            $critRate += self::playerCrit($attack);
+        }
 
         // 选择被攻击武将
         $suitposition = $position = $positionOrigin = $this->processPosition(array_keys($this->team[$T]));
@@ -451,7 +466,12 @@ final class BattleEngine
             $this->attackLog['attacktype'] = 0;
             if ((int)$attack['type'] === 1) {
                 $dodgeRate = self::talent($defense['talentid'], 'dodge');
-                // 依赖未移植：玩家的将魂(5) / 名将成就 / 美人 / 星魄 / 国家学院闪避率加成
+                // 玩家（有体力字段）的将魂(5) / 名将成就 / 美人 / 星魄闪避率加成（battle_model.php:2960）；依赖未移植：国家学院闪避率加成
+                // （旧版套装闪避误加到暴击率变量上，且之后不再使用，无效果）
+                if (isset($defense['tili'])) {
+                    $dodgeRate += ($defense['soul'][5] ?? 0) + ($defense['addition_arr']['dodge'] ?? 0)
+                        + ($defense['beauty_arr']['dodge'] ?? 0) + ($defense['star_arr']['dodge'] ?? 0);
+                }
 
                 // 降低攻击方的精准命中（effect 29）
                 if (isset($this->sideDebuff[$L]['jingzhun']) && $this->sideDebuff[$L]['jingzhun']['round'] >= $round - 1) {
@@ -475,7 +495,9 @@ final class BattleEngine
                 $penetrateRate = self::talent($defense['talentid'], 'penetrate');
                 // 玩家（有体力字段）
                 if (isset($defense['tili'])) {
-                    // 依赖未移植：玩家的将魂(6) / 名将成就 / 美人 / 星魄 / 国家学院 / 套装识破率加成
+                    // 将魂(6) / 名将成就 / 美人 / 星魄识破率加成（battle_model.php:3022）；依赖未移植：国家学院 / 套装识破率加成
+                    $penetrateRate += ($defense['soul'][6] ?? 0) + ($defense['addition_arr']['penetrate'] ?? 0)
+                        + ($defense['beauty_arr']['penetrate'] ?? 0) + ($defense['star_arr']['penetrate'] ?? 0);
 
                     // 降低攻击方的精准命中（effect 29；旧版此处把命中改写为识破率的折算值）
                     if (isset($this->sideDebuff[$L]['jingzhun']) && $this->sideDebuff[$L]['jingzhun']['round'] >= $round - 1) {
@@ -781,7 +803,8 @@ final class BattleEngine
                                             $critRate = self::talent($attack['talentid'], 'crit');
                                             // 玩家（有体力字段）
                                             if (isset($attack['tili'])) {
-                                                // 依赖未移植：将魂(7) / 名将成就 / 星魄 / 套装暴击率加成
+                                                // 将魂(7) / 星魄暴击率加成；依赖未移植：名将成就 / 套装暴击率加成
+                                                $critRate += self::playerCrit($attack);
                                                 // 左方右方暴击和抗暴击
                                                 if (isset($defense['kcrit'])) {
                                                     $critRate -= $defense['kcrit'];
@@ -792,8 +815,18 @@ final class BattleEngine
                                                 // 暴击
                                                 $attackLog2['hit'] = 1;
                                                 if ($this->attackLog['hit'] === 0) {
-                                                    // 依赖未移植：将魂(8) / 美人 / 星魄 / 套装暴击伤害加成
-                                                    $secondHit = (int)($hit * 1.5);
+                                                    // 暴击伤害：将魂(8)（玩家）+ 美人 + 星魄（battle_model.php:3447）；依赖未移植：套装暴击伤害加成
+                                                    $secondHitAdd = 0;
+                                                    if (isset($attack['tili'], $attack['soul'][8])) {
+                                                        $secondHitAdd = (int)($hit * $attack['soul'][8] / 100);
+                                                    }
+                                                    if (isset($attack['beauty_arr'])) {
+                                                        $secondHitAdd += (int)($hit * $attack['beauty_arr']['harm'] / 100);
+                                                    }
+                                                    if (isset($attack['star_arr'])) {
+                                                        $secondHitAdd += (int)($hit * $attack['star_arr']['harm'] / 100);
+                                                    }
+                                                    $secondHit = (int)($hit * 1.5) + $secondHitAdd;
                                                 }
                                             } elseif ($this->attackLog['hit'] === 1) {
                                                 $secondHit = (int)($hit * 2 / 3);
@@ -1335,12 +1368,14 @@ final class BattleEngine
             $typeCoe = 0.5;
         }
 
-        // 天赋系数
-        // 依赖未移植：名将进阶 skill1_value / skill2_value / skill3_value 加到天赋系数上
+        // 天赋系数（名将进阶技能 1 加到攻击天赋系数，技能 2 / 3 加到物防 / 策防天赋系数；battle_model.php:4233 ~ 4266）
         $attackTalentCoe = $defenseTalentCoe = 1;
         if ($attack['talentid']) {
             // 猛将取物攻系数，其他取策攻系数
             $attackTalentCoe = self::talent($attack['talentid'], (int)$attack['type'] === 1 ? 'pattack' : 'sattack');
+            if (isset($attack['advanced'])) {
+                $attackTalentCoe += $attack['advanced']['skill1_value'];
+            }
         }
 
         // 防御值：旧版只在防御方有天赋时才赋值（猛将打物防 defense1、其他打策防 defense2），
@@ -1349,9 +1384,15 @@ final class BattleEngine
         if ($defense['talentid']) {
             if ((int)$attack['type'] === 1) {
                 $defenseTalentCoe = self::talent($defense['talentid'], 'pdefense');
+                if (isset($defense['advanced'])) {
+                    $defenseTalentCoe += $defense['advanced']['skill2_value'];
+                }
                 $defenseValue = $defense['defense1'];
             } else {
                 $defenseTalentCoe = self::talent($defense['talentid'], 'sdefense');
+                if (isset($defense['advanced'])) {
+                    $defenseTalentCoe += $defense['advanced']['skill3_value'];
+                }
                 $defenseValue = $defense['defense2'];
             }
         }
@@ -1461,8 +1502,20 @@ final class BattleEngine
 
         // 暴击 1.5 倍
         if ($hit) {
-            // 依赖未移植：将魂(8) / 美人 / 星魄 / 套装暴击伤害加成
-            $hurt = $hurt * 1.5;
+            // 暴击伤害：将魂(8) 按值加（hurt_add），美人 / 星魄按百分比加（hurt_add_val，battle_model.php:4436），只对玩家（有体力字段）；
+            // 依赖未移植：套装暴击伤害加成
+            $hurtAdd = 0;
+            $hurtAddVal = 0;
+            if (isset($attack['tili'], $attack['soul'][8])) {
+                $hurtAdd += (int)($hurt * $attack['soul'][8] / 100);
+            }
+            if (isset($attack['tili'], $attack['beauty_arr'])) {
+                $hurtAddVal += $attack['beauty_arr']['harm'];
+            }
+            if (isset($attack['tili'], $attack['star_arr'])) {
+                $hurtAddVal += $attack['star_arr']['harm'];
+            }
+            $hurt = $hurt * 1.5 + $hurt * $hurtAddVal / 100 + $hurtAdd;
         }
 
         // 依赖未移植：套装最终伤害加成（lasthurt）
@@ -1522,6 +1575,17 @@ final class BattleEngine
             }
         }
         return $return;
+    }
+
+    /**
+     * 玩家攻击者的暴击率加成：将魂(7) + 名将成就 crit + 星魄 crit（旧版 _general_soul[ugid][7]、_addition_arr[uuid]['crit']、
+     * _star_arr[uuid]['crit']）
+     *
+     * @param array<string, mixed> $attack
+     */
+    private static function playerCrit(array $attack): int
+    {
+        return (int)(($attack['soul'][7] ?? 0) + ($attack['addition_arr']['crit'] ?? 0) + ($attack['star_arr']['crit'] ?? 0));
     }
 
     private function rand(int $min, int $max): int

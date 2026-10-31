@@ -9,7 +9,7 @@ use OmniPHP\Database\DB;
 /**
  * 玩家活动信息（移植旧版 models/member_model.php 的 zc_sanguo_member_activity 读写：get_activity_info / update_activity_info）
  *
- * 新版 member_activity 只有已移植玩法的字段（将魂星路、多人副本、金银岛、四象圣域、通天塔），其余旧版字段随对应玩法补充。
+ * 新版 member_activity 只有已移植玩法的字段（将魂星路、多人副本、金银岛、四象圣域、通天塔、VIP 工资），其余旧版字段随对应玩法补充。
  */
 final class MemberActivity
 {
@@ -37,6 +37,8 @@ final class MemberActivity
         'freeheaven' => 0,
         'heaventimes' => 10,
         'heavendate' => 0,
+        // VIP 工资
+        'vipwage_dateline' => 0,
     ];
 
     /**

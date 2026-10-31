@@ -35,7 +35,7 @@ class FirstRechargeLog extends Model
      *
      * 只记第一次：gold = 充值金额 * 10；写入成功后 member_field.first_recharge 置为 2（充值 >= 6 时，
      * 客户端据此弹出领奖），否则置 0。已有日志时不做任何事。
-     * 依赖未移植：充值入口（旧版 controllers/pay.php 各渠道回调调用本方法），新版尚无充值流程。
+     * 由充值核心 Model\Pay::complete → Model\Vip::pay 在玩家行锁事务里调用（旧版 controllers/pay.php 各渠道回调 → vip_model->pay）。
      *
      * @param int $addMoney 充值金额（旧版参数名 $add_gold，实为人民币元）
      * @return bool 是否写入了新日志
@@ -54,6 +54,7 @@ class FirstRechargeLog extends Model
         ]);
 
         // 旧版此处用 $this->member['uid']（充值回调里即当前玩家）更新 first_recharge / first_recharge_an
+        // （first_recharge_an 为安卓客户端用的同一标识，新版 member_field 无此字段，主城接口恒回 0）
         DB::table('member_field')->where('uid', $uid)->update(['first_recharge' => $addMoney >= 6 ? 2 : 0]);
         Redis::del('player:' . $uid);
         return true;

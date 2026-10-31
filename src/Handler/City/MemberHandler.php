@@ -74,7 +74,7 @@ final class MemberHandler
                 'soulpack' => 4,
                 'act' => 100,
                 'maxact' => 100,
-                'vip' => 1,
+                'vip' => 0,
                 'bagnum' => 20,
                 'guide' => 0,
                 'guidestep' => 0,

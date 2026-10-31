@@ -18,9 +18,15 @@ use Hanjiang\MasterData\SanctumMonster;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\SoulMonster;
 use Hanjiang\MasterData\Talent;
+use Hanjiang\Model\Advanced;
+use Hanjiang\Model\Beauty;
+use Hanjiang\Model\GeneralBook;
+use Hanjiang\Model\HeroTalent;
 use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnMatrix;
 use Hanjiang\Model\OwnMount;
+use Hanjiang\Model\OwnSoul;
+use Hanjiang\Model\OwnStar;
 use OmniPHP\Database\DB;
 use RuntimeException;
 
@@ -58,6 +64,21 @@ final class TeamBuilder
      */
     private const array GENERAL_ATTR = ['id', 'name', 'quality', 'level', 'image', 'type', 'wuli', 'zhili', 'tili', 'talentid', 'skillid'];
 
+    /** 星魄加成开启的主公等级（init_member_team_info：$level >= 80） */
+    private const int STAR_OPEN_LEVEL = 80;
+
+    /** 美人加成开启的主公等级（init_member_team_info：$level >= 60） */
+    private const int BEAUTY_OPEN_LEVEL = 60;
+
+    /** 主公天赋开启的主公等级（init_member_team_info：$level >= 91） */
+    private const int HERO_TALENT_OPEN_LEVEL = 91;
+
+    /** 名将成就加成开启的主公等级（init_member_team_info：$level >= 81） */
+    private const int ACHIEVEMENT_OPEN_LEVEL = 81;
+
+    /** 名将进阶开启的主公等级（init_member_team_info：$level >= 100） */
+    private const int ADVANCED_OPEN_LEVEL = 100;
+
     /**
      * 玩家队伍（移植 battle_model.php:init_member_team_info）
      *
@@ -77,10 +98,23 @@ final class TeamBuilder
     {
         $return = ['status' => 0, 'team' => [], 'matrix_type' => 0, 'matrix_coe' => 0.0];
 
+        // 主公等级（旧版本人取 $this->member['level']，他人取 get_base_info；玩家不存在按 0）
+        $level = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('level') ?? 0);
+
         // 依赖未移植（以下加成在旧版此处预取，均未移植，按 0 计入下方各步）：
-        // 名将成就 general_model->get_own_addition（主公 81 级开启）、美人 beauty_model->get_beauty_addition（60 级）、
-        // 星魄 star_model->get_star_addition（80 级）、国家学院 warcollege_model->get_warcollege_addition（国家 30 级）、
-        // 神树 sacredtree_model->get_tree_by_uid（活动开启时）
+        // 国家学院 warcollege_model->get_warcollege_addition（国家 30 级）、神树 sacredtree_model->get_tree_by_uid（活动开启时）
+
+        // 名将成就加成（general_model->get_own_addition：主公 81 级开启，battle_model.php:1347；没有记录时为空，不加成）。
+        // 旧版记在 _addition_arr[uuid]，这里记在本队每个单位的 addition_arr 上（BattleEngine 读取暴击率 / 闪避率 / 识破率）
+        $additionArr = $level >= self::ACHIEVEMENT_OPEN_LEVEL ? GeneralBook::ownAddition($uid) : [];
+
+        // 星魄加成（star_model->get_star_addition：主公 80 级开启；没有记录时建一行全 0，同旧版）。
+        // 旧版记在 _star_arr[uuid]，这里记在本队每个单位的 star_arr 上（BattleEngine 读取暴击 / 闪避 / 识破 / 暴击伤害 / 抗晕）
+        $starArr = $level >= self::STAR_OPEN_LEVEL ? OwnStar::addition($uid) : null;
+
+        // 美人加成（beauty_model->get_beauty_addition：主公 60 级开启，battle_model.php:1351）。
+        // 旧版记在 _beauty_arr[uuid]，这里记在本队每个单位的 beauty_arr 上（BattleEngine 读取闪避 / 识破 / 暴击伤害）
+        $beautyArr = $level >= self::BEAUTY_OPEN_LEVEL ? Beauty::addition($uid, time()) : null;
 
         // 阵法：旧版 member_field.matrixid 为 0 返回 -1
         $matrixid = OwnMatrix::activeId($uid);
@@ -150,9 +184,23 @@ final class TeamBuilder
         $gemPowerByEid = self::gemPowerByEid($uid, $equipBySite);
 
         // 依赖未移植：锻造套装 equip_forge_model->get_suit_attr（newquality > 0 的装备）
-        // 依赖未移植：将魂 soul_model->get_general_soul / get_soul_by_id（转生 > 0 的将领）
-        // 依赖未移植：主公天赋 talent_model->get_talent_list（主公 91 级开启）
-        // 依赖未移植：名将进阶 advanced_model->get_advanced_by_gid（主公 100 级开启）
+
+        // 将魂（soul_model->get_general_soul / get_soul_by_id：转生 > 0 的将领槽位上的将魂，[将领 id => [类型 => 属性]]）。
+        // 旧版记在 _general_soul[serverid_gid]，这里记在单位的 soul 上（BattleEngine 读取生命 4 / 闪避 5 / 识破 6 / 暴击率 7 / 暴击伤害 8 / 抗晕 12）
+        $soulGeneralArr = [];
+        foreach ($generalArr as $gid => $row) {
+            if ((int)$row['turn'] > 0) {
+                $soulGeneralArr[] = $gid;
+            }
+        }
+        $generalSoul = OwnSoul::battleSouls($soulGeneralArr);
+
+        // 主公天赋（talent_model->get_talent_list：主公 91 级开启；没有记录时建 5 行，同旧版）
+        $heroTalentArr = $level >= self::HERO_TALENT_OPEN_LEVEL ? HeroTalent::list($uid) : [];
+
+        // 名将进阶（advanced_model->get_advanced_by_gid：主公 100 级开启，battle_model.php:1569；没有进阶记录的将领不加成）。
+        // 旧版记在 _advanced_arr[ugid]，这里记在单位的 advanced 上（BattleEngine 读取天赋攻防系数 skill1 ~ 3、生命系数 skill4）
+        $advancedArr = $level >= self::ADVANCED_OPEN_LEVEL ? Advanced::byGids($uid, array_keys($generalArr)) : [];
 
         $team = [];
         foreach ($matrix as $pos => $gid) {
@@ -168,11 +216,16 @@ final class TeamBuilder
                 $general[$attr] = $generalInfo[$attr];
                 if (in_array($attr, ['wuli', 'zhili', 'tili'], true)) {
                     $general[$attr] = (int)$general[$attr] + (int)$generalInfo[$attr . 'up'];
-                    // 依赖未移植：名将进阶初始属性 _advanced_arr[ugid][wuli/zhili/tili]（主公 100 级）
-                    $general[$attr] += 0;
+                    // 名将进阶 增加初始属性
+                    if (isset($advancedArr[$gid])) {
+                        $general[$attr] += $advancedArr[$gid][$attr];
+                    }
                 }
             }
             $general['uid'] = $uid;
+            if (isset($advancedArr[$gid])) {
+                $general['advanced'] = $advancedArr[$gid];
+            }
 
             $level = (int)$generalInfo['level'];
             $turn = (int)$generalInfo['turn'];
@@ -206,10 +259,24 @@ final class TeamBuilder
                     $mountInfo = $mount;
                 }
             }
-            // 依赖未移植：名将进阶初始血量 _advanced_arr[ugid][hp]（主公 100 级）
-            $general['all_blood'] += 0;
-            // 依赖未移植：主公天赋 hero_talent（主公 91 级；type 1 猛将攻击 / 3 谋士攻击 / 2 物防 / 4 策防 / 5 血量）
-            $general['attack'] += 0;
+            // 名将进阶初始血量
+            if (isset($advancedArr[$gid])) {
+                $general['all_blood'] += $advancedArr[$gid]['hp'];
+            }
+            // 主公天赋：type 1 猛将攻击 / 3 谋士攻击 / 2 物防 / 4 策防 / 5 血量
+            foreach ($heroTalentArr as $value) {
+                if ($value['type'] === 1 && (int)$general['type'] === 1) {
+                    $general['attack'] += $value['power'];
+                } elseif ($value['type'] === 3 && (int)$general['type'] === 2) {
+                    $general['attack'] += $value['power'];
+                } elseif ($value['type'] === 2) {
+                    $general['defense1'] += $value['power'];
+                } elseif ($value['type'] === 4) {
+                    $general['defense2'] += $value['power'];
+                } elseif ($value['type'] === 5) {
+                    $general['all_blood'] += $value['power'];
+                }
+            }
 
             // 士气、参与攻击回合数、抗暴击率、命中精准
             $general['power'] = 0;
@@ -219,13 +286,93 @@ final class TeamBuilder
             $general['suitbuff'] = ['xixue' => 0, 'clearpower' => 0, 'retpower' => 0, 'thipower' => 0, 'fanshang' => 0];
 
             // 依赖未移植：锻造套装属性（suit2_* ~ suit4_*，27 类加成）
-            // 依赖未移植：将魂 士气(1) / 武力(2) / 智力(3) / 抗暴击率(11)
-            // 依赖未移植：名将成就加成 _addition_arr（主公 81 级；三围、血量、士气、攻防、命中、抗暴）
-            // 依赖未移植：美人加成 _beauty_arr（主公 60 级；三围、攻防、命中）
-            // 依赖未移植：星魄加成 _star_arr（主公 80 级；三围、血量、士气、攻防、命中、抗暴）
+
+            // 士气 武力 智力 抗暴击率 将魂加成
+            $soul = $generalSoul[$gid] ?? null;
+            if ($soul !== null) {
+                $general['soul'] = $soul;
+                $general['power'] += $soul[1] ?? 0;
+                $general['wuli'] += $soul[2] ?? 0;
+                $general['zhili'] += $soul[3] ?? 0;
+                $general['kcrit'] += $soul[11] ?? 0;
+            }
+
+            // 名将成就加成（battle_model.php:1864 ~ 1882）
+            if ($additionArr !== []) {
+                $general['addition_arr'] = $additionArr;
+                // 武力 智力 体力 血量 士气
+                $general['wuli'] += $additionArr['wuli'];
+                $general['zhili'] += $additionArr['zhili'];
+                $general['tili'] += $additionArr['tili'];
+                $general['all_blood'] += $additionArr['blood'];
+                $general['power'] += $additionArr['power'];
+                // 物攻 / 命中（猛将），策攻 / 精准（谋士）
+                if ((int)$general['type'] === 1) {
+                    $general['attack'] += $additionArr['attack'];
+                    $general['mingzhong'] += $additionArr['mingzhong'];
+                } elseif ((int)$general['type'] === 2) {
+                    $general['attack'] += $additionArr['pattack'];
+                    $general['mingzhong'] += $additionArr['jingzhun'];
+                }
+                // 物防、策防、抗暴击率
+                $general['defense1'] += $additionArr['defense'];
+                $general['defense2'] += $additionArr['pdefense'];
+                $general['kcrit'] += $additionArr['kcrit'];
+            }
+            // 美人加成（battle_model.php:1883 ~ 1912）
+            if ($beautyArr !== null) {
+                $general['beauty_arr'] = $beautyArr;
+                // 武力 智力 体力
+                $general['wuli'] += $beautyArr['wuli'];
+                $general['zhili'] += $beautyArr['zhili'];
+                $general['tili'] += $beautyArr['tili'];
+                // 物攻 / 命中（猛将），策攻 / 精准（谋士）
+                if ((int)$general['type'] === 1) {
+                    $general['attack'] += $beautyArr['attack'];
+                    $general['mingzhong'] += $beautyArr['mingzhong'];
+                } elseif ((int)$general['type'] === 2) {
+                    $general['attack'] += $beautyArr['pattack'];
+                    $general['mingzhong'] += $beautyArr['jingzhun'];
+                }
+                // 物防、策防
+                $general['defense1'] += $beautyArr['defense'];
+                $general['defense2'] += $beautyArr['pdefense'];
+            }
+
+            // 星魄加成
+            if ($starArr !== null) {
+                $general['star_arr'] = $starArr;
+                // 武力 智力 体力 血量 士气
+                $general['wuli'] += $starArr['wuli'];
+                $general['zhili'] += $starArr['zhili'];
+                $general['tili'] += $starArr['tili'];
+                $general['all_blood'] += $starArr['blood'];
+                $general['power'] += $starArr['power'];
+                // 物攻 / 命中（猛将），策攻 / 精准（谋士）
+                if ((int)$general['type'] === 1) {
+                    $general['attack'] += $starArr['attack'];
+                    $general['mingzhong'] += $starArr['mingzhong'];
+                } elseif ((int)$general['type'] === 2) {
+                    $general['attack'] += $starArr['pattack'];
+                    $general['mingzhong'] += $starArr['jingzhun'];
+                }
+                // 物防、策防、抗暴击率
+                $general['defense1'] += $starArr['defense'];
+                $general['defense2'] += $starArr['pdefense'];
+                $general['kcrit'] += $starArr['kcrit'];
+            }
+
             // 依赖未移植：国家学院加成 _warcollege_arr（国家 30 级；三围、士气、攻防、命中）
-            // 依赖未移植：将魂 命中(9) / 精准(10)
-            $general['power'] += 0;
+
+            // 将魂命中（猛将 9）/ 精准（其他 10）：已有命中时累加，否则直接取将魂值
+            $mingzhongSoul = (int)$general['type'] === 1 ? ($soul[9] ?? null) : ($soul[10] ?? null);
+            if ($mingzhongSoul !== null) {
+                if ($general['mingzhong'] > 0) {
+                    $general['mingzhong'] += $mingzhongSoul;
+                } else {
+                    $general['mingzhong'] = $mingzhongSoul;
+                }
+            }
 
             // 6 星以上武将战斗特效：只对当前请求的玩家本人生效
             $general['star'] = ((int)$generalInfo['star'] >= 6 && $self) ? 1 : 0;

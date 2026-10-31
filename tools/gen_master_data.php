@@ -24,7 +24,7 @@ const TABLES = [
     'act_treasure_rank', 'act_treasure_reward', 'act_veteran_reward', 'actenrichment_reward', 'activationcode',
     'activationcode_reward', 'activity_time', 'actkemari_exchange_lottery', 'actkemari_rank_reward', 'actkemari_reward',
     'actsevenstar_actionprice', 'actsevenstar_actionreward', 'actsevenstar_generaltemp', 'actsevenstar_rankreward',
-    'advanced_info', 'advanced_skill', 'arena_exchange', 'arena_rankreward', 'arena_reward',
+    'advanced_info', 'advanced_skill', 'alipay_product', 'arena_exchange', 'arena_rankreward', 'arena_reward',
     'beatengod_box_reward', 'beatengod_hit_chip', 'beatengod_hit_reward', 'beatengod_rank_reward',
     'beauty_advanced', 'beauty_chip', 'beauty_dialogue', 'beauty_loot_box', 'beauty_pamper', 'beauty_skill', 'beauty_temp',
     'blackmarket', 'book', 'book_achievement', 'book_addition', 'business',

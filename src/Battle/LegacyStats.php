@@ -446,7 +446,7 @@ final class LegacyStats
      *
      * @return array<string, mixed>|null
      */
-    private static function topStrengAchieve(string $aid): ?array
+    public static function topStrengAchieve(string $aid): ?array
     {
         if ($aid === '') {
             return null;
