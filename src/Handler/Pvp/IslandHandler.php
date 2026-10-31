@@ -29,7 +29,6 @@ use OmniPHP\Http\Context;
  *
  * 主公 41 级以上挑战计日常任务 9（DailyTask）；军令 / 元宝 / 银币增减由 Member 记流水。
  *
- * 依赖未移植：sub_act 的翻牌活动计数 flopact（flop，旧版数据中已结束）。
  * 战斗 CD 照旧版读 member_field.attackstatus / attackdateline（cd_model->get_attack）；旧版 vip_model->cd_status() 恒为 1，
  * 战后不写 CD、info.cd 恒为 0。
  */

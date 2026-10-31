@@ -34,8 +34,6 @@ use OmniPHP\Http\Context;
  * 首杀、掉落、扫荡、每日奖励照旧版发放并记流水；resource 为当前三种石头数量。
  *
  * 元宝消耗由 Member::deductCurrency 记元宝流水与日常任务 5（元宝消费）。
- *
- * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class HeavenHandler
 {

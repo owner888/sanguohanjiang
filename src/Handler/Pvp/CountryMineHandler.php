@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\Pvp;
 
+use Hanjiang\Handler\Activity\FriendHandler;
 use Hanjiang\Handler\Activity\MessageHandler;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\TavernHandler;
@@ -32,7 +33,8 @@ use OmniPHP\Http\Context;
  *
  * 抢夺写信件战报（Message::recordPkReport）、主公 41 级以上计日常任务 13（DailyTask）；元宝流水由 Member 记。
  *
- * 依赖未移植：好友（friend_model->get_list / get_friend_by_id，新版好友为自定数据），friend 恒为 0。
+ * 好友标记 friend：矿区页按好友 uid 列表缓存（FriendHandler::friendList，旧版 friend_model->get_list），单矿按好友记录
+ * （FriendHandler::friendById，status 1 为好友）。
  */
 final class CountryMineHandler
 {
@@ -132,6 +134,8 @@ final class CountryMineHandler
         // 取该页角色
         $roleList = self::getInfoBySite($page);
         if ($roleList !== []) {
+            // 获取我的好友列表
+            $friendList = FriendHandler::friendList((int)$member['uid']);
             $uidarr = array_map(static fn(array $val): int => $val['uid'], $roleList);
             // 按uid数组查询角色信息
             $userinfo = [];
@@ -174,8 +178,8 @@ final class CountryMineHandler
                 if ($list[$key]['get_jade'] < 0) {
                     $list[$key]['get_jade'] = 0;
                 }
-                // 依赖未移植：好友（friend_model->get_list），friend 恒为 0
-                $list[$key]['friend'] = 0;
+                // 是否是我的好友
+                $list[$key]['friend'] = in_array($role['uid'], $friendList, true) ? 1 : 0;
             }
         } else {
             foreach ($list as $key => $val) {
@@ -264,8 +268,9 @@ final class CountryMineHandler
             if ($info['get_jade'] < 0) {
                 $info['get_jade'] = 0;
             }
-            // 依赖未移植：好友（friend_model->get_friend_by_id），friend 恒为 0
-            $info['friend'] = 0;
+            // 判断该用户是不是自己的好友
+            $friend = FriendHandler::friendById($uid, $mineLog['uid']);
+            $info['friend'] = $friend !== null && $friend['status'] === 1 ? 1 : 0;
         }
 
         $return['status'] = 1;

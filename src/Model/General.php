@@ -124,12 +124,14 @@ class General extends Model
      * 添加武将并返回旧版 general_model->add_general 的返回值（status / type / generalid / name / image / star / 三围 /
      * skill / talent 技能与天赋行）；入库走 createFromTemplate
      *
+     * $type 同 createFromTemplate（1 为 1 级，其他为 30 级）。
+     *
      * @return array<string, mixed>|null 模板不存在或已拥有时为 null
      */
-    public static function addGeneral(int $uid, int $gid): ?array
+    public static function addGeneral(int $uid, int $gid, int $type = 1): ?array
     {
         $tpl = GeneralTemplate::ROWS[$gid] ?? null;
-        if ($tpl === null || self::createFromTemplate($uid, $gid) === null) {
+        if ($tpl === null || self::createFromTemplate($uid, $gid, $type) === null) {
             return null;
         }
         return [
@@ -228,6 +230,14 @@ class General extends Model
     public static function own(int $uid, int $gid): ?array
     {
         return DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
+    }
+
+    /**
+     * 是否已拥有该模板的将领（general_model->get_own_by_id($generalid, $uid, 1) 的 status == 1）
+     */
+    public static function ownsTemplate(int $uid, int $generalid): bool
+    {
+        return DB::table('general')->where('uid', $uid)->where('generalid', $generalid)->whereNull('deleted_at')->value('id') !== null;
     }
 
     /**

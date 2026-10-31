@@ -35,8 +35,6 @@ use OmniPHP\Http\Context;
  * buy_times、pk、mop_up、get_mopup_price、get_report_list、get_report_info、send_to_chat。旧版公开方法即这 10 个。
  *
  * 元宝 / 军令 / 声望增减由 Member 记流水，元宝消耗另计日常任务 5。
- *
- * 依赖未移植：sub_gold / sub_act 的翻牌活动计数 flopgold / flopact（flop，旧版数据中已结束）。
  */
 final class CopiesHandler
 {

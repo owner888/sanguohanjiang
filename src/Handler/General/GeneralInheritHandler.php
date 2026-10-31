@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\GeneralInherit;
+use Hanjiang\Model\Edifice;
 use Hanjiang\Model\General;
 use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
@@ -27,7 +28,7 @@ use OmniPHP\Http\Context;
  * 客户端 inheritpop.js 调用 index、get_inherit_info（gid）、preview / go_inherit（gid1、gid2、type、confirm）。
  *
  * 依赖未移植：老兵召回活动的免费至尊继承（recall，ActivityTime 中 2016-12-31 已结束；actveteran_model 未移植，按活动未开启处理）。
- * 旧版 index 的首次打开记录 edifice_model->add_edifice_log(4) 只写日志，不移植。
+ * index 记首次打开（edifice_model->add_edifice_log(4)，Model\Edifice）。
  */
 final class GeneralInheritHandler
 {
@@ -103,6 +104,8 @@ final class GeneralInheritHandler
             $inheritTime['inherit_' . $freeSite] += 1;
         }
         unset($inheritTime['uid']);
+        // 首次打开操作记录 (类型4)
+        Edifice::addLog($uid, Edifice::INHERIT);
         $return['status'] = 1;
         $return['list'] = $listArr;
         $return['rule'] = $ruleArr;
@@ -580,6 +583,19 @@ final class GeneralInheritHandler
             'inherit_4' => (int)($row['inherit_4'] ?? 0),
             'uid' => $uid,
         ];
+    }
+
+    /**
+     * 增加免费继承次数（general_model->add_inherit_times：没有记录时先建档；神树升级奖励 8 ~ 11 → 类型 1 ~ 4）
+     */
+    public static function addInheritTimes(int $uid, int $type): void
+    {
+        if ($type < 1 || $type > 4) {
+            return;
+        }
+        self::inheritTimes($uid);
+        $col = 'inherit_' . $type;
+        DB::execute("UPDATE `zc_sanguo_inherit_times` SET `{$col}` = `{$col}` + 1 WHERE `uid` = :uid AND `deleted_at` IS NULL", ['uid' => $uid]);
     }
 
     /**

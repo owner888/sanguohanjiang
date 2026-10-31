@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Model;
 
+use Hanjiang\Handler\Pvp\BeatengodHandler;
 use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\AlipayProduct;
 use OmniPHP\Cache\Redis;
@@ -205,9 +206,10 @@ final class Pay
             DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->update(['rebate_firstpay' => 1]);
         }
 
+        // 暴打名将活动开启（结束前一天为止），记录本次充值金额（beatengod_model->add_beatengod_pay_order）
+        BeatengodHandler::addPayOrder($uid, (int)$user['level'], $amount, $orderId, $now);
         // 依赖未移植：圣诞 / 春节充值记录 christmas_model->add_christmas_log（christmaspay / newyearpay）、
-        // 暴打名将 beatengod_model->add_beatengod_pay_order、我爱世界杯 worldcup_model->add_beatengod_pay_order、
-        // 充值送豪奖 actthirty_model->add_thirty_pay_order
+        // 我爱世界杯 worldcup_model->add_beatengod_pay_order、充值送豪奖 actthirty_model->add_thirty_pay_order（节日活动）
         // 依赖未移植：pay_act_init 的充值类活动计数——七夕 acttanabata、国家庆典 actcelebration、中秋 moon、
         // 发工资 actpaychecks、貔貅聚财 actenrichment（这些活动未移植，旧版数据也均已结束）
 

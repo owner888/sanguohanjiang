@@ -42,8 +42,6 @@ use OmniPHP\Http\Context;
  * （OwnSoul::addHeroSoul，失败时扫荡返回 -10、挑战返回 -9）。
  *
  * 获得将魂计主线任务 15；元宝 / 原魂增减由 Member 记流水（元宝消耗另计日常任务 5）；付费点统计 tower_buy / tower_jiabei（StatPay）。
- *
- * 依赖未移植：sub_gold 的四方来朝（翻牌活动 flop）元宝计数（旧版数据中已结束）。
  */
 final class TowerHandler
 {

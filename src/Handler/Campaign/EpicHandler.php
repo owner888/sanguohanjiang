@@ -25,8 +25,6 @@ use OmniPHP\Http\Context;
  * 客户端调用：index、select_epic、refresh、force、buy_lock_times、buy_refresh_times（epicpop.js）。
  *
  * 刷新计日常任务 14（主公 41 级以上）；元宝 / 声望增减由 Member 记流水，元宝消耗另计日常任务 5。
- *
- * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class EpicHandler
 {

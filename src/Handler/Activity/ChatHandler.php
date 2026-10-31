@@ -6,7 +6,9 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\CountryHandler;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
+use Hanjiang\Model\Sacredtree;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -22,7 +24,6 @@ use OmniPHP\Http\Context;
  *
  * 未移植：
  * - index 的战神上线公告（chat_model->god_login + transfer_model 通知跨服，依赖未移植：战神殿 god）；
- * - send 的神树活动 tree（依赖未移植：sacredtree_model->get_tree_by_uid，tree 恒为 0）；
  * - index / read 的 platform = android / wp8 原生客户端格式转换（H5 客户端不传 platform）；
  * - send_system_chat（旧版不校验身份即可发全服系统消息）、clear_ban_key（运维口令接口），客户端都不调用；
  *   服务端代码发系统消息直接用 Chat::sendToAll(…, 7)。
@@ -107,8 +108,8 @@ final class ChatHandler
             return $return;
         }
 
-        // 依赖未移植：神树活动中拥有的树（sacredtree_model->get_tree_by_uid），tree 恒为 0
-        $tree = 0;
+        // 神树活动中拥有的树（旧版 chat.php 的神树开关默认开着：活动未开启时按版本 0 查，取不到为 0）
+        $tree = Sacredtree::treeByUid(Sacredtree::openVersion(BossClock::now()) ?? 0, [$uid])[$uid]['treeid'] ?? 0;
         $status = self::memberStatus($row);
         $message = Chat::checkBadword($message);
 

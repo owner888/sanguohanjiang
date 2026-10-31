@@ -6,7 +6,9 @@ namespace Hanjiang\Handler\Pvp;
 
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
+use Hanjiang\Handler\Activity\DiceHandler;
 use Hanjiang\Handler\Activity\MessageHandler;
+use Hanjiang\Handler\Activity\OverseasTradeHandler;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
 use Hanjiang\MasterData\CountryDonate;
@@ -14,6 +16,7 @@ use Hanjiang\MasterData\CountryJob;
 use Hanjiang\MasterData\CountryLearn;
 use Hanjiang\MasterData\CountryLevel;
 use Hanjiang\Model\Banquet;
+use Hanjiang\Model\CountryTaxes;
 use Hanjiang\Model\Expostulation;
 use Hanjiang\Model\General;
 use Hanjiang\Model\Member;
@@ -1019,7 +1022,8 @@ final class CountryHandler
         // 国家排行列表
         $list = self::allCountryPages();
 
-        // 依赖未移植：overseastrade_model->clear_team 海外贸易队伍清理
+        // 海外贸易队伍清理
+        OverseasTradeHandler::clearTeam($uid);
         // 国家宴会队伍清理
         Banquet::repair($myCountry, $uid, $uid);
         // 国战报名状态清理
@@ -1027,7 +1031,8 @@ final class CountryHandler
         // 国家谏言支持状态清理、清理没有采纳的谏言
         Expostulation::clearSupStatus($uid);
         Expostulation::clearExpos($uid);
-        // 依赖未移植：dice_model->clear_dice_info 清除国家骰子信息
+        // 清除国家骰子信息
+        DiceHandler::clearDiceInfo($uid);
         // 清理国家学院buffcd
         WarCollege::clearBuffcd($uid);
 
@@ -1432,7 +1437,8 @@ final class CountryHandler
         // 更新计划任务标志位（依赖未移植：消费方 cron_country 计划任务）
         Redis::set(self::FLOG_KEY, 1, self::TTL);
 
-        // 依赖未移植：overseastrade_model->clear_team 海外贸易队伍清理
+        // 海外贸易队伍清理
+        OverseasTradeHandler::clearTeam($uid);
         // 国家宴会队伍清理（旧版队伍前缀取踢人者的国家，即同一国家）
         Banquet::repair($myCountry, $uid, $myUid);
         // 国家谏言支持状态清理、清理没有采纳的谏言
@@ -1440,7 +1446,8 @@ final class CountryHandler
         Expostulation::clearExpos($uid);
         // 国战报名状态清理
         SiegeHandler::clearSiegeStatus($uid);
-        // 依赖未移植：dice_model->clear_dice_info 清除国家骰子信息
+        // 清除国家骰子信息
+        DiceHandler::clearDiceInfo($uid);
 
         // 添加国家退出记录(状态 1退出，2进入，3被踢出)
         self::addCountryLog([
@@ -2628,7 +2635,11 @@ final class CountryHandler
     private static function updateMemberInfo(array $data, int $uid): int
     {
         if (isset($data['contribute']) && $data['contribute'] > 0) {
-            // 依赖未移植：member_country_taxes_model->change_taxes('+', 新增今日贡献 * 0.1) 国家税金累计
+            // 预处理（pretreatment）：新增今日贡献 × 0.1 累加国家税金（member_country_taxes_model->change_taxes('+')）
+            $info = self::memberCountry($uid);
+            $add = (int)$data['contribute'] - (int)($info['contribute'] ?? 0);
+            $country = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('country') ?? 0);
+            CountryTaxes::add($uid, $country, $add * 0.1);
         }
         $affected = DB::table('member_country')->where('uid', $uid)->whereNull('deleted_at')->update($data);
         return $affected > 0 ? 1 : 0;
@@ -3051,18 +3062,20 @@ final class CountryHandler
     }
 
     /**
-     * 玩家为国家加贡献（国宴 / 谏言领奖共用：update_member_info 今日贡献与总贡献 + 增加国家经验 add_exp + 贡献 log）
+     * 玩家为国家加贡献（国宴 / 谏言领奖 / 国家祭祀共用：update_member_info 今日贡献与总贡献 + 增加国家经验 add_exp + 贡献 log）
      *
      * 贡献用一条 UPDATE 原子累加（旧版按请求开始时读到的贡献读改写）。
      *
      * @param array<string, mixed> $member 当前玩家（uid / level / vip / country）
-     * @param int $type 贡献 log 类型（3 谏言、4 国宴）
+     * @param int $type 贡献 log 类型（1 / 2 国家祭祀的银币 / 元宝、3 谏言、4 国宴）
+     * @param int $cost 贡献 log 的花费（国家祭祀记祭祀价格，其余为 0）
      * @return array{contribute: int, allcontribute: int}|null 加完后的今日贡献与总贡献；不在国家里为 null
      */
-    public static function addContribute(array $member, int $donate, int $type, string $class, string $method): ?array
+    public static function addContribute(array $member, int $donate, int $type, string $class, string $method, int $cost = 0): ?array
     {
         $uid = (int)$member['uid'];
-        // 依赖未移植：member_country_taxes_model->change_taxes('+', 新增今日贡献 * 0.1) 国家税金累计
+        // 新增今日贡献 × 0.1 累加国家税金（update_member_info 的 pretreatment → member_country_taxes_model->change_taxes('+')）
+        CountryTaxes::add($uid, (int)$member['country'], $donate * 0.1);
         $affected = DB::execute(
             'UPDATE `zc_sanguo_member_country` SET `contribute` = `contribute` + :add, `allcontribute` = `allcontribute` + :add2
              WHERE `uid` = :uid AND `deleted_at` IS NULL',
@@ -3081,7 +3094,7 @@ final class CountryHandler
         // 记录贡献log
         self::addDonateLog($member, $method, [
             'type' => $type,
-            'cost' => 0,
+            'cost' => $cost,
             'donate' => $donate,
             'contribute' => $data['contribute'],
             'allcontribute' => $data['allcontribute'],

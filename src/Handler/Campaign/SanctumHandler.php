@@ -36,8 +36,6 @@ use OmniPHP\Http\Context;
  * （OwnGem::addGem / addGemuse）；gem / all_chip / all_gem 为当前碎片数。
  *
  * 元宝消耗由 Member::deductCurrency 记元宝流水与日常任务 5（元宝消费）。
- *
- * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class SanctumHandler
 {

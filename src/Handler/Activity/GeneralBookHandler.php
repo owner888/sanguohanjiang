@@ -8,6 +8,7 @@ use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\General as GeneralTemplate;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\Edifice;
 use Hanjiang\Model\GeneralBook;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\TraderLog;
@@ -27,7 +28,7 @@ use OmniPHP\Http\Context;
  * 旧版 clear_book_count（运维刷新图鉴总数缓存，直接 echo）客户端不调用，不移植。
  * 并发：levelup 在 Member::locked 玩家行锁内执行。
  *
- * 依赖未移植：首次打开记录 edifice_model->add_edifice_log(7)、计划任务 cron::update_addition（导入数据后全服重算，运维用）、
+ * 依赖未移植：计划任务 cron::update_addition（导入数据后全服重算，运维用）、
  * 武将折旧 muster sale_general 后的重算（随 sale_general 一起移植）。
  */
 final class GeneralBookHandler
@@ -91,7 +92,8 @@ final class GeneralBookHandler
         // 加成列表（旧版取整行 own_addition 后输出大于 0 的字段，uid 也在其中）
         $return['addition'] = self::additionText(GeneralBook::ownAddition($uid));
 
-        // 依赖未移植：首次打开操作记录 edifice_model->add_edifice_log(7)
+        // 首次打开操作记录 (类型7)
+        Edifice::addLog($uid, Edifice::BOOK);
 
         $happy = self::happy($now);
         $return['book'] = $book['list'];

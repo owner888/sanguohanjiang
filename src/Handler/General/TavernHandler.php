@@ -12,6 +12,7 @@ use Hanjiang\MasterData\Talent;
 use Hanjiang\MasterData\Trader;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\DailyTask;
+use Hanjiang\Model\Edifice;
 use Hanjiang\Model\Expostulation;
 use Hanjiang\Model\FreeLeap;
 use Hanjiang\Model\General;
@@ -33,7 +34,7 @@ use OmniPHP\Http\Context;
  * 客户端 tradepop.js / barpop.js 调用 index、trade（type、s）、trade_batch、get_list（page、tab）、buy（generalid、num）。
  * 主公 31 级开启。
  *
- * 旧版首次打开记录 edifice_model->add_edifice_log（5 / 9 / 10）只写日志、不影响返回，不移植。
+ * 首次打开记录（edifice_model->add_edifice_log：index 5、get_list 英雄祭坛 9 / 普通酒馆 10）见 Model\Edifice。
  * 与旧版的差别：贸易 / 购买在玩家行锁里执行（宝石、免费次数与扣费不会被并发绕过）；宝石不足以外的支付失败与旧版一样返回 2。
  */
 final class TavernHandler
@@ -62,7 +63,10 @@ final class TavernHandler
         if ((int)$member['level'] < self::OPEN_LEVEL) {
             return ['status' => 5];
         }
-        return self::info((int)$member['uid']);
+        $return = self::info((int)$member['uid']);
+        // 首次打开操作记录 (类型5)
+        Edifice::addLog((int)$member['uid'], Edifice::TRADE);
+        return $return;
     }
 
     /**
@@ -359,6 +363,8 @@ final class TavernHandler
                 $info[$key] = $value;
             }
         }
+        // 首次打开操作记录：进入英雄祭坛(类型9) / 普通酒馆(类型10)
+        Edifice::addLog($uid, $tab === 4 ? Edifice::HEROTAVERN : Edifice::TAVERN);
         $return['page'] = $list['page'];
         $return['perpage'] = $list['perpage'];
         $return['totals'] = $list['totals'];

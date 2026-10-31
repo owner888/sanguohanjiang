@@ -13,7 +13,7 @@ use OmniPHP\Database\DB;
  * 来源：酒馆突飞卡（tavern tab 3）、神将之门奖励、VIP 礼包 / 工资、首充、过关斩将等；消耗：校场突飞 / 突飞扫荡、名将进阶技能。
  *
  * 与旧版的差别：增减用一条 UPDATE 原子完成（旧版按请求开始时读到的张数读改写，并发会丢）。
- * 依赖未移植：sub_freeleap 的翻牌活动计数（四方来朝 flop，member_activity.flopleap*；旧版数据中 2016-12-31 已结束）。
+ * 四方来朝（翻牌）活动期间消耗突飞卡累计翻牌次数（Flop::addSpend，member_activity.flopleap*；旧版数据中 2016-12-31 已结束）。
  */
 final class FreeLeap
 {
@@ -56,7 +56,8 @@ final class FreeLeap
             return $left !== null && (int)$left < $num ? -1 : 0;
         }
         $balance = (int)DB::query('SELECT LAST_INSERT_ID() AS `v`')[0]['v'];
-        // 依赖未移植：四方来朝（翻牌）活动计数 flopleap
+        // 四方来朝
+        Flop::addSpend($uid, Flop::SPEND_LEAP, $num);
         self::log($uid, 2, $num, $balance, $now);
         return 1;
     }

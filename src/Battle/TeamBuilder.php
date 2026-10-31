@@ -20,6 +20,7 @@ use Hanjiang\MasterData\SoulMonster;
 use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\Advanced;
 use Hanjiang\Model\Beauty;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\GeneralBook;
 use Hanjiang\Model\HeroTalent;
 use Hanjiang\Model\OwnGem;
@@ -27,6 +28,7 @@ use Hanjiang\Model\OwnMatrix;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\OwnStar;
+use Hanjiang\Model\Sacredtree;
 use Hanjiang\Model\WarCollege;
 use OmniPHP\Database\DB;
 use RuntimeException;
@@ -103,7 +105,9 @@ final class TeamBuilder
         // 主公等级（旧版本人取 $this->member['level']，他人取 get_base_info；玩家不存在按 0）
         $level = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('level') ?? 0);
 
-        // 依赖未移植（旧版此处预取，按 0 计入下方各步）：神树 sacredtree_model->get_tree_by_uid（活动开启时）
+        // 神树（sacredtree_model->get_tree_by_uid：神树活动开启时取玩家本活动版本的神树；没有记录不加成）。
+        // 旧版记在 _tree_info[uuid]，这里记在本队每个单位的 tree 上（BattleEngine 把 buff 加到血量 ptblood、treeid 记到战斗 buff 的 tree）
+        $tree = Sacredtree::openTree($uid, BossClock::now());
 
         // 名将成就加成（general_model->get_own_addition：主公 81 级开启，battle_model.php:1347；没有记录时为空，不加成）。
         // 旧版记在 _addition_arr[uuid]，这里记在本队每个单位的 addition_arr 上（BattleEngine 读取暴击率 / 闪避率 / 识破率）
@@ -456,6 +460,12 @@ final class TeamBuilder
             }
 
             $team[$pos] = $general;
+        }
+
+        if ($tree !== null) {
+            foreach ($team as $pos => $general) {
+                $team[$pos]['tree'] = ['treeid' => $tree['treeid'], 'buff' => $tree['buff']];
+            }
         }
 
         // 战斗 buff 的坐骑（旧版 battle() 按单位 uuid 取 _mount_info；同一玩家各单位相同）

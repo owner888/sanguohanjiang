@@ -21,8 +21,10 @@ use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Soul;
 use Hanjiang\MasterData\SoulType;
 use Hanjiang\MasterData\Talent;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\DailyTask;
+use Hanjiang\Model\Edifice;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\General;
 use Hanjiang\Model\MainQuestTask;
@@ -35,6 +37,7 @@ use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\PubLog;
+use Hanjiang\Model\Sacredtree;
 use Hanjiang\Model\StatPay;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -156,7 +159,8 @@ final class ArenaHandler
             }
         }
 
-        // 依赖未移植：edifice_model->add_edifice_log(3) 首次打开操作记录
+        // 首次打开操作记录 (类型3)
+        Edifice::addLog($uid, Edifice::ARENA);
 
         // 奖励领取倒计时
         $return['end_time'] = strtotime(date('y-m-d', $now)) + 86400 - $now;
@@ -818,7 +822,16 @@ final class ArenaHandler
         foreach ($list as $key => $val) {
             $list[$key]['tree'] = 0;
         }
-        // 依赖未移植：神树活动（activity_model->activity_status('sacredtree') / sacredtree_model->get_tree_by_uid），tree 恒为 0
+        // 查询前五的神树等级（神树活动开启时）
+        $treeVersion = Sacredtree::openVersion(BossClock::now());
+        if ($treeVersion !== null) {
+            $tree = Sacredtree::treeByUid($treeVersion, array_values(array_map(static fn (array $val): int => (int)$val['uid'], $list)));
+            foreach ($list as $key => $val) {
+                if (isset($tree[(int)$val['uid']])) {
+                    $list[$key]['tree'] = $tree[(int)$val['uid']]['treeid'];
+                }
+            }
+        }
         return $list;
     }
 

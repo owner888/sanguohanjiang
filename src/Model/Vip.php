@@ -183,7 +183,16 @@ final class Vip
                     self::addEpicTimes($uid, 45, $now);
                 }
             }
-            // 依赖未移植：vip 赌石免费切石次数（member_field.stone1~3_times，赌石玩法未移植）
+            // vip 赌石更改：升到 VIP 2~5 / 6~9 / 10 以上时盘龙石 / 仙王玉石 / 九窍灵石免费切石次数 + 10（add_stone_times；
+            // 旧版按读到的次数 + 10 写回，新版单条 UPDATE 累加，tinyint 列封顶 255）
+            if ($lastVip !== $rank && $rank >= 2) {
+                $stone = $rank <= 5 ? 1 : ($rank <= 9 ? 2 : 3);
+                DB::execute(
+                    'UPDATE `zc_sanguo_member_field` SET `stone' . $stone . '_times` = LEAST(`stone' . $stone . '_times` + 10, 255)
+                     WHERE `uid` = :uid AND `deleted_at` IS NULL',
+                    ['uid' => $uid]
+                );
+            }
         }
 
         // 判断是否成功
@@ -312,13 +321,14 @@ final class Vip
     }
 
     /**
-     * 清空 cd（clear_cd：member_field 的攻击 / 征收 cd）
-     *
-     * 依赖未移植：强征 cd（qiangdateline / qiangstatus）与征收状态 levystatus，新版 member_field 尚无这些字段。
+     * 清空 cd（clear_cd：member_field 的强化 / 征收 / 攻击 cd）
      */
     private static function clearCd(int $uid): void
     {
         DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update([
+            'qiangdateline' => 0,
+            'qiangstatus' => 0,
+            'levystatus' => 0,
             'levydateline' => 0,
             'attackdateline' => 0,
             'attackstatus' => 0,

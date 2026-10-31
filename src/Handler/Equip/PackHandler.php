@@ -8,6 +8,10 @@ use Hanjiang\Battle\LegacyStats;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\EquipEssence;
+use Hanjiang\MasterData\WorldShop;
+use Hanjiang\Handler\General\TavernHandler;
+use Hanjiang\Model\FreeLeap;
+use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnGem;
 
 use OmniPHP\Http\Context;
@@ -15,7 +19,7 @@ use OmniPHP\Database\DB;
 use OmniPHP\Cache\Redis;
 
 /**
- * 背包（移植旧版 controllers/pack.php 的 index / sale；use_item 见下方说明）
+ * 背包（移植旧版 controllers/pack.php 的 index / sale / use_item）
  */
 final class PackHandler
 {
@@ -136,14 +140,73 @@ final class PackHandler
     }
 
     /**
-     * 使用物品: c=pack&m=use_item
+     * 使用物品: c=pack&m=use_item&id=&confirm=（旧版 controllers/pack.php:use_item）
+     *
+     * 只用于跨服物品（own_equip type 11 ~ 18，旧版在跨服商城 worldarena 用功勋兑换），奖励规则取 MasterData WorldShop：
+     * type 1 银币（add1 × 主公等级）、2 ~ 4 蓝 / 金 / 紫宝石、5 军令、6 ~ 8 蓝 / 金 / 紫色突飞卡（突飞卡按 1 / 2 / 4 倍张数）。
+     * confirm 为 1 时才扣物品（数量减到 0 时软删除，旧版 disable = 1）、发奖励；否则只返回预览。
+     * 依赖未移植：跨服商城兑换（新版没有获得跨服物品的途径，背包里不会有这类物品，接口回 -1）与全服奖励记录
+     * worldarena_model->add_reward_info（world_reward 表，本服 61 级以上玩家共享 add2 的跨服福利）。
+     *
+     * 状态码：-3 使用物品失败，-2 获取物品奖励信息失败，-1 获取物品信息失败，0 失败，1 成功
      */
     public static function use_item(Context $ctx): array
     {
-        return [
-            'status' => 1,
-            'message' => '使用成功',
-        ];
+        $uid = MemberHandler::resolveUid($ctx);
+        $itemid = (int)$ctx->input('id', 0);
+        $confirm = (int)$ctx->input('confirm', 0);
+        return Member::locked($uid, static function () use ($uid, $itemid, $confirm): array {
+            $return = ['status' => 0];
+            // 获取物品信息
+            $item = DB::table('equipment')->select('id', 'equipid', 'number')->where('uid', $uid)->where('id', $itemid)
+                ->whereBetween('type', 11, 18)->whereNull('deleted_at')->first();
+            if ($item === null || (int)$item['number'] < 1) {
+                $return['status'] = -1;
+                return $return;
+            }
+            // 获取物品奖励规则
+            $info = WorldShop::ROWS[(int)$item['equipid']] ?? null;
+            if ($info === null) {
+                $return['status'] = -2;
+                return $return;
+            }
+            $level = (int)DB::table('member')->where('uid', $uid)->value('level');
+            $num = match ($info['type']) {
+                1 => $info['add1'] * $level,
+                default => $info['add1'],
+            };
+            $times = match ($info['type']) {
+                6 => $info['add1'],
+                7 => $info['add1'] * 2,
+                8 => $info['add1'] * 4,
+                default => 0,
+            };
+            if ($confirm === 1) {
+                $number = (int)$item['number'] - 1;
+                $data = $number === 0 ? ['number' => 0, 'deleted_at' => date('Y-m-d H:i:s')] : ['number' => $number];
+                if (DB::table('equipment')->where('id', (int)$item['id'])->where('uid', $uid)->whereNull('deleted_at')->update($data) !== 1) {
+                    $return['status'] = -3;
+                    return $return;
+                }
+                match ($info['type']) {
+                    1 => Member::addCurrency($uid, silver: $num),
+                    2 => TavernHandler::addJade($uid, 1, $num, 'pack', 'use_item'),
+                    3 => TavernHandler::addJade($uid, 2, $num, 'pack', 'use_item'),
+                    4 => TavernHandler::addJade($uid, 3, $num, 'pack', 'use_item'),
+                    5 => Member::addCurrency($uid, act: $num),
+                    6, 7, 8 => FreeLeap::add($uid, $times),
+                    default => null,
+                };
+                // 依赖未移植：记录到全服奖励表 worldarena_model->add_reward_info（跨服）
+                $after = DB::table('member')->select('silver', 'act')->where('uid', $uid)->first();
+                $return['silver'] = (int)$after['silver'];
+                $return['act'] = (int)$after['act'];
+                $return['number'] = $number;
+            }
+            $return['status'] = 1;
+            $return['info'] = ['type' => $info['type'], 'reward' => $num];
+            return $return;
+        });
     }
 
     /**

@@ -38,8 +38,8 @@ use Random\Randomizer;
  * 国家学院闪避 / 识破（旧版学院的暴击伤害分支已注释掉），名将进阶技能 1 ~ 3 加到天赋攻防系数、技能 4 加到天赋血量系数。
  *
  * 依赖未移植（旧版对应数组在新版恒为空，相关分支不移植）：
- * 锻造套装 _suit_arr 与单位上的 suitbuff（回气 / 偷气 / 清气 / 反伤 / 最终增伤 / 暴击伤害 / 血量伤害倍增）、
- * 神树 _tree_info（buff 里的 tree）。
+ * 锻造套装 _suit_arr 与单位上的 suitbuff（回气 / 偷气 / 清气 / 反伤 / 最终增伤 / 暴击伤害 / 血量伤害倍增）。
+ * 神树 _tree_info 由 TeamBuilder 记在玩家单位的 tree 上（treeid / buff），这里照旧版加到血量 ptblood 并记到 buff 的 tree。
  * 坐骑的特殊属性（血量% / 抗晕 / 最终免伤 / 吸血，旧版也记在 _suit_arr 与 suitbuff）与 buff 里的 mount 由 TeamBuilder 记在单位的
  * suit / suitbuff / mountinfo 上，这里照旧版计算。
  *
@@ -189,7 +189,10 @@ final class BattleEngine
             if ((int)$value['type'] === 2 && $buff['jingzhun'] < $mingzhong) {
                 $buff['jingzhun'] = $mingzhong;
             }
-            // 依赖未移植：神树 buff tree
+            // 神树（旧版 _tree_info[uuid]：神树活动开启时玩家的神树等级，TeamBuilder 记在单位的 tree 上）
+            if (isset($value['tree'])) {
+                $buff['tree'] = $value['tree']['treeid'];
+            }
             // 坐骑（旧版 _mount_info[uuid]：玩家本队品级最高的坐骑，TeamBuilder 记在各单位的 mountinfo）
             if (isset($value['mountinfo'])) {
                 $buff['mount'] = ['id' => $value['mountinfo']['mid'], 'name' => $value['mountinfo']['name'], 'quality' => $value['mountinfo']['quality']];
@@ -245,9 +248,9 @@ final class BattleEngine
     {
         // 名将进阶血量加成（和天赋的数值加起来再一起计算）
         $advancedBlood = (float)($general['advanced']['skill4_value'] ?? 0);
-        // ptblood = 将魂生命(4) + 套装 / 坐骑血量%（旧版 _suit_arr[ugid]['ptblood']，记在单位的 suit 上）
-        // 依赖未移植：神树 buff
-        $ptblood = (float)(($general['soul'][4] ?? 0) + ($general['suit']['ptblood'] ?? 0));
+        // ptblood = 将魂生命(4) + 神树血量 buff（旧版 _tree_info[uuid]['buff']，记在单位的 tree 上）
+        //         + 套装 / 坐骑血量%（旧版 _suit_arr[ugid]['ptblood']，记在单位的 suit 上）
+        $ptblood = (float)(($general['soul'][4] ?? 0) + ($general['tree']['buff'] ?? 0) + ($general['suit']['ptblood'] ?? 0));
         return LegacyStats::battleAllBlood(
             (float)($general['all_blood'] ?? 0),
             (int)($general['tili'] ?? 0),

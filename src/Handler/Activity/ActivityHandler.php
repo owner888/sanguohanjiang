@@ -6,8 +6,8 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\Logined;
 use Hanjiang\Model\WorldBoss;
-use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -25,11 +25,8 @@ final class ActivityHandler
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
         $level = max(1, (int)($member['level'] ?? 1));
 
-        // 连续登录奖励提示气泡
-        $signKey = 'dailysign:' . $uid;
-        $signData = Redis::getJson($signKey);
-        $todayStr = date('Ymd');
-        $loginedPopo = (is_array($signData) && ($signData['last_date'] ?? '') === $todayStr) ? 0 : 1;
+        // 判定连续登录的提示状态（logined_model->get_reward_log / get_time_by_uid）
+        $loginedPopo = Logined::popo($uid, Logined::rewardLog($uid), time());
 
         // 计算多人副本的真实活动时段状态 (1:进行中, 2:时间未到, 3:今日已结束)
         $isAlwaysOpen = (bool)(getenv('DEV_ACTIVITY_ALL_OPEN') ?: false);
@@ -60,6 +57,11 @@ final class ActivityHandler
                 'endtime2' => $eliteEnd2,
             ],
         ];
+
+        // 被邀请过且邀请奖励全部领完时关闭邀请入口（member_field.close_invitation）
+        if ((int)(DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->value('close_invitation') ?? 0) === 1) {
+            unset($activities['invitation']);
+        }
 
         return [
             'status' => 1,

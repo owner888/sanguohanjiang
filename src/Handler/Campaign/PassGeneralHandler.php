@@ -53,9 +53,7 @@ use OmniPHP\Http\Context;
  *
  * 紫装以上装备发小喇叭，7 星以上武将 / 神将发小喇叭与聊天室系统消息（get_message_str 45 / 46）。
  *
- * 依赖未移植：
- * - sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
- * （元宝 / 声望 / 原魂 / 军令的增减由 Member / OwnSoul 记流水，元宝消耗另计日常任务 5）
+ * 元宝 / 声望 / 原魂 / 军令的增减由 Member / OwnSoul 记流水，元宝消耗另计日常任务 5。
  */
 final class PassGeneralHandler
 {

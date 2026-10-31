@@ -40,10 +40,10 @@ final class EliteRoom
         'firemember', 'changeorder', 'teaminvited', 'startfight',
     ];
 
-    /** 队伍人数上限（elitepop.js 的队伍列表显示「人数 x/3」、队伍详情固定 3 个位置） */
+    /** 队伍人数上限：开发者决定最多 3 人（elitepop.js 的队伍列表显示「人数 x/3」、队伍详情固定 3 个位置） */
     private const int TEAM_MAX = 3;
 
-    /** 开战最少人数（旧版 action：队员去重后只有 1 人时不能开战） */
+    /** 开战最少人数：开发者决定最少 2 人（旧版 action：队员去重后只有 1 人时不能开战） */
     private const int TEAM_MIN = 2;
 
     /** 各事件失败时回给客户端的事件名 */

@@ -10,6 +10,7 @@ use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\Advanced;
 use Hanjiang\Model\Beauty;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\General;
 use Hanjiang\Model\GeneralBook;
 use Hanjiang\Model\HeroTalent;
@@ -18,6 +19,7 @@ use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\OwnStar;
 use Hanjiang\Model\Refine;
+use Hanjiang\Model\Sacredtree;
 use Hanjiang\Model\WarCollege;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -35,8 +37,9 @@ use OmniPHP\Http\Context;
  * 名将进阶（_get_advanced_info，主公 100 级起，Advanced）、名将成就（_get_achievement_info，主公 81 级起，GeneralBook 的名将谱加成）、
  * 国家学院（_get_war_college_info，国家 30 级起且学院 buff 未结束，WarCollege 的三围）。
  *
- * 依赖未移植（界面血量 / 三围加成，均按 0 计入 LegacyStats::infoHp 与 wuliup/zhiliup/tiliup）：
- * 套装 _get_siut_info、神树活动 _get_sacredtree_info（index 的 tree 恒为 0）。
+ * 神树活动（_get_sacredtree_info，Model\Sacredtree）：index / get_info 的血量按神树 buff 加成，index 的 tree 为神树等级。
+ *
+ * 依赖未移植（界面血量 / 三围加成，均按 0 计入 LegacyStats::infoHp 与 wuliup/zhiliup/tiliup）：套装 _get_siut_info。
  */
 final class GeneralHandler
 {
@@ -99,11 +102,12 @@ final class GeneralHandler
             $return['status'] = -1;
             return $return;
         }
+        // 如果神树活动开启，查询用户拥有神树信息（按神树 buff 加血）
+        $tree = self::sacredtreeInfo($uid, $first);
         $list[1] = $first;
 
         $return['list'] = $list;
-        // 依赖未移植：神树活动（sacredtree 活动开启时为玩家神树 treeid，并按 buff 加血）
-        $return['tree'] = 0;
+        $return['tree'] = $tree;
         $return['equipments'] = self::unequipList($uid, (int)$first['level'], (int)$first['type']);
         $return['status'] = 1;
         return $return;
@@ -138,6 +142,8 @@ final class GeneralHandler
             return $return;
         }
 
+        // 如果神树活动开启，查询用户拥有神树信息（按神树 buff 加血）
+        self::sacredtreeInfo($uid, $general);
         $return['info'] = self::infoFields($general);
         $return['equipments'] = self::unequipList($uid, (int)$general['level'], (int)$general['type']);
         $return['status'] = 1;
@@ -266,6 +272,21 @@ final class GeneralHandler
     {
         $general = self::enrich($uid, self::legacyRow($row, self::equippedIds($uid, (int)$row['id'])));
         return $general === null ? null : self::infoFields($general);
+    }
+
+    /**
+     * 神树加成（_get_sacredtree_info：神树活动开启且有神树时 hp 按 buff% 加成），返回神树等级（没有为 0）
+     *
+     * @param array<string, mixed> $general
+     */
+    private static function sacredtreeInfo(int $uid, array &$general): int
+    {
+        $tree = Sacredtree::openTree($uid, BossClock::now());
+        if ($tree === null) {
+            return 0;
+        }
+        $general['hp'] = (int)($general['hp'] + ($general['hp'] / 100 * $tree['buff']));
+        return $tree['treeid'];
     }
 
     /**

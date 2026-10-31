@@ -37,7 +37,6 @@ use OmniPHP\Http\Context;
  * 别人的装备按「装备不存在」返回。
  *
  * 元宝消耗由 Member::deductCurrency 记元宝流水与日常任务 5（元宝消费）。
- * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class RefineHandler
 {

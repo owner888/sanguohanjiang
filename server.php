@@ -16,10 +16,16 @@ declare(strict_types=1);
 
 require_once __DIR__ . '/bootstrap.php';
 
+use Hanjiang\Cron\BeatengodCron;
+use Hanjiang\Cron\BusinessCron;
 use Hanjiang\Cron\CompeteCron;
 use Hanjiang\Cron\CountryCron;
+use Hanjiang\Cron\ExerciseCron;
+use Hanjiang\Cron\FlopCron;
+use Hanjiang\Cron\NewgiftCron;
 use Hanjiang\Cron\PassGeneralCron;
 use Hanjiang\Cron\SiegeCron;
+use Hanjiang\Cron\TreasuremapCron;
 use Hanjiang\Cron\WorldBossCron;
 use Hanjiang\Model\FlowLog;
 use Hanjiang\Support\Connections;
@@ -101,6 +107,38 @@ $httpWorker->onWorkerStart = static function (Worker $worker): void {
         // 群雄逐鹿：活动结束后 10 小时内自动补领排名奖励（cron.php:get_compete_reward）
         Timer::add(CompeteCron::INTERVAL, $cron('cron', 'get_compete_reward', static function (): void {
             CompeteCron::run(time());
+        }));
+        // 整军演武：每日 7 点清排行（cron::clear_exercise）；活动结束后 3 天内自动开剩余礼包（cron::sale_gift）
+        $daily(ExerciseCron::CLEAR_AT, $cron('cron', 'clear_exercise', static function (): void {
+            ExerciseCron::clearRank();
+        }));
+        Timer::add(ExerciseCron::SALE_INTERVAL, $cron('cron', 'sale_gift', static function (): void {
+            ExerciseCron::saleGift(time());
+        }));
+        // 每日通商：今天起 3 天没有任务的日期按旧版 business_model->builder 生成（旧版由后台生成，数据只到 2017-10-11）
+        $business = $cron('business', 'builder', static function (): void {
+            BusinessCron::run(time());
+        });
+        $business();
+        Timer::add(BusinessCron::INTERVAL, $business);
+        // 四方来朝：活动结束后 10 小时内自动领取剩余翻牌次数（cron::push_flop_reward），之后清除翻牌次数（cron::clear_flop_times）
+        Timer::add(FlopCron::INTERVAL, $cron('cron', 'push_flop_reward', static function (): void {
+            FlopCron::run(time());
+        }));
+        // 暴打名将：活动结束后 10 小时内自动发放未领取的排行奖励与宝箱奖励（cron::get_beatengod_reward / get_beatengod_box_reward）
+        Timer::add(BeatengodCron::INTERVAL, $cron('cron', 'get_beatengod_reward', static function (): void {
+            BeatengodCron::rank(time());
+        }));
+        Timer::add(BeatengodCron::INTERVAL, $cron('cron', 'get_beatengod_box_reward', static function (): void {
+            BeatengodCron::box(time());
+        }));
+        // 藏宝图：每日 7 点（跟征收一起）出售昨天以前获得、未组队的藏宝图（cron::sale_map）
+        $daily(TreasuremapCron::RUN_AT, $cron('cron', 'sale_map', static function (): void {
+            TreasuremapCron::run(time());
+        }));
+        // 新服大礼包：30 天活动结束后自动领取可领取的礼包并发信件（cron::get_newgift_reward）
+        $daily(NewgiftCron::RUN_AT, $cron('cron', 'get_newgift_reward', static function (): void {
+            NewgiftCron::run(time());
         }));
     }
 };

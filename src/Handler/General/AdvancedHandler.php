@@ -32,7 +32,7 @@ use OmniPHP\Http\Context;
  * 名将成就、美人、主公星魄、国家学院、坐骑、将魂）。技能升级消耗突飞卡走 FreeLeap::sub（记 leap_log）。
  * 并发：level_up / start_advanced / advanced_inherit 在 Member::locked 玩家行锁内执行。
  *
- * 依赖未移植：突飞卡的翻牌活动计数（tavern_model->sub_freeleap 的四方来朝 flop，旧版数据中已结束）。
+ * 突飞卡消耗的翻牌活动计数（四方来朝）由 FreeLeap::sub 记。
  * 声望消耗由 Member::subReputation 记声望流水。
  */
 final class AdvancedHandler

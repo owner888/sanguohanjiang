@@ -11,6 +11,7 @@ use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\Model\Beauty;
 use Hanjiang\Model\Chat;
+use Hanjiang\Model\Edifice;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberIntegral;
@@ -43,7 +44,7 @@ use OmniPHP\Http\Context;
  *
  * 掠夺信件与信件战报（pm / pm_report，report_detail 回放）见 Model\Message；元宝 / 银币 / 声望流水由 Member 的增减记。
  *
- * 依赖未移植：首次打开操作记录 edifice_model->add_edifice_log(11)；春节送福活动 actnewyear_model->add_task_num（掠夺 16、亲近 17）。
+ * 依赖未移植：春节送福活动 actnewyear_model->add_task_num（掠夺 16、亲近 17）。
  */
 final class BeautyHandler
 {
@@ -210,8 +211,12 @@ final class BeautyHandler
         if ($member === null) {
             return ['status' => 0];
         }
-        // 依赖未移植：首次打开操作记录 edifice_model->add_edifice_log(11)
-        return self::indexInfo($member, 0, time());
+        $return = self::indexInfo($member, 0, time());
+        if ($return['status'] === 1) {
+            // 首次打开操作记录
+            Edifice::addLog((int)$member['uid'], Edifice::BEAUTY);
+        }
+        return $return;
     }
 
     /**

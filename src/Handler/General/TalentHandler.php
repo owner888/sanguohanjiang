@@ -24,8 +24,6 @@ use OmniPHP\Http\Context;
  * 客户端调用（talentpop.js）：index、levelup、get_info。旧版 get_talent_list（按 uid 查他人天赋）前端不调用，不移植。
  * 开放：主公等级大于 90。双倍活动 ActivityTime double_talent（升星 / 顿悟成功率翻倍；配置的开始 / 结束时间为 0，不会开启）。
  * 并发：levelup 在 Member::locked 玩家行锁内执行。元宝消耗由 Member::deductCurrency 记元宝流水与日常任务 5。
- *
- * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class TalentHandler
 {

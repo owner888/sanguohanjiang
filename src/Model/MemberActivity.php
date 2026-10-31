@@ -9,7 +9,8 @@ use OmniPHP\Database\DB;
 /**
  * 玩家活动信息（移植旧版 models/member_model.php 的 zc_sanguo_member_activity 读写：get_activity_info / update_activity_info）
  *
- * 新版 member_activity 只有已移植玩法的字段（将魂星路、多人副本、金银岛、四象圣域、通天塔、VIP 工资、日常任务、每日对酒、神将之门），其余旧版字段随对应玩法补充。
+ * 新版 member_activity 只有已移植玩法的字段（将魂星路、多人副本、金银岛、四象圣域、通天塔、VIP 工资、日常任务、每日对酒、神将之门、
+ * 整军演武、四方来朝），其余旧版字段随对应玩法补充。
  */
 final class MemberActivity
 {
@@ -45,6 +46,27 @@ final class MemberActivity
         'drinktime' => 0,
         // 神将之门挑战次数
         'generaltasktimes' => 10,
+        // 整军演武礼包（exercise_level 旧版建档语句不写，取列默认值 0）
+        'exercise_gift' => 0,
+        // 四方来朝
+        'floptimes' => 0,
+        'flopact' => 0,
+        'flopgold' => 0,
+        'flopleap' => 0,
+        'flopacttimes' => 0,
+        'flopgoldtimes' => 0,
+        'flopleaptimes' => 0,
+        // 天神祭祀
+        'sacrifice1' => 0,
+        'sacrifice2' => 0,
+        'sacrifice3' => 0,
+        // 每日通商
+        'freebusiness' => 20,
+        'businesstimes' => 0,
+        // 神矿（宝石赌博）
+        'jadetype' => 0,
+        'jadenum' => 0,
+        'jadeturn' => 0,
     ];
 
     /**

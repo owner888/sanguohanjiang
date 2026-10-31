@@ -20,6 +20,7 @@ use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\Message;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\PassGeneral;
+use Hanjiang\Model\Sacredtree;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -38,7 +39,6 @@ use OmniPHP\Http\Context;
  *
  * 挑战写信件战报（Message::recordPkReport）；元宝流水由 Member 记。
  *
- * 依赖未移植：神树活动（activity_model->activity_status('sacredtree') / sacredtree_model->get_tree_by_uid），top_list 的 tree 恒为 0。
  */
 final class CompeteHandler
 {
@@ -833,7 +833,16 @@ final class CompeteHandler
         foreach ($list as $key => $val) {
             $list[$key]['tree'] = 0;
         }
-        // 依赖未移植：神树活动（activity_model->activity_status('sacredtree') / sacredtree_model->get_tree_by_uid），tree 恒为 0
+        // 查询前三的神树等级（神树活动开启时）
+        $treeVersion = Sacredtree::openVersion(BossClock::now());
+        if ($treeVersion !== null) {
+            $tree = Sacredtree::treeByUid($treeVersion, array_values(array_map(static fn (array $val): int => (int)$val['uid'], $list)));
+            foreach ($list as $key => $val) {
+                if (isset($tree[(int)$val['uid']])) {
+                    $list[$key]['tree'] = $tree[(int)$val['uid']]['treeid'];
+                }
+            }
+        }
         return $list;
     }
 

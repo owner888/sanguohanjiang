@@ -28,8 +28,6 @@ use OmniPHP\Http\Context;
  * 旧版先读再写不是原子的，这里用 SET NX。refining_index 旧版不查锁，这里不加锁。
  * 另外 level_up / refining 的读改写在 Member::locked 玩家行锁内执行（两者的锁键不同，旧版可以并发改星魄余额）。
  * refining 的元宝消耗由 Member::deductCurrency 记元宝流水与日常任务 5。
- *
- * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class StarHandler
 {

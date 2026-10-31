@@ -12,6 +12,7 @@ use Hanjiang\MasterData\CountryMission;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberActivity;
 use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\OpenMap;
 use OmniPHP\Cache\Redis;
@@ -38,9 +39,6 @@ use OmniPHP\Http\Context;
  * 主城国战提示（member index 的 country_war 等字段）由 countryWar() 提供。
  *
  * 聊天室：至尊攻城小喇叭、国战胜负全服系统公告、双方国家聊天室战报（get_message_str 18 ~ 21，type 6 系统）。
- *
- * 依赖未移植：
- * - 通商免费次数 member_activity.freebusiness（都城效果 type 2）。
  */
 final class SiegeHandler
 {
@@ -841,8 +839,21 @@ final class SiegeHandler
                         $return['times'] = (int)DB::table('member_field')->where('uid', $uid)->value('levytimes');
                     }
                 }
-            } elseif ($capital['type'] === 2 && date('Ymd', $now) !== date('Ymd', $effect)) {
-                // 依赖未移植：member_activity.freebusiness 通商免费次数（新版 member_activity 无此字段），不加次数、不记更新时间
+            } elseif ($capital['type'] === 2 && date('Ymd', $now) !== date('Ymd', $effect) && $result !== null) {
+                // 增加通商次数：先以更新时间抢占（多 Worker 并发只加一次），再单条 UPDATE 累加 member_activity.freebusiness
+                // （旧版读出后 + value 写回；tinyint 列封顶 255）
+                $affected = DB::table('member_country')->where('country', $country)->where('uid', $uid)
+                    ->where('effect', $effect)->where('effect_type', $effectType)->whereNull('deleted_at')
+                    ->update(['effect' => $now, 'effect_type' => $capital['type']]);
+                if ($affected > 0) {
+                    // get_activity_info：没有活动记录时按旧版建档
+                    MemberActivity::ensure($uid);
+                    DB::execute(
+                        'UPDATE `zc_sanguo_member_activity` SET `freebusiness` = LEAST(`freebusiness` + :add, 255)
+                         WHERE `uid` = :uid AND `deleted_at` IS NULL',
+                        ['add' => $capital['value'], 'uid' => $uid]
+                    );
+                }
             }
         }
         $return['status'] = 1;

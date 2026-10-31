@@ -42,7 +42,6 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  *
  * 依赖未移植：
  * - 春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(…, 24, uid) 计数）；
- * - sub_gold 的四方来朝（翻牌活动 flop）元宝计数（旧版数据中已结束）；
  * （主线任务 10「参加一次多人副本」按参战玩家计数；元宝流水与日常任务 5 由 Member::deductCurrency 记；
  *  消费统计 stat_model->elite_times 旧版不在付费点列表里，是空操作）
  */

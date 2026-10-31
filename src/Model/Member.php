@@ -4,8 +4,11 @@ declare(strict_types=1);
 
 namespace Hanjiang\Model;
 
+use Hanjiang\Handler\Activity\LotteryHandler;
+use Hanjiang\Handler\City\LevelgiftHandler;
 use Hanjiang\Handler\Pvp\ArenaHandler;
 use Hanjiang\Handler\Pvp\CompeteHandler;
+use Hanjiang\Handler\Pvp\SiegeHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Database\SoftDeletes;
@@ -98,33 +101,68 @@ class Member extends Model
      */
     public static function dailyCron(int $uid, int $now): void
     {
+        // 每日计划任务日志用的是执行前的剩余征收次数（旧版 insert_member_log 取请求开始时读到的 member_field）
+        $levytimes = (int)(DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->value('levytimes') ?? 0);
         // 每日重置用户状态：今日突飞次数 leaptimes、白金 / 至尊培养次数 baijintimes / zhizuntimes、
-        // 将魂星路今日购买次数 soultimes 归零
+        // 将魂星路今日购买次数 soultimes 归零；赌石免费切石次数 stone1~3_times 归零后按 VIP 发 10 次
+        // （VIP 10 以上九窍灵石、6 以上仙王玉石、2 以上盘龙石）
+        $vip = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('vip') ?? 0);
+        $stoneTimes = [1 => 0, 2 => 0, 3 => 0];
+        if ($vip >= 10) {
+            $stoneTimes[3] = 10;
+        } elseif ($vip >= 6) {
+            $stoneTimes[2] = 10;
+        } elseif ($vip >= 2) {
+            $stoneTimes[1] = 10;
+        }
         $affected = DB::execute(
-            'UPDATE `zc_sanguo_member_field` SET `dateline` = :now, `leaptimes` = 0, `baijintimes` = 0, `zhizuntimes` = 0, `soultimes` = 0
+            'UPDATE `zc_sanguo_member_field` SET `dateline` = :now, `leaptimes` = 0, `baijintimes` = 0, `zhizuntimes` = 0, `soultimes` = 0,
+                 `stone1_times` = :stone1, `stone2_times` = :stone2, `stone3_times` = :stone3
              WHERE `uid` = :uid AND `deleted_at` IS NULL AND `dateline` < :today',
-            ['now' => $now, 'uid' => $uid, 'today' => strtotime(date('Y-m-d', $now))]
+            [
+                'now' => $now,
+                'stone1' => $stoneTimes[1],
+                'stone2' => $stoneTimes[2],
+                'stone3' => $stoneTimes[3],
+                'uid' => $uid,
+                'today' => strtotime(date('Y-m-d', $now)),
+            ]
         );
         if ($affected === 0) {
             return;
         }
 
-        // 依赖未移植：member_field 每日计数（stone1~3_times / treasure_free，赌石 / 寻宝，新版 member_field 尚无这些字段）
+        // 依赖未移植：member_field.treasure_free（寻宝活动免费次数，act_treasure 节日活动）
 
-        // update_activity_info：金银岛挑战次数归零、将魂星路免费次数重置为 10、多人副本次数重置为 10、
-        // 神将之门挑战次数重置为 10、通天塔免费次数重置为 10、日常任务次数重置为 6（没有记录时不插入，同旧版）
+        // update_activity_info：金银岛挑战次数、天神祭祀次数 sacrifice1~3 归零，免费通商次数重置为 20，将魂星路免费次数重置为 10、
+        // 多人副本次数重置为 10、神将之门挑战次数重置为 10、通天塔免费次数重置为 10、日常任务次数重置为 6、
+        // 四方来朝的元宝 / 军令 / 突飞卡累计与已换算次数归零（剩余翻牌次数 floptimes 不归零）；没有记录时不插入，同旧版
         MemberActivity::update($uid, [
             'islandtimes' => 0,
+            'sacrifice1' => 0,
+            'sacrifice2' => 0,
+            'sacrifice3' => 0,
+            'freebusiness' => 20,
             'freetower' => 10,
+            'task_number' => DailyTask::DAILY_NUMBER,
+            'flopgold' => 0,
+            'flopleap' => 0,
+            'flopact' => 0,
+            'flopgoldtimes' => 0,
+            'flopleaptimes' => 0,
+            'flopacttimes' => 0,
             'elitetimes' => 10,
             'generaltasktimes' => 10,
             'freeheaven' => 10,
-            'task_number' => DailyTask::DAILY_NUMBER,
         ]);
-        // 依赖未移植：update_activity_info 的其余字段（sacrifice1~3 / freebusiness /
-        // freemooncake / flop*，新版 member_activity 尚无这些字段）
-        // 依赖未移植：lottery_model->update_day、logined_model->update_day 连续登录计数
-        // 依赖未移植：member.dateline / version / appversion、insert_member_log 每日日志
+        // 依赖未移植：update_activity_info 的 freemooncake（中秋月饼，节日活动，新版 member_activity 无此字段）
+        // 修改抽奖连续登录次数（lottery_model->update_day）
+        LotteryHandler::updateDay($uid, $now);
+
+        // 修改连续登录次数（logined_model->update_day）
+        Logined::updateDay($uid, $now);
+
+        // 依赖未移植：member.dateline / version / appversion（旧版记最后活动时间与客户端版本）
 
         // 清空昨日贡献次数/学艺次数（member_model->clear_donate）
         DB::table('member_country')->where('uid', $uid)->whereNull('deleted_at')->update([
@@ -132,6 +170,74 @@ class Member extends Model
             'silvertimes' => 0,
             'learntimes' => 0,
         ]);
+
+        // 用户每日计划任务日志（insert_member_log）
+        $info = self::logInfo($uid);
+        if ($info !== null) {
+            DB::table('member_log')->insert([
+                'ymd' => (int)date('ymd', $now),
+                'uid' => $uid,
+                'level' => $info['level'],
+                'vip' => $info['vip'],
+                'levytimes' => max(0, $levytimes),
+                'dateline' => $now,
+            ]);
+        }
+    }
+
+    /**
+     * 每日 7 点的征收计划任务（移植旧版 ZC_Controller::_cron_time → member_model->levy_cron）
+     *
+     * 7 点之后的第一次请求执行：按距上次执行跨过的「7 点日」数每天发 12 次征收（加上剩余次数，最多 50），
+     * 总征收次数 levyall 与今日强征次数 imposetimes 归零，exercisetimes 记执行时间；随后查国家占领都城加成
+     * （siege_model->get_city_effect，type 1 时再加征收次数）。
+     * $fieldDateline 是本次请求的每日计划任务执行前读到的 member_field.dateline（旧版 levy_cron 用请求开始时读到的扩展信息）：
+     * 为 0（从未执行过每日计划任务）时直接给 12 次。
+     * 以 member.crontime 条件更新抢占执行权，多 Worker 并发只执行一次。
+     *
+     * @return bool 本次是否执行
+     */
+    public static function levyCron(int $uid, int $now, int $fieldDateline): bool
+    {
+        $cronSec = 3600 * 7;
+        $member = DB::table('member')->select('uid', 'country', 'crontime')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $levytimes = DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->value('levytimes');
+        if ($member === null || $levytimes === null) {
+            return false;
+        }
+        $crontime = (int)$member['crontime'];
+        if (date('Ymd', $now - $cronSec) <= date('Ymd', $crontime - $cronSec)) {
+            return false;
+        }
+        // 修改用户最后活动时间（先抢占，再改征收信息）
+        $claimed = DB::table('member')->where('uid', $uid)->where('crontime', $crontime)->whereNull('deleted_at')->update(['crontime' => $now]);
+        if ($claimed === 0) {
+            return false;
+        }
+        if ($fieldDateline === 0) {
+            $levynum = 12;
+        } else {
+            $time1 = $crontime - $cronSec;
+            $time2 = $now - $cronSec;
+            $levynum = (int)(ceil((strtotime(date('y-m-d', $time2)) - strtotime(date('y-m-d', $time1))) / 86400) * 12) + (int)$levytimes;
+            if ($levynum > 50) {
+                $levynum = 50;
+            }
+        }
+        // 修改征收信息
+        DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update([
+            'exercisetimes' => $now,
+            // 剩余免费征收次数
+            'levytimes' => $levynum,
+            // 总征收次数(整军演武)
+            'levyall' => 0,
+            // 今日强征次数
+            'imposetimes' => 0,
+        ]);
+        Redis::del('player:' . $uid);
+        // 查询国家占领都城加成（type 1 加征收次数）
+        SiegeHandler::getCityEffect($member, $now);
+        return true;
     }
 
     /**
@@ -142,8 +248,8 @@ class Member extends Model
      *   （旧版 $type：1 正常消耗，百次祭祖传 100）；
      * - 银币：silver_log（type 2）——旧版 sub_silver 只给 VIP 玩家记流水，VIP 0 不记，照搬；
      * - 军令：act_log（type 2）。
-     * 依赖未移植：sub_gold / sub_act 的翻牌活动计数（flop，member_activity.flop*，随翻牌活动移植；旧版数据中 flop 已于
-     * 2016-12-31 结束）；sub_gold 国庆节流水 national_day_gold_log（节日活动）。
+     * 四方来朝（翻牌）活动期间按消耗累计翻牌次数（Flop::addSpend，member_activity.flop*；旧版数据中 flop 已于 2016-12-31 结束）。
+     * 依赖未移植：sub_gold 国庆节流水 national_day_gold_log（节日活动）。
      */
     public static function deductCurrency(int $uid, int $silver = 0, int $gold = 0, int $act = 0, int $goldType = 1): bool
     {
@@ -192,6 +298,14 @@ class Member extends Model
             return false;
         }
         Redis::del('player:' . $uid);
+
+        // 四方来朝（翻牌）活动期间：元宝 / 军令消耗累计换算翻牌次数（sub_gold / sub_act 的 flop_model->get_times）
+        if ($gold > 0) {
+            Flop::addSpend($uid, Flop::SPEND_GOLD, $gold);
+        }
+        if ($act > 0) {
+            Flop::addSpend($uid, Flop::SPEND_ACT, $act);
+        }
 
         // 日常任务（5 是元宝消费对应的类型）
         if ($gold > 0 && $row['level'] >= DailyTask::OPEN_LEVEL) {
@@ -263,7 +377,7 @@ class Member extends Model
      * 每升一级加 2 军令（check_levelup 里 add_act(1) 默认 2 个，记 act_log type 1，流水等级为升级前的等级）。
      * 升级时写 level 与 maxexp（旧版 levelupexp 列），不论升级都写 exp。升到 26 级（最终等级正好是 26）时进入演武榜
      * 与群雄逐鹿（arena_model / compete_model->get_info_by_id）。
-     * 依赖未移植：等级礼包标识 level_gift（levelgift_model，新版 c=levelgift 是自定玩法）；
+     * 升级时按等级礼包刷新主城礼包标识（level_gift → LevelgiftHandler::levelGift）。
      * 旧版砸蛋 hitegg_model->get_hitegg_info 的条件是「开启等级 1 >= 主公等级」，升级后主公至少 2 级，永不成立，不移植。
      *
      * 在玩家行锁里读写（多 Worker 安全）。
@@ -320,6 +434,10 @@ class Member extends Model
                 ArenaHandler::getInfoById($member, $now);
                 CompeteHandler::getInfoById($member, $now);
             }
+        }
+        // 等级礼包
+        if ($levelup === 1) {
+            LevelgiftHandler::levelGift($uid, $result['new_level']);
         }
         return [
             'status' => 1,

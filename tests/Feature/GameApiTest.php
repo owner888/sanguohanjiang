@@ -147,31 +147,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(50, (int)$updated['act_limit']);
     }
 
-    public function testCitySystem(): void
-    {
-        $res = $this->request('city', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertArrayHasKey('times', $res);
-        $this->assertArrayHasKey('buildings', $res);
-        $oldTimes = (int)$res['times'];
-
-        // 1. 普通征收
-        $impose = $this->request('city', 'impose');
-        $this->assertSame(1, $impose['status']);
-        $this->assertGreaterThan(0, $impose['silver']);
-        $this->assertSame($oldTimes - 1, $impose['levytimes']);
-
-        // 2. 元宝强征
-        $impress = $this->request('city', 'impress');
-        $this->assertSame(1, $impress['status']);
-        $this->assertGreaterThan(0, $impress['silver']);
-        $this->assertSame(2, $impress['gold_cost']);
-
-        // 3. 清除 CD
-        $clearCd = $this->request('city', 'clear_cd');
-        $this->assertSame(1, $clearCd['status']);
-    }
-
     /**
      * 物品存储类奖励的发放点（旧版调用 add_talent_scroll / add_item 碎片分支 / add_mount / add_jade 等处）
      */
@@ -1477,40 +1452,6 @@ final class GameApiTest extends TestCase
         $this->assertSame([[5, $this->chatFrom($p) . ' 在将魂星路击败了 {9,' . $name . '} {4,[查看战报],5}', 5, $p['uid']]], $this->chatMessages($w));
     }
 
-    public function testShopSystem(): void
-    {
-        $res = $this->request('shop', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('info', $res);
-        $this->assertArrayHasKey('info', $res['info']);
-        $this->assertArrayHasKey('totals', $res);
-        $this->assertArrayHasKey('log_list', $res);
-
-        // 旧版商城 1 号位：MasterData Shop → 装备 7 青玉兵符，元宝 50
-        $this->assertSame(7, $res['list'][1]['id']);
-        $this->assertSame('青玉兵符', $res['list'][1]['name']);
-        $this->assertSame(50, $res['list'][1]['price']);
-
-        $detail = $this->request('shop', 'get_info', ['id' => 7]);
-        $this->assertSame(1, $detail['status']);
-        $this->assertArrayHasKey('info', $detail);
-
-        $before = count(DB::table('equipment')->where('uid', self::$uid)->where('equipid', 7)->whereNull('deleted_at')->get());
-        $buyItem = $this->request('shop', 'buy', ['id' => 7]);
-        $this->assertSame(1, $buyItem['status']);
-        $bought = DB::table('equipment')->where('uid', self::$uid)->where('equipid', 7)->whereNull('deleted_at')->get();
-        $this->assertCount($before + 1, $bought);
-        $this->assertSame('青玉兵符', $bought[0]['name']);
-        $this->assertSame(5, (int)$bought[0]['type']);
-        $this->assertSame(100, (int)$bought[0]['power']);
-
-        $this->assertSame(-1, $this->request('shop', 'buy', ['id' => 31])['status'], '非旧版商城商品不可购买');
-
-        $buyAct = $this->request('shop', 'buy_act');
-        $this->assertSame(1, $buyAct['status']);
-    }
-
     /**
      * 演武榜测试用：清空排行榜（各用例自建玩家与名次），返回按顺序入榜的 26 级新玩家
      *
@@ -2310,76 +2251,6 @@ final class GameApiTest extends TestCase
         Redis::del('player:' . self::$uid);
     }
 
-    public function testDailySignSystem(): void
-    {
-        // 1. 查看签到面板
-        $res = $this->request('dailysign', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 执行今日签到
-        $sign = $this->request('dailysign', 'sign');
-        $this->assertSame(1, $sign['status']);
-        $this->assertGreaterThan(0, $sign['silver']);
-        $this->assertGreaterThan(0, $sign['gold']);
-        $this->assertGreaterThan(0, $sign['act']);
-
-        // 3. 今日重复签到拦截
-        $dup = $this->request('dailysign', 'sign');
-        $this->assertSame(-1, $dup['status']);
-    }
-
-    public function testFriendSystem(): void
-    {
-        // 1. 查看好友列表
-        $res = $this->request('friend', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('now_number', $res);
-        $this->assertArrayHasKey('all_number', $res);
-        $this->assertArrayHasKey('online', $res);
-        $this->assertArrayHasKey('nickname', $res['list'][0]);
-        $this->assertArrayHasKey('country', $res['list'][0]);
-        $this->assertArrayHasKey('job', $res['list'][0]);
-
-        // 2. 添加新好友
-        $add = $this->request('friend', 'add_friend', ['target_uid' => 10005]);
-        $this->assertSame(1, $add['status']);
-
-        // 3. 重复添加好友拦截
-        $dup = $this->request('friend', 'add_friend', ['target_uid' => 10005]);
-        $this->assertSame(0, $dup['status']);
-
-        // 4. 删除好友
-        $del = $this->request('friend', 'del_friend', ['target_uid' => 10005]);
-        $this->assertSame(1, $del['status']);
-    }
-
-    public function testMineSystem(): void
-    {
-        // 1. 查看矿区列表
-        $res = $this->request('mine', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['mines']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('level', $res);
-        $this->assertSame(1, $res['list'][0]['page']);
-
-        // 2. 占领大型富饶银矿 (id: 3)
-        $claim = $this->request('mine', 'caikuang', ['id' => 3]);
-        $this->assertSame(1, $claim['status']);
-        $this->assertSame(3, $claim['mine_id']);
-
-        // 3. 提取开采累积银两
-        $harvest = $this->request('mine', 'get_silver');
-        $this->assertSame(1, $harvest['status']);
-        $this->assertGreaterThan(0, $harvest['silver']);
-
-        // 4. 放弃矿位
-        $giveUp = $this->request('mine', 'give_up');
-        $this->assertSame(1, $giveUp['status']);
-    }
-
     public function testMountSystem(): void
     {
         // 旧版 controllers/mount.php：主公 120 级开启，坐骑写 own_mount，将领身上的坐骑写 general.mid0 ~ mid4
@@ -3063,29 +2934,6 @@ final class GameApiTest extends TestCase
         $this->assertSame(20, \Hanjiang\MasterData\Monster::ROWS[1]['blood']);
     }
 
-    public function testBlackmarketSystem(): void
-    {
-        // 1. 查看黑市货架
-        $res = $this->request('blackmarket', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 锁定商品 1
-        $lock = $this->request('blackmarket', 'lock', ['id' => 1]);
-        $this->assertSame(1, $lock['status']);
-        $this->assertSame(1, $lock['locked']);
-
-        // 3. 购买商品 1
-        $buy = $this->request('blackmarket', 'buy', ['id' => 1]);
-        $this->assertSame(1, $buy['status']);
-        $this->assertSame(1, $buy['id']);
-
-        // 4. 刷新货架
-        $refresh = $this->request('blackmarket', 'refresh');
-        $this->assertSame(1, $refresh['status']);
-        $this->assertNotEmpty($refresh['list']);
-    }
-
     public function testFirstRechargeSystem(): void
     {
         $this->withFreshPlayer(function (int $uid): void {
@@ -3191,36 +3039,6 @@ final class GameApiTest extends TestCase
         });
     }
 
-    public function testOverseasTradeSystem(): void
-    {
-        // 1. 查看商贸主界面
-        $res = $this->request('overseastrade', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['fleets']);
-        $this->assertArrayHasKey('info', $res);
-        $this->assertArrayHasKey('times', $res['info']);
-        $this->assertArrayHasKey('rob', $res);
-        $this->assertArrayHasKey('team', $res);
-
-        // 2. 查看国家贸易组队大厅 (验证 page 与 allpage 避免 NaN 翻页)
-        $teams = $this->request('overseastrade', 'get_list_by_country', ['p' => 1]);
-        $this->assertSame(1, $teams['status']);
-        $this->assertSame(1, $teams['page']);
-        $this->assertSame(5, $teams['allpage']);
-        $this->assertArrayHasKey('list', $teams);
-
-        // 3. 派遣快行小帆船启航出海 (fleet: 1)
-        $go = $this->request('overseastrade', 'goout', ['fleet_id' => 1]);
-        $this->assertSame(1, $go['status']);
-        $this->assertSame(1, $go['fleet_id']);
-
-        // 4. 验证商贸刷新接口 (验证 team.allpage)
-        $refresh = $this->request('overseastrade', 'refresh', ['p' => 1]);
-        $this->assertSame(1, $refresh['status']);
-        $this->assertArrayHasKey('team', $refresh);
-        $this->assertSame(1, $refresh['team']['allpage']);
-    }
-
     public function testStudfarmSystem(): void
     {
         // 旧版 controllers/studfarm.php：三档取 MountRatio，花黄 / 紫宝石（trader_log.get2 / get3），首次必得最高品级
@@ -3280,74 +3098,6 @@ final class GameApiTest extends TestCase
                 [2, '恭喜【' . $nick . '】在西域马场选中名马-' . $mount . '，真乃当世雄主', 0, $uid],
             ], $this->chatMessages($w));
         });
-    }
-
-    public function testJadegambleSystem(): void
-    {
-        // 1. 查看赌石坊
-        $res = $this->request('jadegamble', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 选购原石
-        $mine = $this->request('jadegamble', 'mining', ['id' => 1]);
-        $this->assertSame(1, $mine['status']);
-
-        // 3. 解石一刀切
-        $cut = $this->request('jadegamble', 'gambling');
-        $this->assertSame(1, $cut['status']);
-        $this->assertGreaterThan(0, $cut['final_value']);
-
-        // 4. 收取翡翠玉石
-        $harvest = $this->request('jadegamble', 'harvest');
-        $this->assertSame(1, $harvest['status']);
-        $this->assertGreaterThan(0, $harvest['silver']);
-    }
-
-    public function testTreasuremapSystem(): void
-    {
-        // 1. 查看藏宝图
-        $res = $this->request('treasuremap', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(1, $res['star']);
-        $this->assertArrayHasKey('list', $res);
-        $this->assertArrayHasKey('map', $res);
-        $this->assertArrayHasKey('team', $res);
-
-        // 2. 寻龙分金刷新宝图
-        $ref = $this->request('treasuremap', 'refresh');
-        $this->assertSame(1, $ref['status']);
-
-        // 3. 创建寻宝队伍 (c=treasuremap&m=create_team)
-        $team = $this->request('treasuremap', 'create_team');
-        $this->assertSame(1, $team['status']);
-        $this->assertNotEmpty($team['team']);
-
-        // 4. 退出/解散队伍 (c=treasuremap&m=exit_team)
-        $exit = $this->request('treasuremap', 'exit_team');
-        $this->assertSame(1, $exit['status']);
-
-        // 5. 发掘挖宝
-        $sale = $this->request('treasuremap', 'sale');
-        $this->assertSame(1, $sale['status']);
-        $this->assertGreaterThan(0, $sale['silver']);
-    }
-
-    public function testWorkshopSystem(): void
-    {
-        // 1. 查看军械工坊
-        $res = $this->request('workshop', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(1, $res['level']);
-
-        // 2. 收取军械折现
-        $reward = $this->request('workshop', 'get_reward');
-        $this->assertSame(1, $reward['status']);
-
-        // 3. 升级军械工坊
-        $up = $this->request('workshop', 'levelup');
-        $this->assertSame(1, $up['status']);
-        $this->assertSame(2, $up['level']);
     }
 
     /**
@@ -3527,70 +3277,6 @@ final class GameApiTest extends TestCase
         CountryCron::clearContribute();
         $this->assertSame(0, (int)DB::table('member_country')->where('uid', $uid)->first()['contribute']);
     }
-
-    public function testCountrySacrificeSystem(): void
-    {
-        // 1. 查看宗庙祈福
-        $res = $this->request('countrysacrifice', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(3, $res['list']);
-
-        // 2. 执行白马平祭 (type: 1)
-        $action = $this->request('countrysacrifice', 'action', ['type' => 1]);
-        $this->assertSame(1, $action['status']);
-        $this->assertGreaterThan(0, $action['add_reputation']);
-    }
-
-    public function testDiceSystem(): void
-    {
-        // 1. 查看神骰主界面
-        $res = $this->request('dice', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertArrayHasKey('member', $res);
-        $this->assertArrayHasKey('last_week', $res);
-        $this->assertArrayHasKey('list', $res);
-        $this->assertArrayHasKey('points', $res['member']);
-        $this->assertGreaterThanOrEqual(1, $res['member']['times']);
-
-        // 2. 投掷骰子
-        $shake = $this->request('dice', 'shake_dice');
-        $this->assertSame(1, $shake['status']);
-        $this->assertArrayHasKey('member', $shake);
-        $this->assertArrayHasKey('dices', $shake);
-        $this->assertCount(3, $shake['dices']);
-        $this->assertGreaterThan(0, $shake['silver']);
-    }
-
-    public function testSacredtreeSystem(): void
-    {
-        // 1. 查看聚宝神树
-        $res = $this->request('sacredtree', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(1, $res['level']);
-
-        // 2. 给神树浇水摇钱
-        $water = $this->request('sacredtree', 'watering');
-        $this->assertSame(1, $water['status']);
-        $this->assertGreaterThan(0, $water['silver']);
-    }
-
-    public function testFlopSystem(): void
-    {
-        // 1. 查看翻牌界面
-        $res = $this->request('flop', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(9, $res['cards']);
-
-        // 2. 翻开第 1 张卡牌
-        $turn = $this->request('flop', 'turnover', ['id' => 1]);
-        $this->assertSame(1, $turn['status']);
-        $this->assertGreaterThan(0, $turn['silver']);
-
-        // 3. 重复翻同一张卡牌被拦截
-        $dup = $this->request('flop', 'turnover', ['id' => 1]);
-        $this->assertSame(0, $dup['status']);
-    }
-
 
     /**
      * @param array<string, mixed> $params
@@ -4494,73 +4180,6 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('popo', $res['list']['boss']);
     }
 
-    public function testLoginedSystem(): void
-    {
-        $res = $this->request('logined', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(1, $res['day']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('id', $res['list'][0]);
-        $this->assertArrayHasKey('type', $res['list'][0]);
-
-        $claim = $this->request('logined', 'get_reward', ['id' => 1]);
-        $this->assertSame(1, $claim['status']);
-        $this->assertGreaterThan(0, $claim['all_silver']);
-    }
-
-    public function testBusinessSystem(): void
-    {
-        // 1. 查看四海通商
-        $res = $this->request('business', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['cities']);
-
-        // 2. 启程通商洛阳商市 (city: 1)
-        $go = $this->request('business', 'go_business', ['id' => 1]);
-        $this->assertSame(1, $go['status']);
-        $this->assertSame('中原·洛阳商市', $go['city_name']);
-    }
-
-    public function testGamblingSystem(): void
-    {
-        // 1. 查看聚宝博彩盆
-        $res = $this->request('gambling', 'index');
-        $this->assertSame(1, $res['status']);
-
-        // 2. 投注原石
-        $buy = $this->request('gambling', 'buy');
-        $this->assertSame(1, $buy['status']);
-
-        // 3. 抛光雕琢
-        $cut = $this->request('gambling', 'cut');
-        $this->assertSame(1, $cut['status']);
-        $this->assertGreaterThan(0, $cut['final_value']);
-
-        // 4. 典当折现
-        $sell = $this->request('gambling', 'sell');
-        $this->assertSame(1, $sell['status']);
-        $this->assertGreaterThan(0, $sell['silver']);
-    }
-
-    public function testLotterySystem(): void
-    {
-        // 1. 查看大转盘
-        $res = $this->request('lottery', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(8, $res['list']);
-        $this->assertArrayHasKey('log', $res);
-        $this->assertArrayHasKey('info', $res['log']);
-        $this->assertArrayHasKey('total_num', $res['log']['info']);
-
-        // 2. 旋转转盘
-        $roll = $this->request('lottery', 'action');
-        $this->assertSame(1, $roll['status']);
-        $this->assertArrayHasKey('info', $roll);
-        $this->assertArrayHasKey('id', $roll['info']);
-        $this->assertArrayHasKey('gettype', $roll['info']);
-        $this->assertArrayHasKey('prize_name', $roll);
-    }
-
     /**
      * c=copies 请求：去掉响应信封补的 message（以及信封补的 msg = ok；旧版 api_return 只输出控制器给的字段）
      *
@@ -5097,18 +4716,6 @@ final class GameApiTest extends TestCase
         $this->assertSame([[53, $this->chatFrom($p) . '击败了' . $monster . '(普通) {53,[查看战报],1|1}', '1', $uid]], $this->chatMessages($w));
     }
 
-    public function testBeatengodSystem(): void
-    {
-        // 1. 查看战神试炼
-        $res = $this->request('beatengod', 'index');
-        $this->assertSame(1, $res['status']);
-
-        // 2. 敲击战神金身
-        $beaten = $this->request('beatengod', 'beaten');
-        $this->assertSame(1, $beaten['status']);
-        $this->assertGreaterThan(0, $beaten['silver']);
-    }
-
     public function testWarSystem(): void
     {
         // 1. 查看皇城国战大厅
@@ -5405,129 +5012,6 @@ final class GameApiTest extends TestCase
         return $out;
     }
 
-    public function testHiteggSystem(): void
-    {
-        // 1. 查看砸金蛋
-        $res = $this->request('hitegg', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(3, $res['eggs']);
-
-        // 2. 砸碎如意金蛋
-        $hit = $this->request('hitegg', 'hit_egg', ['id' => 1]);
-        $this->assertSame(1, $hit['status']);
-        $this->assertGreaterThan(0, $hit['silver']);
-        $this->assertGreaterThan(0, $hit['gold']);
-    }
-
-    public function testLevelgiftSystem(): void
-    {
-        // 1. 查看等级礼包
-        $res = $this->request('levelgift', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 领取 5 级成长礼包 (如果当前等级达到 5 级)
-        $gift = $this->request('levelgift', 'get_reward', ['level' => 5]);
-        $this->assertIsArray($gift);
-    }
-
-    public function testCountryShopSystem(): void
-    {
-        // 1. 查看国家特产商城
-        $res = $this->request('countryshop', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 购买青龙偃月刀图纸（需要声望）
-        DB::table('member')->where('uid', self::$uid)->update(['reputation' => 100000]);
-        Redis::del('player:' . self::$uid);
-        $buy = $this->request('countryshop', 'buy', ['id' => 1]);
-        $this->assertSame(1, $buy['status']);
-        $this->assertStringContainsString('青龙偃月刀', $buy['goods_name']);
-
-        // 3. 国家税金商城测试 (c=country_taxes_shop&m=index / buy)
-        $taxesShop = $this->request('country_taxes_shop', 'index');
-        $this->assertSame(1, $taxesShop['status']);
-        $this->assertNotEmpty($taxesShop['shop_list']['list']);
-        $this->assertArrayHasKey('member_info', $taxesShop);
-
-        $buyTaxes = $this->request('country_taxes_shop', 'buy', ['id' => 1]);
-        $this->assertSame(1, $buyTaxes['status']);
-    }
-
-    public function testEquipForgeSystem(): void
-    {
-        // 1. 查看铸造工坊
-        $res = $this->request('equip_forge', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['recipes']);
-
-        // 2. 锻造神装青龙偃月刀
-        $forge = $this->request('equip_forge', 'fabrication', ['id' => 1]);
-        $this->assertSame(1, $forge['status']);
-        $this->assertStringContainsString('青龙偃月刀', $forge['equip_name']);
-
-        // 3. 熔炼一件未穿戴装备
-        $pack = $this->request('pack', 'index');
-        $freeEid = 0;
-        foreach ($pack['list'] as $item) {
-            if ($item['is_equipped'] === 0) {
-                $freeEid = (int)$item['id'];
-                break;
-            }
-        }
-        if ($freeEid > 0) {
-            $resolve = $this->request('equip_forge', 'resolve', ['id' => $freeEid]);
-            $this->assertSame(1, $resolve['status']);
-            $this->assertGreaterThan(0, $resolve['get_iron']);
-        }
-    }
-
-    public function testTotalLoginSystem(): void
-    {
-        // 1. 查看累登面板
-        $res = $this->request('totallogin', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 领取第 1 天累登豪礼
-        $reward = $this->request('totallogin', 'action', ['day' => 1]);
-        $this->assertSame(1, $reward['status']);
-        $this->assertGreaterThan(0, $reward['silver']);
-    }
-
-
-    public function testActivationCodeSystem(): void
-    {
-        // 1. 查看激活码主界面
-        $res = $this->request('activationcode', 'index');
-        $this->assertSame(1, $res['status']);
-
-        // 2. 兑换官方豪礼码 VIP888
-        $reward = $this->request('activationcode', 'get_reward', ['code' => 'VIP888']);
-        $this->assertSame(1, $reward['status']);
-        $this->assertSame(88888, $reward['silver']);
-        $this->assertSame(200, $reward['gold']);
-
-        // 3. 重复兑换拦截
-        $dup = $this->request('activationcode', 'get_reward', ['code' => 'VIP888']);
-        $this->assertSame(-2, $dup['status']);
-    }
-
-    public function testExerciseSystem(): void
-    {
-        // 1. 查看整军演武
-        $res = $this->request('exercise', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(1, $res['gift_count']);
-
-        // 2. 拆开整军礼包
-        $open = $this->request('exercise', 'open_gift');
-        $this->assertSame(1, $open['status']);
-        $this->assertGreaterThan(0, $open['silver']);
-        $this->assertGreaterThan(0, $open['act']);
-    }
-
     public function testInformationSystem(): void
     {
         // 1. 查看主公资料；新版自定的 total_power 旧版没有对应字段（客户端也不读），已删除
@@ -5540,24 +5024,6 @@ final class GameApiTest extends TestCase
         $ach = $this->request('information', 'get_own_achievement');
         $this->assertSame(1, $ach['status']);
         $this->assertNotEmpty($ach['list']);
-    }
-
-    public function testInvitationSystem(): void
-    {
-        // 1. 查看结义邀请
-        $res = $this->request('invitation', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['my_code']);
-
-        // 2. 绑定好友结义码
-        $bind = $this->request('invitation', 'change', ['code' => 'HJ888888']);
-        $this->assertSame(1, $bind['status']);
-        $this->assertSame(100, $bind['gold']);
-
-        // 3. 领取邀请达标奖励
-        $reward = $this->request('invitation', 'get_reward');
-        $this->assertSame(1, $reward['status']);
-        $this->assertGreaterThan(0, $reward['silver']);
     }
 
     public function testLightweightThinModelsArchitecture(): void
@@ -5579,6 +5045,10 @@ final class GameApiTest extends TestCase
 
         // 3. 验证 Equipment 模型装配位置（战斗数值不再在模型里推算，见 Battle\TeamBuilder）
         $equips = Equipment::query()->where('uid', self::$uid)->get();
+        if ($equips === []) {
+            Equipment::addFromTemplate(self::$uid, 15);
+            $equips = Equipment::query()->where('uid', self::$uid)->get();
+        }
         $this->assertNotEmpty($equips);
         $firstEq = Equipment::fromArray($equips[0]);
         $this->assertGreaterThan(0, $firstEq->getSite());

@@ -206,8 +206,8 @@ final class MainQuestTask
             19 => (int)(DB::table('general')->where('uid', $uid)->where('star', '>=', $value)->whereNull('deleted_at')->value('star') ?? 0),
             // 获得历史上升排名
             9 => self::arenaRankUp($uid),
-            // 连续登录x天：依赖未移植 member_field.login_day（连续登录天数，member.php _update_continuous_login_day），按 0
-            20 => 0,
+            // 连续登录x天（member_field.login_day，主城 member.index 每天第一次打开时更新）
+            20 => (int)(DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->value('login_day') ?? 0),
             default => 0,
         };
     }

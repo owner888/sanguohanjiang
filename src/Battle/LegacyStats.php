@@ -373,7 +373,7 @@ final class LegacyStats
      *   r = intval(r * (100 + ptblood) / 100)
      * $allBlood 为 _get_general_blood 加完精炼/强化成就/坐骑后的值；
      * $tili 为 tili + tiliup + 名将进阶 tili（battle_model 组队时已合并）；
-     * $ptblood 为将魂[4] + 神树 buff + 套装 ptblood 之和（均未移植，由调用方传入）。
+     * $ptblood 为将魂[4] + 神树 buff + 套装 ptblood 之和（由调用方传入）。
      * 来源：models/battle_model.php:_get_general_all_blood
      */
     public static function battleAllBlood(

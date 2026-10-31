@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Model\DailyTask;
+use Hanjiang\Model\Edifice;
 use Hanjiang\Model\FreeLeap;
 use Hanjiang\Model\General;
 use Hanjiang\Model\MainQuestTask;
@@ -23,7 +24,7 @@ use OmniPHP\Http\Context;
  * unlock、practice_start（pid、gid、type）、get_levelup_price（pid）、levelup（pid）、practice_stop（pid）。
  * 同一玩家的突飞 / 训练 / 解锁 / 升级在玩家行锁里串行执行。
  *
- * 旧版 index 的首次打开记录 edifice_model->add_edifice_log(1) 只写日志、不影响返回，不移植。
+ * index 记首次打开（edifice_model->add_edifice_log(1)，Model\Edifice）。
  */
 final class PracticeHandler
 {
@@ -134,6 +135,8 @@ final class PracticeHandler
         }
 
         $return['mop'] = self::MOP;
+        // 首次打开操作记录 (类型1)
+        Edifice::addLog((int)$member['uid'], Edifice::PRACTICE);
         $return['list'] = $battleArr;
         $return['place'] = $practiceArr;
         $return['rule'] = Practice::typeList((int)$member['level']);
