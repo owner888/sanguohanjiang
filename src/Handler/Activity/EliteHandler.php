@@ -14,6 +14,8 @@ use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\Mission;
 use Hanjiang\MasterData\Price;
 use Hanjiang\MasterData\TalentScroll;
+use Hanjiang\Model\ActNewyear;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\MainQuestTask;
@@ -40,10 +42,8 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  * 新版实时组队层是 Hanjiang\WebSocket\EliteRoom（按 elitepop.js 的事件还原），它直接调用这里的 memberInfo / fight 等静态方法；
  * HTTP 的 action 不再开放（见 action 注释）。
  *
- * 依赖未移植：
- * - 春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(…, 24, uid) 计数）；
- * （主线任务 10「参加一次多人副本」按参战玩家计数；元宝流水与日常任务 5 由 Member::deductCurrency 记；
- *  消费统计 stat_model->elite_times 旧版不在付费点列表里，是空操作）
+ * 主线任务 10「参加一次多人副本」与春节送福任务 24（活动开启时，ActNewyear::task）按参战玩家计数；元宝流水与日常任务 5
+ * 由 Member::deductCurrency 记；消费统计 stat_model->elite_times 旧版不在付费点列表里，是空操作。
  */
 final class EliteHandler
 {
@@ -517,7 +517,8 @@ final class EliteHandler
         // 主线任务 10参加一次多人副本（无论胜负）
         foreach ($team as $val) {
             MainQuestTask::action((int)$val, 10, 1);
-            // 依赖未移植：春节送福活动 actnewyear_model->add_task_num(version, 24, uid)
+            // 添加春节送福日常任务完成次数（活动开启时）
+            ActNewyear::task((int)$val, 24, BossClock::now());
         }
 
         // 成功返回

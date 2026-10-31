@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\City;
 
+use Hanjiang\Cross\UcModel;
 use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\MasterData\Activationcode;
 use Hanjiang\MasterData\ActivationcodeReward;
@@ -23,8 +24,8 @@ use OmniPHP\Http\Context;
  * 6 黄宝石、7 紫宝石、8 原魂）。每个玩家 24 小时内最多尝试 50 次（Redis activation_max_{uid}）。
  * 客户端 settingspop.js 调用 index、get_reward（code）。index 照旧版恒回 open 0（旧版「为了支持多种类型的激活码」注释掉了查询）。
  *
- * 依赖未移植：8 ~ 13 位的激活码由 uc 服务器校验（uc_model->use_activation_code，uc 的 activationcode 不在旧版代码包里）。
- * uc 没有返回时旧版会写一条 type 0 的使用记录再因奖励类型为空 SQL 出错；这里格式正确的长码一律回 -3（激活码不存在），不写记录。
+ * 8 ~ 13 位的激活码由 uc 校验并标记使用（Cross\UcModel::useActivationCode，单服下在本进程内；码与类型由运营后台生成），
+ * 成功后按码的类型取本服奖励发放；uc 的 -1 / -2 / -3 / -4 / -5 对应这里的 -3 / -4 / -5 / -5 / -1。
  * 当前时间取 BossClock（生产恒为 time()，测试可固定时间验证有效期）。
  * 与旧版的差别：处理锁改为 Redis SET NX（旧版 get + setex）。
  */
@@ -44,6 +45,8 @@ final class ActivationCodeHandler
         'code_error1' => '已经使用过激活码',
         'code_error2' => '激活码格式不正确',
         'code_error3' => '激活码不存在',
+        'code_error4' => '激活码已使用',
+        'code_error5' => '激活码使用失败',
         'code_error6' => '请求正在处理，请稍后再试',
         'code_error7' => '尝试次数过多，请稍后再试',
         'code_error8' => '没有激活码可用',
@@ -76,6 +79,8 @@ final class ActivationCodeHandler
          * -8 没有激活码可用
          * -7 尝试次数过多，请稍后再试
          * -6 请求正在处理，请稍后再试
+         * -5 激活码使用失败
+         * -4 激活码已使用
          * -3 激活码不存在
          * -2 激活码格式不正确
          * -1 已使用过激活码
@@ -127,10 +132,25 @@ final class ActivationCodeHandler
                 $return['message'] = self::LANG['code_error2'];
                 return $return;
             }
-            // 依赖未移植：uc 服务器校验长激活码（uc_model->use_activation_code），按激活码不存在处理
-            $return['status'] = -3;
-            $return['message'] = self::LANG['code_error3'];
-            return $return;
+            // 去 uc 更新验证码信息
+            $result = UcModel::useActivationCode($uid, $code);
+            $fail = match ($result['status']) {
+                // 激活码不存在
+                -1 => [-3, 'code_error3'],
+                // 激活码已使用
+                -2 => [-4, 'code_error4'],
+                // 激活码使用失败 / 参数不完整
+                -3, -4 => [-5, 'code_error5'],
+                // 已使用过同类型的激活码
+                -5 => [-1, 'code_error1'],
+                default => null,
+            };
+            if ($fail !== null) {
+                $return['status'] = $fail[0];
+                $return['message'] = self::LANG[$fail[1]];
+                return $return;
+            }
+            return self::grant($uid, $code, (int)$result['code']['type'], $now, $return);
         }
         // 找出数据库所存在的激活码
         $info = null;
@@ -158,7 +178,17 @@ final class ActivationCodeHandler
             $return['message'] = self::LANG['code_error1'];
             return $return;
         }
-        $rewardType = (int)$info['type'];
+        return self::grant($uid, $code, (int)$info['type'], $now, $return);
+    }
+
+    /**
+     * 记录使用并发放奖励（四位码与长码共用；奖励取本服 ActivationcodeReward）
+     *
+     * @param array<string, mixed> $return
+     * @return array<string, mixed>
+     */
+    private static function grant(int $uid, string $code, int $rewardType, int $now, array $return): array
+    {
         // 查询奖励列表（先查奖励：取不到时旧版已写使用记录，这里不写）
         $reward = null;
         foreach (ActivationcodeReward::ROWS as $row) {

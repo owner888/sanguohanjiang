@@ -467,7 +467,7 @@ final class Daily3Test extends TestCase
         $this->assertSame(-9, $this->request($p['auth'], 'activationcode', 'get_reward', ['code' => '1005'])['status']);
         $this->assertSame(-8, $this->request($p['auth'], 'activationcode', 'get_reward', ['code' => '9999'])['status']);
         $this->assertSame(-2, $this->request($p['auth'], 'activationcode', 'get_reward', ['code' => 'ab'])['status']);
-        // 长码由 uc 校验（未移植）：激活码不存在
+        // 长码由 uc 校验：uc 里没有的码为激活码不存在（uc 流程见 Cross1Test）
         $this->assertSame(-3, $this->request($p['auth'], 'activationcode', 'get_reward', ['code' => 'ABCDEFGH12'])['status']);
 
         BossClock::freeze(1483203600 + 100);
@@ -492,9 +492,11 @@ final class Daily3Test extends TestCase
         $uid = $p['uid'];
         $this->assertSame(['status' => -1, 'code' => '', 'number' => 0, 'list' => []], $this->request($p['auth'], 'invitation', 'index'));
         DB::table('member')->where('uid', $uid)->update(['level' => 50]);
-        // 没有 uc 生成邀请码
-        $this->assertSame(['status' => 0, 'code' => '', 'number' => 0, 'list' => []], $this->request($p['auth'], 'invitation', 'index'));
-        DB::table('invitation_code')->insert(['uid' => $uid, 'code' => 'abc123', 'number' => 5, 'status' => 0]);
+        // 第一次打开向 uc 取邀请码（8 位小写字母数字）存到本服（uc 流程见 Cross1Test）
+        $index = $this->request($p['auth'], 'invitation', 'index');
+        $this->assertSame([1, 0], [$index['status'], $index['number']]);
+        $this->assertMatchesRegularExpression('/^[a-z0-9]{8}$/', $index['code']);
+        DB::table('invitation_code')->where('uid', $uid)->update(['code' => 'abc123', 'number' => 5]);
         $index = $this->request($p['auth'], 'invitation', 'index');
         $this->assertSame([1, 'abc123', 5], [$index['status'], $index['code'], $index['number']]);
         $this->assertSame([2, 2, 0, 'gold', 'get2'], [$index['list'][0]['completed'], $index['list'][1]['completed'], $index['list'][2]['completed'], $index['list'][0]['reward_type'], $index['list'][2]['reward_type']]);
@@ -504,9 +506,9 @@ final class Daily3Test extends TestCase
         $this->assertSame(2, $this->request($p['auth'], 'invitation', 'get_reward', ['id' => 3])['status']);
         $this->assertSame(4, $this->request($p['auth'], 'invitation', 'get_reward', ['id' => 99])['status']);
 
-        // 兑换别人的邀请码：空码 3；uc 未移植按没有返回（0，记错误次数）；已被邀请 4；错误 50 次 5
+        // 兑换别人的邀请码：空码 3；uc 里没有的码 3（记错误次数）；已被邀请 4；错误 50 次 5
         $this->assertSame(['status' => 3, 'all_silver' => 0, 'all_gold' => 0, 'reward' => ['gold' => 100, 'silver' => 500000]], $this->request($p['auth'], 'invitation', 'change', ['code' => '']));
-        $this->assertSame(0, $this->request($p['auth'], 'invitation', 'change', ['code' => 'xyz'])['status']);
+        $this->assertSame(3, $this->request($p['auth'], 'invitation', 'change', ['code' => 'xyz'])['status']);
         $this->assertSame(1, Redis::get('invitation_error_' . $uid));
         DB::table('invitation_code')->where('uid', $uid)->update(['status' => 1, 'number' => 50]);
         $this->assertSame(4, $this->request($p['auth'], 'invitation', 'change', ['code' => 'xyz'])['status']);
@@ -575,9 +577,10 @@ final class Daily3Test extends TestCase
         $this->assertSame(['now_tree' => '', 'name' => '', 'buff' => 0, 'tree_id' => 1], $index['tree']);
         $this->assertSame([6, 2, 0, 1, 500], [count($index['list']), $index['list'][0]['id'], $index['list'][0]['status'], $index['list'][0]['reward'][1]['type'], $index['list'][0]['reward'][1]['value']]);
 
-        // 第一次 100 元宝浇水免费
+        // 第一次 100 元宝浇水免费。暴击倍数走 mt_rand（8 倍时 800 经验直接升级），固定种子使第一次为 1 倍；tearDown 重置
+        mt_srand(1);
         $water = $this->request($p['auth'], 'sacredtree', 'watering', ['type' => 1]);
-        $this->assertSame([1, 0, 5000, 100 * $water['multiple'], 0], [$water['status'], $water['time'], $water['all_gold'], $water['add_exp'], $water['levelup']]);
+        $this->assertSame([1, 1, 0, 5000, 100, 0], [$water['status'], $water['multiple'], $water['time'], $water['all_gold'], $water['add_exp'], $water['levelup']]);
         $this->assertSame(0, (int)DB::table('sacredtree_action_log')->where('uid', $uid)->value('gold'));
         // 升级：经验够 800 升 2 级，发奖励（元宝 500、突飞卡 50、银币 500 万）
         DB::table('sacredtree_log')->where('uid', $uid)->update(['exp' => 799]);
@@ -712,7 +715,8 @@ final class Daily3Test extends TestCase
 
         BossClock::freeze(self::OPEN_TS);
         $member = $this->request($p['auth'], 'member', 'index');
-        $this->assertSame([1, 1, 1, 0], [$member['exercise'], $member['flop'], $member['sacredtree'], $member['god']]);
+        // 战神殿 god 在活动循环后写死为 1（旧版 member.php）
+        $this->assertSame([1, 1, 1, 1], [$member['exercise'], $member['flop'], $member['sacredtree'], $member['god']]);
         $this->assertSame(1, $member['blackmarket_type']);
     }
 }

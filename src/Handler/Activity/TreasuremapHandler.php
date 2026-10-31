@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Model\ActNewyear;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
 use Hanjiang\Model\StatPay;
@@ -25,8 +27,9 @@ use OmniPHP\Http\Context;
  * 未在队伍中的藏宝图自动卖掉并发信件（TreasuremapCron）。
  *
  * 照旧版保留的写法：组队完成时其余队员的 mapreward 是覆盖写入（上一次未领的奖励会被覆盖）；index 的 team_status 在队伍中
- * 为 1、空闲 0、队伍已解散 -1；sale 只卖最早的一块。依赖未移植：组队完成的春节送福计数 actnewyear_model->add_task_num(20)
- * （节日活动）。不移植：clear_all / clear_map_count（运维口令接口，客户端不调用）、get_team_info（客户端不调用）。
+ * 为 1、空闲 0、队伍已解散 -1；sale 只卖最早的一块。组队完成时春节送福活动开启则给每名队员记任务 20
+ * （ActNewyear::task，旧版 actnewyear_model->add_task_num(version, 20, uid)）。不移植：clear_all / clear_map_count
+ * （运维口令接口，客户端不调用）、get_team_info（客户端不调用）。
  * 与旧版的差别：队伍的创建 / 加入 / 退出在 MySQL 命名锁 hj_treasuremap 里串行执行（旧版无锁，并发加入可能凑出 4 人队）；
  * 藏宝图删除为软删除。
  */
@@ -245,7 +248,8 @@ final class TreasuremapHandler
                 if (self::delMap($idArr) > 0) {
                     foreach (array_keys($levelArr) as $memberUid) {
                         self::subMap($memberUid);
-                        // 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num($version, 20, $uid)（节日活动）
+                        // 添加春节送福日常任务完成次数（活动开启时）
+                        ActNewyear::task($memberUid, 20, BossClock::now());
                     }
                 }
                 $map = self::mapInfo($uid, $member['level']);

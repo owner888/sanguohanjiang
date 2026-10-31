@@ -10,9 +10,11 @@ use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\EquipEssence;
 use Hanjiang\MasterData\WorldShop;
 use Hanjiang\Handler\General\TavernHandler;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\FreeLeap;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnGem;
+use Hanjiang\Model\WorldArena;
 
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
@@ -142,11 +144,10 @@ final class PackHandler
     /**
      * 使用物品: c=pack&m=use_item&id=&confirm=（旧版 controllers/pack.php:use_item）
      *
-     * 只用于跨服物品（own_equip type 11 ~ 18，旧版在跨服商城 worldarena 用功勋兑换），奖励规则取 MasterData WorldShop：
+     * 只用于跨服物品（own_equip type 11 ~ 18，在跨服商城 c=worldarena&m=exchange_item 用功勋兑换），奖励规则取 MasterData WorldShop：
      * type 1 银币（add1 × 主公等级）、2 ~ 4 蓝 / 金 / 紫宝石、5 军令、6 ~ 8 蓝 / 金 / 紫色突飞卡（突飞卡按 1 / 2 / 4 倍张数）。
-     * confirm 为 1 时才扣物品（数量减到 0 时软删除，旧版 disable = 1）、发奖励；否则只返回预览。
-     * 依赖未移植：跨服商城兑换（新版没有获得跨服物品的途径，背包里不会有这类物品，接口回 -1）与全服奖励记录
-     * worldarena_model->add_reward_info（world_reward 表，本服 61 级以上玩家共享 add2 的跨服福利）。
+     * confirm 为 1 时才扣物品（数量减到 0 时软删除，旧版 disable = 1）、发奖励，并记一条全服奖励（world_reward，add2：
+     * 本服 61 级以上的其他玩家各领一次，c=worldarena&m=get_server_reward）；否则只返回预览。
      *
      * 状态码：-3 使用物品失败，-2 获取物品奖励信息失败，-1 获取物品信息失败，0 失败，1 成功
      */
@@ -197,7 +198,16 @@ final class PackHandler
                     6, 7, 8 => FreeLeap::add($uid, $times),
                     default => null,
                 };
-                // 依赖未移植：记录到全服奖励表 worldarena_model->add_reward_info（跨服）
+                // 记录到奖励表（全服福利）
+                $nickname = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+                WorldArena::addRewardInfo([
+                    'itemid' => $info['id'],
+                    'uid' => $uid,
+                    'nickname' => $nickname,
+                    'type' => $info['type'],
+                    'add' => $info['add2'],
+                    'dateline' => BossClock::now(),
+                ]);
                 $after = DB::table('member')->select('silver', 'act')->where('uid', $uid)->first();
                 $return['silver'] = (int)$after['silver'];
                 $return['act'] = (int)$after['act'];

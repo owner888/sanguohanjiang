@@ -7,6 +7,7 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\Activity\EliteHandler;
+use Hanjiang\Cross\UcModel;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\Model\ActivityClock;
@@ -20,6 +21,7 @@ use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\MemberStone;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\PassGeneral;
+use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -38,9 +40,8 @@ use OmniPHP\Http\Context;
  * 奖励类型（gettype）：1 银币、2 玉石、3 装备、4 装备碎片、5 天赋卷轴碎片、6 天赋卷轴、7 声望、8 原魂、9 突飞卡、
  * 10 紫宝石、11 精炼石、12 五彩石、13 上古血玉、14 坐骑碎片、15 坐骑。HerothroneMission 里用到 1 / 2 / 4 / 7 / 8 / 14。
  *
- * 依赖未移植：
- * - 跨服排行 uc_model->get_top_rank / update_top_rank（uc 服务器 herothrone 排行，旧版缓存在 Redis herothrone 键 1800 秒）：
- *   index / go_back 的 list 恒为空数组，过关刷新历史最高时不上报。
+ * 跨服排行：index / go_back 的 list 为 uc 的英雄王座排行前 10 名（Cross\UcModel，本服缓存在 Redis herothrone 键 1800 秒），
+ * 过关刷新历史最高时按旧版规则上报（update_top_rank）。
  * （元宝 / 银币 / 声望 / 原魂的增减由 Member / OwnSoul 记流水，元宝消耗另计日常任务 5）
  */
 final class HerothroneHandler
@@ -65,6 +66,13 @@ final class HerothroneHandler
 
     /** 一页显示几个怪物（herothrone_model->_num） */
     private const int PAGE_NUM = 5;
+
+    /** 排行人数（旧版 $_num） */
+    private const int TOP_RANK_NUM = 10;
+
+    /** 排行缓存键与时间（旧版 $_toprank / $_ttl） */
+    private const string TOP_RANK_KEY = 'herothrone';
+    private const int TOP_RANK_TTL = 1800;
 
     /** 旧版语言包 language/chinese_s/base_lang.php */
     private const string LANG_BASE_CHIP = '碎片';
@@ -456,7 +464,8 @@ final class HerothroneHandler
                 if ($missionid > $info['laststage']) {
                     // 修改历史最高过关记录
                     $data['laststage'] = $missionid;
-                    // 依赖未移植：update_top_rank（uc_model 跨服排行上报 + 本服 Redis herothrone 排行缓存）
+                    // 更新排行（uc 跨服排行 + 本服 Redis herothrone 排行缓存）
+                    self::updateTopRank($uid, (string)$member['nickname'], $missionid);
                 }
                 // 判断是否通关
                 if ($missionid === self::MAX_STAGE) {
@@ -819,15 +828,56 @@ final class HerothroneHandler
     }
 
     /**
-     * 排行列表（旧版 get_top_rank：Redis herothrone 缓存，没有时从 uc 服务器取前 10 名，servername 为分组名 + 服务器 id + 「服」）
-     *
-     * 依赖未移植：uc 服务器的英雄王座跨服排行（uc 的 herothrone_model 不在旧版代码包里），返回空数组。
+     * 排行列表（旧版 get_top_rank）：Redis herothrone 缓存 1800 秒，没有（或缓存的是 uc 的出错返回）时从 uc 取前 10 名
+     * （UcModel::getTopRank）；servername 为分组名 + 服务器 id + 「服」，去掉 groupname
      *
      * @return list<array<string, mixed>>
      */
     private static function getTopRank(): array
     {
-        return [];
+        $topRank = Redis::get(self::TOP_RANK_KEY);
+        if (!is_array($topRank) || $topRank === [] || isset($topRank['status'])) {
+            // 缓存没有排行信息，从 uc 服务器获取排行列表
+            $topRank = UcModel::getTopRank(self::TOP_RANK_NUM);
+            if ($topRank !== []) {
+                Redis::set(self::TOP_RANK_KEY, $topRank, self::TOP_RANK_TTL);
+            }
+        }
+        $return = [];
+        foreach ($topRank as $val) {
+            $val['servername'] = $val['groupname'] . $val['serverid'] . '服';
+            unset($val['groupname']);
+            $return[] = $val;
+        }
+        return $return;
+    }
+
+    /**
+     * 更新排行（旧版 update_top_rank）：排行未满 10 人时直接上报；满了时进度超过缓存里最后一名、且超过 uc 最新排行最后一名才上报。
+     * 上报后 uc 返回的结果（最新排行，或出错时的 status 数组）写入本服缓存，同旧版
+     */
+    private static function updateTopRank(int $uid, string $nickname, int $stage): void
+    {
+        $list = [];
+        // 从缓存获取排行
+        $topRank = self::getTopRank();
+        if (count($topRank) >= self::TOP_RANK_NUM) {
+            // 判断自己的进度是否大于排行中最后一名的进度（大于就表示能进入排行）
+            if ($stage > $topRank[count($topRank) - 1]['stage']) {
+                // 能进入排行，从 uc 服务器取最新的排行，避免缓存导致数据错误
+                $ucTopRank = UcModel::getTopRank(self::TOP_RANK_NUM);
+                if ($ucTopRank !== [] && $stage > $ucTopRank[count($ucTopRank) - 1]['stage']) {
+                    $list = UcModel::updateTopRank($uid, $nickname, $stage, self::TOP_RANK_NUM);
+                }
+            }
+        } else {
+            // 直接把数据插入到 uc 服务器
+            $list = UcModel::updateTopRank($uid, $nickname, $stage, self::TOP_RANK_NUM);
+        }
+        // 更新本服务器缓存
+        if ($list !== []) {
+            Redis::set(self::TOP_RANK_KEY, $list, self::TOP_RANK_TTL);
+        }
     }
 
     /**

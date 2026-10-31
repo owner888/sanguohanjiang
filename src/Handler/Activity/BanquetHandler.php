@@ -6,7 +6,9 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\CountryHandler;
+use Hanjiang\Model\ActNewyear;
 use Hanjiang\Model\Banquet;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Member;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -22,8 +24,8 @@ use OmniPHP\Http\Context;
  * dismiss_team、getout_team、action（type）。
  *
  * 同一国家的组队操作在国家行锁里串行执行（Banquet::locked）。
- * 依赖未移植：国家计划任务标志位 country_model->set_flog（消费方 cron_country 计划任务未移植）；
- * 春节送福活动计数 actnewyear_model->add_task_num(version, 22)（节日活动，旧版数据中已结束）。
+ * 开宴时春节送福活动开启则记任务 22（ActNewyear::task）：霸王宴（type 非 0）只记队长，普通开宴记队伍里每个人（含队长）。
+ * 依赖未移植：国家计划任务标志位 country_model->set_flog（消费方 cron_country 计划任务未移植）。
  */
 final class BanquetHandler
 {
@@ -382,7 +384,17 @@ final class BanquetHandler
             // 删除队伍，修改队长的队伍状态
             Banquet::delTeam($country, $memberInfo['team'], $uid);
             Banquet::updateTeam([$uid]);
-            // 依赖未移植：更新计划任务标志位 country_model->set_flog；春节送福活动计数 add_task_num(version, 22)
+            // 依赖未移植：更新计划任务标志位 country_model->set_flog
+            // 添加春节送福日常任务完成次数（活动开启时）
+            if ($type !== 0) {
+                ActNewyear::task($uid, 22, BossClock::now());
+            } else {
+                foreach ($team['list'] as $val) {
+                    if (isset($val['uid'])) {
+                        ActNewyear::task((int)$val['uid'], 22, BossClock::now());
+                    }
+                }
+            }
             $after = self::member($uid);
             $return['status'] = 1;
             $return['add_silver'] = $addSilver;

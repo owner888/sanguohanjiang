@@ -30,7 +30,9 @@
         "server:reload": "php server.php reload",
         "server:restart": "php server.php restart -d",
         "server:stop": "php server.php stop",
-        "server:status": "php server.php status"
+        "server:status": "php server.php status",
+        "migrate": "php tools/migrate.php migrate",
+        "migrate:status": "php tools/migrate.php status"
     },
     "repositories": [
         {

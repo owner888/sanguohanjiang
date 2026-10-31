@@ -21,14 +21,22 @@ use Hanjiang\Cron\BusinessCron;
 use Hanjiang\Cron\CompeteCron;
 use Hanjiang\Cron\CountryCron;
 use Hanjiang\Cron\ExerciseCron;
+use Hanjiang\Cron\Fest3Cron;
+use Hanjiang\Cron\FestivalCron;
 use Hanjiang\Cron\FlopCron;
+use Hanjiang\Cron\GodCron;
+use Hanjiang\Cron\GvgCron;
 use Hanjiang\Cron\NewgiftCron;
+use Hanjiang\Cron\NewyearbossCron;
 use Hanjiang\Cron\PassGeneralCron;
 use Hanjiang\Cron\SiegeCron;
 use Hanjiang\Cron\TreasuremapCron;
+use Hanjiang\Cron\WarCron;
+use Hanjiang\Cron\WorldArenaCron;
 use Hanjiang\Cron\WorldBossCron;
 use Hanjiang\Model\FlowLog;
 use Hanjiang\Support\Connections;
+use Hanjiang\Support\Migrations;
 use Hanjiang\WebSocket\ChatPush;
 use Hanjiang\WebSocket\EliteRoom;
 use Hanjiang\WebSocket\WebSocketHandler;
@@ -45,9 +53,21 @@ Application::workerman('hanjiang');
 // 路由在 master 里注册一次，fork 后子进程继承
 require_once __DIR__ . '/routes.php';
 
-// 数据库迁移不自动执行：OmniPHP MigrationRunner 只认 database/migrations/*.php（框架 Migration 类），
-// 本项目的迁移是手写 .sql，按 README「数据库迁移」一节手动执行。这里也不调用 DatabaseBootstrap::init()——
-// 它只在 master 里连一次再关掉，对本项目没有用处。
+// 数据库自动迁移（与 smart-book 的 DatabaseBootstrap::init() 同一时机）：start / restart 时在 master 里
+// 跑完 database/migrations/*.php 中待执行的迁移（空库时第一个迁移导入 database/schema.sql），然后关闭连接再 fork；
+// 子进程照旧在 onWorkerStart 里 Connections::init()。stop / status / reload 等命令不碰数据库。
+// 迁移失败直接退出，不带着没迁移完的库启动。不直接调 DatabaseBootstrap::init() 的原因见 Hanjiang\Support\Migrations。
+if (in_array($argv[1] ?? '', ['start', 'restart'], true)) {
+    try {
+        $migrated = Migrations::migrateOnStart();
+    } catch (Throwable $e) {
+        fwrite(STDERR, '数据库迁移失败: ' . $e->getMessage() . "\n");
+        exit(1);
+    }
+    echo $migrated === []
+        ? "数据库迁移：没有待执行的迁移\n"
+        : '数据库迁移：执行了 ' . count($migrated) . ' 个（' . implode('、', $migrated) . "）\n";
+}
 
 // -------------------------------------------------------------
 // 1. HTTP 游戏业务网关
@@ -132,6 +152,32 @@ $httpWorker->onWorkerStart = static function (Worker $worker): void {
         Timer::add(BeatengodCron::INTERVAL, $cron('cron', 'get_beatengod_box_reward', static function (): void {
             BeatengodCron::box(time());
         }));
+        // 春节年兽：活动结束后 10 小时内补发未领取的伤害 / 鼓舞 / 闪避排行奖励（cron::get_newyearboss_reward）
+        Timer::add(NewyearbossCron::INTERVAL, $cron('cron', 'get_newyearboss_reward', static function (): void {
+            NewyearbossCron::run(time());
+        }));
+        // 节日活动第二批：活动结束后补发未领取的奖励（七夕 / 国家庆典 / 中秋 / 国庆 / 万圣节 / 圣诞团购 / 清明 / 充值返利）
+        foreach (FestivalCron::JOBS as [$cronClass, $cronMethod, $cronJob]) {
+            Timer::add(FestivalCron::INTERVAL, $cron($cronClass, $cronMethod, static function () use ($cronJob): void {
+                $cronJob(time());
+            }));
+        }
+        // 节日活动第三批：每天零点的寻宝 / 充值送豪礼与累计登录 / 蹴鞠与世界杯任务，半小时一次的招募战友统计，
+        // 活动结束后的领工资、貔貅聚财、七星灯补发
+        foreach (Fest3Cron::DAILY as [$cronClass, $cronMethod, $cronJob]) {
+            $daily(Fest3Cron::RUN_AT, $cron($cronClass, $cronMethod, static function () use ($cronJob): void {
+                $cronJob(time());
+            }));
+        }
+        [$cronClass, $cronMethod, $cronJob] = Fest3Cron::STAT;
+        Timer::add(Fest3Cron::STAT_INTERVAL, $cron($cronClass, $cronMethod, static function () use ($cronJob): void {
+            $cronJob(time());
+        }));
+        foreach (Fest3Cron::JOBS as [$cronClass, $cronMethod, $cronJob]) {
+            Timer::add(Fest3Cron::INTERVAL, $cron($cronClass, $cronMethod, static function () use ($cronJob): void {
+                $cronJob(time());
+            }));
+        }
         // 藏宝图：每日 7 点（跟征收一起）出售昨天以前获得、未组队的藏宝图（cron::sale_map）
         $daily(TreasuremapCron::RUN_AT, $cron('cron', 'sale_map', static function (): void {
             TreasuremapCron::run(time());
@@ -139,6 +185,33 @@ $httpWorker->onWorkerStart = static function (Worker $worker): void {
         // 新服大礼包：30 天活动结束后自动领取可领取的礼包并发信件（cron::get_newgift_reward）
         $daily(NewgiftCron::RUN_AT, $cron('cron', 'get_newgift_reward', static function (): void {
             NewgiftCron::run(time());
+        }));
+        // 跨服演武：0 点后记本服昨日前三（cron::cache_top_rank）并重置跨服排行榜（battle cron::reset_rank_list）；
+        // 每 10 分钟同步榜上玩家的神树等级（battle cron::reset_member_tree）
+        $daily(WorldArenaCron::RUN_AT, $cron('cron', 'cache_top_rank', static function (): void {
+            WorldArenaCron::daily(time());
+        }));
+        Timer::add(WorldArenaCron::TREE_INTERVAL, $cron('cron', 'reset_member_tree', static function (): void {
+            WorldArenaCron::tree(time());
+        }));
+        // 战神殿：报名结束后生成对阵，战斗阶段每局开打前 1 分钟算出全部战斗（battle god::check_pk）
+        Timer::add(GodCron::INTERVAL, $cron('god', 'check_pk', static function (): void {
+            GodCron::run(time());
+        }));
+        // 武斗会：报名结束后同步、每天开打生成对阵、每局开打前 1 分钟算出战斗、每天打完排名晋级（服务器端赛程，推定）
+        Timer::add(WarCron::INTERVAL, $cron('war', 'check_pk', static function (): void {
+            WarCron::run(time());
+        }));
+        // 群服争霸：生成参赛服务器 / 对阵 / 关注、开战前取参赛玩家并同步、每轮锁定后算出团战（battle gvg::run_pk）
+        Timer::add(GvgCron::PK_INTERVAL, $cron('gvg', 'run_pk', static function (): void {
+            GvgCron::runPk(time());
+        }));
+        // 群服争霸：押注奖励与晋级奖励（cron_gvg::bet_reward / push_member_reward）
+        Timer::add(GvgCron::REWARD_INTERVAL, $cron('cron_gvg', 'bet_reward', static function (): void {
+            GvgCron::betReward(time());
+        }));
+        Timer::add(GvgCron::REWARD_INTERVAL, $cron('cron_gvg', 'push_member_reward', static function (): void {
+            GvgCron::pushMemberReward(time());
         }));
     }
 };

@@ -67,6 +67,9 @@ final class MemberActivity
         'jadetype' => 0,
         'jadenum' => 0,
         'jadeturn' => 0,
+        // 中秋吃月饼（mooncake）免费次数与购买次数
+        'freemooncake' => 12,
+        'mooncaketimes' => 0,
     ];
 
     /**

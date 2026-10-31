@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\Activity;
 
+use Hanjiang\Cross\UcModel;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\MasterData\InvitationReward;
@@ -20,10 +21,9 @@ use OmniPHP\Http\Context;
  * （Redis invitation_error_{uid}，旧版键名）。被邀请过且奖励全部领完时关闭入口（member_field.close_invitation = 1，每日活动不显示）。
  * 客户端 invitationpop.js / miscpop.js 调用 index、get_reward（id）、change（code）。
  *
- * 依赖未移植：邀请码由 uc 服务器生成与校验（uc_model->create_invitation_code / check_invitation_code），邀请成功由 uc 回调
- * completed 累计人数（uc 的 invitation 不在旧版代码包里）。没有 uc 时：index 生成不了邀请码——旧版会插入一条空邀请码，
- * 这里不插，回 status 0；change 照旧版按 uc 没有返回处理（status 0，记一次错误）；已邀请人数恒为 0。
- * 不移植：completed（uc 回调）、clear_change_limit（运维接口，不校验身份）。
+ * 邀请码由 uc 生成与校验（Cross\UcModel::createInvitationCode / checkInvitationCode，单服下在本进程内）：第一次打开时向 uc
+ * 取码存到本服；输入别人的码由 uc 校验，成功时 uc 给邀请者累计人数并发信件（旧版 uc 回调本控制器的 completed，同一处理）。
+ * 不移植：completed（uc 回调接口，单服下 uc 直接执行）、clear_change_limit（运维接口，不校验身份）。
  */
 final class InvitationHandler
 {
@@ -51,11 +51,7 @@ final class InvitationHandler
             return $return;
         }
         $uid = (int)$member['uid'];
-        $codeInfo = self::codeInfo($uid);
-        if ($codeInfo === null) {
-            // 依赖未移植：没有邀请码时由 uc 生成（create_code_info），无法生成
-            return $return;
-        }
+        $codeInfo = self::codeInfo($uid) ?? self::createCodeInfo($uid);
         // 处理奖励
         $rewardList = array_values(InvitationReward::ROWS);
         $myReward = self::myRewardIds($uid);
@@ -174,6 +170,7 @@ final class InvitationHandler
          */
         $return = ['status' => 0, 'all_silver' => 0, 'all_gold' => 0, 'reward' => []];
         $member = self::member(MemberHandler::resolveUid($ctx));
+        $nickname = $member === null ? '' : (string)DB::table('member')->where('uid', (int)$member['uid'])->value('nickname');
         if ($member === null || (int)$member['level'] < self::LEVEL_LIMIT) {
             $return['status'] = -1;
             return $return;
@@ -189,11 +186,32 @@ final class InvitationHandler
             // 输入错误次数太多
             $status = 5;
         } else {
-            $codeInfo = self::codeInfo($uid);
-            if ($codeInfo === null || $codeInfo['status'] === 0) {
-                // 依赖未移植：uc 校验邀请码（check_invitation_code），按 uc 没有返回处理（status 0）
-                // 记录连续错误次数
-                Redis::set(self::ERROR_KEY . $uid, $times + 1, self::ERROR_EXPIRE);
+            // 没有邀请码信息时先向 uc 取一个
+            $codeInfo = self::codeInfo($uid) ?? self::createCodeInfo($uid);
+            if ($codeInfo['status'] === 0) {
+                $result = UcModel::checkInvitationCode($uid, $nickname, $code);
+                if ($result['status'] === 1) {
+                    // 兑换成功 发放奖励（以 status = 0 为条件标记已被邀请，并发只发一次）
+                    $done = DB::table('invitation_code')->where('uid', $uid)->where('status', 0)->whereNull('deleted_at')
+                        ->update(['status' => 1, 'to_code' => $code]);
+                    if ($done === 1) {
+                        Member::addCurrency($uid, silver: self::CHANGE_REWARD['silver'], gold: self::CHANGE_REWARD['gold']);
+                    }
+                    $after = DB::table('member')->select('silver', 'gold')->where('uid', $uid)->first();
+                    $return['all_silver'] = (int)$after['silver'];
+                    $return['all_gold'] = (int)$after['gold'];
+                    $status = 1;
+                } elseif ($result['status'] === 2) {
+                    // 邀请码已过期
+                    $status = 2;
+                } elseif ($result['status'] === 3) {
+                    // 邀请码错误
+                    $status = 3;
+                }
+                if ($status !== 1) {
+                    // 记录连续错误次数
+                    Redis::set(self::ERROR_KEY . $uid, $times + 1, self::ERROR_EXPIRE);
+                }
             } else {
                 // 已经获得过奖励
                 $status = 4;
@@ -205,11 +223,26 @@ final class InvitationHandler
     }
 
     /**
+     * 没有邀请码信息时向 uc 取码并保存到本地（create_code_info）
+     *
+     * @return array{code: string, number: int, status: int}
+     */
+    public static function createCodeInfo(int $uid): array
+    {
+        $result = UcModel::createInvitationCode($uid);
+        DB::execute(
+            'INSERT IGNORE INTO `zc_sanguo_invitation_code` (`uid`, `code`, `number`, `status`) VALUES (:uid, :code, 0, 0)',
+            ['uid' => $uid, 'code' => $result['code']]
+        );
+        return self::codeInfo($uid) ?? ['code' => $result['code'], 'number' => 0, 'status' => 0];
+    }
+
+    /**
      * 邀请码信息（get_code_info）；没有为 null
      *
      * @return array{code: string, number: int, status: int}|null
      */
-    private static function codeInfo(int $uid): ?array
+    public static function codeInfo(int $uid): ?array
     {
         $row = DB::table('invitation_code')->select('code', 'number', 'status')->where('uid', $uid)->whereNull('deleted_at')->first();
         return $row === null ? null : ['code' => (string)$row['code'], 'number' => (int)$row['number'], 'status' => (int)$row['status']];

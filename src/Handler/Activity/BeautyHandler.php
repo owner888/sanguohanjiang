@@ -7,7 +7,9 @@ namespace Hanjiang\Handler\Activity;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\ArenaHandler;
 use Hanjiang\Handler\Pvp\CountryHandler;
+use Hanjiang\Model\ActNewyear;
 use Hanjiang\Model\ActivityClock;
+use Hanjiang\Model\BossClock;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\Model\Beauty;
 use Hanjiang\Model\Chat;
@@ -44,7 +46,7 @@ use OmniPHP\Http\Context;
  *
  * 掠夺信件与信件战报（pm / pm_report，report_detail 回放）见 Model\Message；元宝 / 银币 / 声望流水由 Member 的增减记。
  *
- * 依赖未移植：春节送福活动 actnewyear_model->add_task_num（掠夺 16、亲近 17）。
+ * 春节送福活动开启时记任务（ActNewyear::task，旧版 actnewyear_model->add_task_num）：掠夺 16、亲近（type 2）17。
  */
 final class BeautyHandler
 {
@@ -727,7 +729,8 @@ final class BeautyHandler
         $beautyChip = self::chipList($uid, $beautyId);
         $lootArray = self::lootLogArray($uid);
         $chipName = Beauty::chipInfo($beautyId, $chipId)['chip_name'] ?? null;
-        // 依赖未移植：春节送福活动 actnewyear_model->add_task_num(version, 16)
+        // 添加春节送福日常任务完成次数（活动开启时）
+        ActNewyear::task($uid, 16, BossClock::now());
 
         Beauty::unLottLock($uid, $touid);
         $after = self::member($uid) ?? $member;
@@ -1316,7 +1319,10 @@ final class BeautyHandler
         // 添加奖励
         self::addReward($member, $result, $now, 'active_action');
         $happy = self::happyInfo($uid, $bid);
-        // 依赖未移植：春节送福活动 actnewyear_model->add_task_num(version, 17)（亲近）
+        if ($type === 2) {
+            // 添加春节送福日常任务完成次数（活动开启时）
+            ActNewyear::task($uid, 17, BossClock::now());
+        }
 
         Beauty::unlock(self::ACTIVE_ACTION_LOCK, $uid);
         $after = self::member($uid) ?? $member;

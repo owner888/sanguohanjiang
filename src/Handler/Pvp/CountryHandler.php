@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\Pvp;
 
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
+use Hanjiang\Handler\Activity\ActCelebrationHandler;
 use Hanjiang\Handler\Activity\DiceHandler;
 use Hanjiang\Handler\Activity\MessageHandler;
 use Hanjiang\Handler\Activity\OverseasTradeHandler;
@@ -15,7 +16,9 @@ use Hanjiang\MasterData\CountryDonate;
 use Hanjiang\MasterData\CountryJob;
 use Hanjiang\MasterData\CountryLearn;
 use Hanjiang\MasterData\CountryLevel;
+use Hanjiang\Model\ActNewyear;
 use Hanjiang\Model\Banquet;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\CountryTaxes;
 use Hanjiang\Model\Expostulation;
 use Hanjiang\Model\General;
@@ -1044,7 +1047,8 @@ final class CountryHandler
             'status' => 1,
         ], 'betray', $now);
 
-        // 依赖未移植：action_celebration_reward 国家庆典活动未领奖励自动发放
+        // 判断国家庆典活动是否开启，自动领取未领的奖励（action_celebration_reward）
+        ActCelebrationHandler::leaveCountryReward($uid, $now);
 
         $return['status'] = 1;
         $return['list'] = $list;
@@ -1457,7 +1461,8 @@ final class CountryHandler
             'status' => 3,
         ], 'kick_out', $now);
 
-        // 依赖未移植：action_celebration_reward 国家庆典活动未领奖励自动发放
+        // 判断国家庆典活动是否开启，自动领取未领的奖励（action_celebration_reward）
+        ActCelebrationHandler::leaveCountryReward($uid, $now);
 
         $return['status'] = 1;
         $return['country'] = $data;
@@ -1947,7 +1952,8 @@ final class CountryHandler
             'allcontribute' => $data['allcontribute'],
         ]);
 
-        // 依赖未移植：actnewyear_model->add_task_num 春节送福活动日常任务计数(23)
+        // 添加春节送福日常任务完成次数（活动开启时，任务 23 国家捐献）
+        ActNewyear::task($uid, 23, BossClock::now());
 
         $after = self::member($uid);
         $return['status'] = 1;

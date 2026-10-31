@@ -7,6 +7,8 @@ namespace Hanjiang\Handler\Activity;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Stone;
 use Hanjiang\MasterData\StoneRule;
+use Hanjiang\Model\ActNewyear;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberJade;
@@ -26,7 +28,7 @@ use OmniPHP\Http\Context;
  * 切出 4 品以上宝石发小喇叭（gambling_accomplish）。
  *
  * 与旧版的差别：buy / cut / sell 在 Member::locked（玩家行锁）里执行；own_stone 软删除，(uid, 有效位置) 唯一。
- * 依赖未移植：春节送福活动计数（actnewyear_model->add_task_num 26，节日活动）。
+ * 春节送福活动开启时切碎（cut 状态 2）与卖出（sell）记任务 26（ActNewyear::task，旧版 actnewyear_model->add_task_num(version, 26)）。
  */
 final class GamblingHandler
 {
@@ -236,7 +238,8 @@ final class GamblingHandler
                         // 这里要把已经拥有的石头数量加上
                         $field['stone' . $id . '_times'] += 1;
                     }
-                    // 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 26)
+                    // 添加春节送福日常任务完成次数（活动开启时）
+                    ActNewyear::task($uid, 26, BossClock::now());
                     break;
                 case 3:
                     // 切小了：把当前正在切的宝石算上
@@ -313,7 +316,8 @@ final class GamblingHandler
                 // 这里要把已经拥有的石头数量加上
                 $field['stone' . $id . '_times'] += 1;
             }
-            // 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 26)
+            // 添加春节送福日常任务完成次数（活动开启时）
+            ActNewyear::task($uid, 26, BossClock::now());
 
             $return['status'] = 1;
             $return['value'] = $value;

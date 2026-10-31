@@ -105,7 +105,7 @@ class Member extends Model
         $levytimes = (int)(DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->value('levytimes') ?? 0);
         // 每日重置用户状态：今日突飞次数 leaptimes、白金 / 至尊培养次数 baijintimes / zhizuntimes、
         // 将魂星路今日购买次数 soultimes 归零；赌石免费切石次数 stone1~3_times 归零后按 VIP 发 10 次
-        // （VIP 10 以上九窍灵石、6 以上仙王玉石、2 以上盘龙石）
+        // （VIP 10 以上九窍灵石、6 以上仙王玉石、2 以上盘龙石）；踏青寻宝免费次数 treasure_free 重置为 1
         $vip = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('vip') ?? 0);
         $stoneTimes = [1 => 0, 2 => 0, 3 => 0];
         if ($vip >= 10) {
@@ -117,7 +117,7 @@ class Member extends Model
         }
         $affected = DB::execute(
             'UPDATE `zc_sanguo_member_field` SET `dateline` = :now, `leaptimes` = 0, `baijintimes` = 0, `zhizuntimes` = 0, `soultimes` = 0,
-                 `stone1_times` = :stone1, `stone2_times` = :stone2, `stone3_times` = :stone3
+                 `stone1_times` = :stone1, `stone2_times` = :stone2, `stone3_times` = :stone3, `treasure_free` = 1
              WHERE `uid` = :uid AND `deleted_at` IS NULL AND `dateline` < :today',
             [
                 'now' => $now,
@@ -132,10 +132,8 @@ class Member extends Model
             return;
         }
 
-        // 依赖未移植：member_field.treasure_free（寻宝活动免费次数，act_treasure 节日活动）
-
         // update_activity_info：金银岛挑战次数、天神祭祀次数 sacrifice1~3 归零，免费通商次数重置为 20，将魂星路免费次数重置为 10、
-        // 多人副本次数重置为 10、神将之门挑战次数重置为 10、通天塔免费次数重置为 10、日常任务次数重置为 6、
+        // 多人副本次数重置为 10、神将之门挑战次数重置为 10、通天塔免费次数重置为 10、日常任务次数重置为 6、中秋吃月饼免费次数重置为 12、
         // 四方来朝的元宝 / 军令 / 突飞卡累计与已换算次数归零（剩余翻牌次数 floptimes 不归零）；没有记录时不插入，同旧版
         MemberActivity::update($uid, [
             'islandtimes' => 0,
@@ -154,8 +152,8 @@ class Member extends Model
             'elitetimes' => 10,
             'generaltasktimes' => 10,
             'freeheaven' => 10,
+            'freemooncake' => 12,
         ]);
-        // 依赖未移植：update_activity_info 的 freemooncake（中秋月饼，节日活动，新版 member_activity 无此字段）
         // 修改抽奖连续登录次数（lottery_model->update_day）
         LotteryHandler::updateDay($uid, $now);
 
@@ -249,7 +247,7 @@ class Member extends Model
      * - 银币：silver_log（type 2）——旧版 sub_silver 只给 VIP 玩家记流水，VIP 0 不记，照搬；
      * - 军令：act_log（type 2）。
      * 四方来朝（翻牌）活动期间按消耗累计翻牌次数（Flop::addSpend，member_activity.flop*；旧版数据中 flop 已于 2016-12-31 结束）。
-     * 依赖未移植：sub_gold 国庆节流水 national_day_gold_log（节日活动）。
+     * 国庆节活动期间元宝花费另记 national_day_gold_log（FlowLog::write 里处理）。
      */
     public static function deductCurrency(int $uid, int $silver = 0, int $gold = 0, int $act = 0, int $goldType = 1): bool
     {

@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\Activity;
 
+use Hanjiang\Cross\Server;
+use Hanjiang\Cross\WorldArenaServer;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralInheritHandler;
 use Hanjiang\Handler\General\TavernHandler;
@@ -17,6 +19,7 @@ use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\Sacredtree;
+use Hanjiang\Model\WorldArena;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -28,7 +31,7 @@ use OmniPHP\Http\Context;
  * 活动时间取 ActivityTime 的 sacredtree（旧版数据 2016-12-31 已结束，接口回 -1）。客户端 sacredtreepop.js 调用 index、watering（type）。
  * 当前时间取 BossClock（生产恒为 time()）。
  *
- * 依赖未移植：升级后更新跨服演武榜里的神树（worldarena_model->get_top_rank / transfer_model->update_worldarena_tree，跨服）。
+ * 升级后在跨服演武榜上时更新榜上的神树等级（transfer_model->update_worldarena_tree → Cross\WorldArenaServer::updateTree）。
  * 与旧版的差别：浇水锁改为 Redis SET NX（旧版 get + setex，有并发窗口），免费次数以条件更新扣减。
  */
 final class SacredtreeHandler
@@ -320,7 +323,10 @@ final class SacredtreeHandler
 
         // 按钮开启状态
         $btnStatus = $expResult['level'] >= Sacredtree::MAX_LEVEL ? 1 : 0;
-        // 依赖未移植：有升级时更新跨服演武榜里的神树（worldarena_model / transfer_model，跨服）
+        // 有升级，判断是否需要更新跨服列表中的神树：在跨服榜（本服昨日前三）中时更新战斗服务器里的神树等级
+        if ($expResult['level'] - $member['treeid'] > 0 && isset(WorldArena::topRank($now)[$uid])) {
+            WorldArenaServer::updateTree(Server::id(), $uid, $expResult['level']);
+        }
 
         // 添加获得经验log
         DB::table('sacredtreeexp_log')->insert([

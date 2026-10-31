@@ -48,12 +48,21 @@ A high-performance Three Kingdoms tactical card RPG game server reconstructed wi
    - **Strictly forbidden**: Never open MySQL / Redis connections (`Hanjiang\Support\Connections::init()`, `DatabaseBootstrap::initWorker()`, `DB::init()`, `Redis::init()`) in the Master process global scope before `Worker::runAll()`.
    - **Reason**: `pcntl_fork()` duplicates open socket file descriptors. Sharing an fd across workers leads to concurrent packet collision, `Packets out of order` MySQL crashes, and severe race corruption.
    - **Required**: call `Hanjiang\Support\Connections::init()` (= `DatabaseBootstrap::initWorker()` + PDO options from `config/database.php` + `Redis::init()` with `config/cache.php` `redis`) inside each worker's `$worker->onWorkerStart`. CLI tools, `tests/Support/*_worker.php` and `tests/bootstrap.php` call it once after requiring `bootstrap.php`.
+   - **Only exception**: on `start` / `restart`, `server.php` runs `Hanjiang\Support\Migrations::migrateOnStart()` in the master before `Worker::runAll()`; it opens its own MySQL connection, runs pending migrations and always closes it (`DB::close()` in `finally`) before any fork. Nothing else may touch MySQL / Redis in the master.
 
 10. **Fiber Event Loop & Request-Scoped State (Fiber 事件循环与请求级状态铁律)**:
    - Workers run on Workerman's Fiber driver (`Application::workerman()`, Revolt): every connection event and timer callback runs in its own Fiber.
    - **Strictly forbidden**: request-scoped data in static properties. Use `Context $ctx`, or Fiber-local storage `Workerman\Coroutine\Context` when a value must be reachable statically (see `Model\FlowLog::route()`; crons and `EliteRoom` set their own route).
    - **Invariant**: PDO and phpredis are synchronous, so a request never suspends half-way. `Member::locked()` / `DB::transaction()` on the single per-process PDO and the `EliteRoom::$inLock` reentrancy flag rely on this. Introducing anything that suspends a Fiber mid-request (async MySQL / Redis clients, `Timer::sleep`) requires per-request connections and Fiber-local lock flags first. `usleep` waits (Siege / EliteRoom Redis locks) block the whole worker, exactly as before.
    - Process-wide statics that are fine: reflection / handler-map caches (`GameProtocolMiddleware::$actionCache`, `HandlerRegistry`), WebSocket connection registries and timer ids (`ChatPush`, `EliteRoom`, `WebSocketHandler`), test-only clocks (`BossClock`, `EliteRoom::useClock`).
+
+11. **Database Changes Only Through Idempotent Code Migrations (数据库修改必须通过代码 · 迁移幂等铁律)**:
+   - **Strictly forbidden**: never change a deployed database by hand (`ALTER TABLE`, adding / dropping columns or tables in a MySQL shell on the server). Never edit `vendor/` to work around the migration runner.
+   - **Required**: every schema change is 100% code: a PHP migration in `database/migrations/` (`php tools/make-migration.php <name>`; `return new class extends Migration { up() / down() }`), committed with the code. Restarting `server.php` (`start` / `restart`) runs pending migrations automatically in the master (`Hanjiang\Support\Migrations::migrateOnStart()` → OmniPHP `MigrationRunner`, filename order, recorded in the unprefixed `migrations` table). A failed migration aborts the start.
+   - **Idempotent, always**: `database/schema.sql` stays the complete current schema, and on an empty database the first migration (`0000_00_00_000000_import_base_schema`) imports it, so every later migration must be a no-op when its change already exists: guard with `Schema::hasTable()` / `Schema::hasColumn()` / `Schema::hasIndex()` before each step, and make `down()` safe to run twice as well.
+   - **Same change in `database/schema.sql`**: write each migration's change into `schema.sql` in the same commit (same DDL text, so fresh and upgraded databases are identical; `tests/Feature/MigrationTest.php` compares a fresh migration run with `schema.sql`). New tables follow Iron Rule 7.
+   - Migration code uses full table names (`zc_sanguo_xxx`): the migration connection has no table prefix. Prefer raw DDL copied from `schema.sql` over `Blueprint` (it cannot express table charset / comments).
+   - `database/migrations/sql/*.sql` are the old hand-written migrations, kept only for upgrading installs older than the automatic migrations by hand; never add new `.sql` files there.
 
 ---
 
@@ -94,7 +103,13 @@ src/
 ├── Http/
 │   └── ExceptionHandler.php # extends OmniPHP ExceptionHandler; 500 + {"status":-500,"message":"系统异常: ..."}
 └── Support/
-    └── Connections.php  # per-process MySQL / Redis init (Iron Rule 9)
+    ├── Connections.php  # per-process MySQL / Redis init (Iron Rule 9)
+    └── Migrations.php   # migration connection (no table prefix) + MigrationRunner wrapper + migrations table DDL (Iron Rule 11)
+database/
+├── schema.sql           # Always the complete, current schema (fresh installs import it through the first migration)
+└── migrations/          # *.php migrations, run in filename order at server start; sql/ = old hand-written .sql history (not run)
+tools/migrate.php        # migrate | status | rollback [N] | reset --force | refresh --force
+tools/make-migration.php # Generates an idempotent migration template
 server.php               # Workerman entrypoint: Application::workerman('hanjiang') + Kernel::handle
 tests/                   # PHPUnit (bootstrap: tests/bootstrap.php)
 ├── Feature/GameApiTest.php
@@ -125,7 +140,7 @@ tests/                   # PHPUnit (bootstrap: tests/bootstrap.php)
    ```
    - Config: env vars > `.env` (project root, git-ignored, loaded by `bootstrap.php`) > defaults in `config/*.php`. Alternate ports: `HTTP_LISTEN`, `WS_LISTEN`, `WS_PUBLIC_PORT`.
    - Logs: `runtime/logs/hanjiang.log` (Workerman master), `runtime/logs/hanjiang_stdout.log` (daemon stdout: access log, PHP warnings / fatals), `runtime/logs/{level}_YYYYMMDD.log` (OmniPHP Logger). Read these first when something breaks.
-   - Migrations are manual: OmniPHP `MigrationRunner` only runs its own `database/migrations/*.php` classes; our migrations are hand-written `.sql`. Never call `DatabaseBootstrap::init()` with auto-migrate.
+   - Migrations run automatically on `start` / `restart` (Iron Rule 11); `php tools/migrate.php status` shows what ran. Do not call `DatabaseBootstrap::init()` directly (it ignores our PDO options, mixes prefixed / unprefixed names for the `migrations` table and swallows failures; see `src/Support/Migrations.php`, `docs/TRAPS.md` §9).
    - `revolt/event-loop` is required by the Fiber driver; without it workers crash-loop with `Class "Revolt\EventLoop" not found`.
 
 4. **Agent Workflow Baseline**:

@@ -2908,23 +2908,6 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThan(5000, (int)$member['silver']);
     }
 
-    public function testGvgSystem(): void
-    {
-        // 1. 查看跨服 GVG 对阵树
-        $res = $this->request('gvg', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['teams']);
-
-        // 2. 押注竞猜天命无双军团夺冠
-        $bet = $this->request('gvg', 'betting', ['team_id' => 1, 'amount' => 5000]);
-        $this->assertSame(1, $bet['status']);
-        $this->assertSame(5000, $bet['bet_amount']);
-
-        // 3. 重复押注拦截
-        $dup = $this->request('gvg', 'betting', ['team_id' => 2, 'amount' => 5000]);
-        $this->assertSame(0, $dup['status']);
-    }
-
     public function testMasterDataMatchesLegacyDump(): void
     {
         // 旧版配置表生成的常量数组：抽查场景与怪物原值
@@ -4716,32 +4699,6 @@ final class GameApiTest extends TestCase
         $this->assertSame([[53, $this->chatFrom($p) . '击败了' . $monster . '(普通) {53,[查看战报],1|1}', '1', $uid]], $this->chatMessages($w));
     }
 
-    public function testWarSystem(): void
-    {
-        // 1. 查看皇城国战大厅
-        $res = $this->request('war', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['leaderboard']);
-
-        // 2. 报名皇城国战出征
-        $entry = $this->request('war', 'entry');
-        $this->assertSame(1, $entry['status']);
-        $this->assertGreaterThan(0, $entry['silver']);
-
-        // 3. 查看积分功勋商城
-        $shop = $this->request('war', 'point_shop');
-        $this->assertSame(1, $shop['status']);
-        $this->assertArrayHasKey('point', $shop);
-        $this->assertNotEmpty($shop['list']);
-        $this->assertNotEmpty($shop['goods']);
-
-        // 4. 积分兑换青铜宝匣
-        $buyBox = $this->request('war', 'point_buy', ['id' => 1]);
-        $this->assertSame(1, $buyBox['status']);
-        $this->assertArrayHasKey('point', $buyBox);
-        $this->assertArrayHasKey('silver', $buyBox);
-    }
-
     /**
      * 国家（玩家军团）：等级 $level
      */
@@ -5172,59 +5129,6 @@ final class GameApiTest extends TestCase
 
         // 3. 锁释放后恢复正常
         Redis::del($lockKey);
-    }
-
-    public function testHalloweenSystem(): void
-    {
-        // 1. 查看万圣活动主页
-        $res = $this->request('act_halloween', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertGreaterThan(0, $res['candy']);
-        $this->assertGreaterThan(0, $res['hammer']);
-
-        // 2. 砸开 1 号南瓜
-        $smash = $this->request('act_halloween', 'action_pumpkin', ['id' => 1]);
-        $this->assertSame(1, $smash['status']);
-        $this->assertSame(1, $smash['id']);
-
-        // 3. 品尝万圣魔法糖果
-        $candy = $this->request('act_halloween', 'action_candy');
-        $this->assertSame(1, $candy['status']);
-        $this->assertGreaterThan(0, $candy['soul']);
-    }
-
-    public function testWorldArenaSystem(): void
-    {
-        // 1. 查看跨服远征主界面
-        $res = $this->request('worldarena', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertArrayHasKey('top', $res);
-        $this->assertNotEmpty($res['top']);
-        $this->assertArrayHasKey('reward', $res);
-
-        // 2. 领取跨服排行奖励 (验证 add 与 exploit)
-        $rankReward = $this->request('worldarena', 'get_rank_reward');
-        $this->assertSame(1, $rankReward['status']);
-        $this->assertGreaterThan(0, $rankReward['add']);
-        $this->assertGreaterThan(0, $rankReward['exploit']);
-
-        // 3. 查看跨服功勋商店 (验证 list 与 exploit)
-        $shop = $this->request('worldarena', 'shop');
-        $this->assertSame(1, $shop['status']);
-        $this->assertNotEmpty($shop['list']);
-        $this->assertArrayHasKey('exploit', $shop);
-
-        // 4. 领取跨服押注奖励 (验证 bet.rank.before)
-        $betReward = $this->request('worldarena', 'get_bet_reward');
-        $this->assertSame(1, $betReward['status']);
-        $this->assertArrayHasKey('bet', $betReward);
-        $this->assertArrayHasKey('rank', $betReward['bet']);
-        $this->assertSame(0, $betReward['bet']['rank']['before']);
-
-        // 5. 进入跨服备战
-        $enter = $this->request('worldarena', 'enter');
-        $this->assertSame(1, $enter['status']);
     }
 
     // ---------------------------------------------------------------

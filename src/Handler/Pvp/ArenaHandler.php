@@ -922,6 +922,26 @@ final class ArenaHandler
     }
 
     /**
+     * 演武榜前 $top 名（移植 arena_model->get_arena_top：排名 1 ~ $top，按排名降序，缓存 60 秒；群服争霸参赛玩家用）
+     *
+     * @return list<array{uid: int, username: string, rank: int}>
+     */
+    public static function arenaTop(int $top): array
+    {
+        $cache = Redis::get(self::ARENA_TOP_KEY);
+        if (is_array($cache)) {
+            return $cache;
+        }
+        $rows = DB::table('arena')->select('uid', 'username', 'rank')->where('rank', '>', 0)->where('rank', '<=', $top)->whereNull('deleted_at')
+            ->orderBy('rank', 'DESC')->limit($top)->get();
+        $return = array_map(static fn (array $r): array => ['uid' => (int)$r['uid'], 'username' => (string)$r['username'], 'rank' => (int)$r['rank']], $rows);
+        if ($return !== []) {
+            Redis::set(self::ARENA_TOP_KEY, $return, 60);
+        }
+        return $return;
+    }
+
+    /**
      * 修改 member_field 中 rank 信息（移植 arena_model->update_rank）
      */
     private static function updateRank(int $uid, int $rank): void

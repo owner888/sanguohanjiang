@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\CountryHandler;
+use Hanjiang\Handler\Pvp\GodHandler;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\Sacredtree;
@@ -22,8 +23,9 @@ use OmniPHP\Http\Context;
  * 去掉符号后含聊天屏蔽字、或与 5 分钟内上次发的内容相同时按 status 2 处理；禁言（member.status 1 / 2）同样处理：
  * 世界频道只发给自己、国家频道只进国家队列和自己、私聊不发，客户端照常显示发送成功。
  *
+ * index 里战帝本人上线时发全服公告（{@see GodHandler::loginNotice}）。
+ *
  * 未移植：
- * - index 的战神上线公告（chat_model->god_login + transfer_model 通知跨服，依赖未移植：战神殿 god）；
  * - index / read 的 platform = android / wp8 原生客户端格式转换（H5 客户端不传 platform）；
  * - send_system_chat（旧版不校验身份即可发全服系统消息）、clear_ban_key（运维口令接口），客户端都不调用；
  *   服务端代码发系统消息直接用 Chat::sendToAll(…, 7)。
@@ -53,8 +55,8 @@ final class ChatHandler
             return $return;
         }
         $return['list'] = self::publicList($member);
-        // 依赖未移植：每月 15 日以外，战神（member_model->get_god / transfer_model->get_god_info）本人上线时
-        // chat_model->god_login 发全服喇叭 + 系统公告并通知跨服（战神殿 god 未移植）
+        // 每月 15 日以外，战帝本人上线时发全服喇叭 + 系统公告（chat_model->god_login，5 分钟一次）
+        GodHandler::loginNotice($uid, BossClock::now());
         $return['status'] = 1;
         return $return;
     }

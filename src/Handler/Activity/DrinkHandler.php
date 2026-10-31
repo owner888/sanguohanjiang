@@ -6,6 +6,8 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Drink;
+use Hanjiang\Model\ActNewyear;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
 use Hanjiang\Model\StatPay;
@@ -19,7 +21,7 @@ use OmniPHP\Http\Context;
  * 加军令（act_log）；梨花白（id 1）以外的对酒记一条 drink_log，界面显示全服最近 7 条。
  * 客户端 drinkpop.js 调用 index、go_drink（type 酒 id）。
  *
- * 依赖未移植：春节送福活动计数（actnewyear_model->add_task_num(version, 21)，type 2 时；节日活动，旧版数据中已结束）。
+ * 春节送福活动开启时，请求的 type 为 2 记任务 21（ActNewyear::task，旧版 actnewyear_model->add_task_num(version, 21)）。
  * 与旧版的差别：对酒在玩家行锁里执行，并以 drinktime 条件更新抢占当天的次数（旧版先扣钱再改时间，并发可对多次）。
  */
 final class DrinkHandler
@@ -134,7 +136,10 @@ final class DrinkHandler
             if ($drink['id'] > 1) {
                 DB::table('drink_log')->insert($data);
             }
-            // 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 21)（type 2 时）
+            if ($type === 2) {
+                // 添加春节送福日常任务完成次数（活动开启时）
+                ActNewyear::task($uid, 21, BossClock::now());
+            }
 
             $after = self::member($uid);
             $return['status'] = 1;

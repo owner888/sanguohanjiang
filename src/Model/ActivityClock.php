@@ -24,16 +24,28 @@ use OmniPHP\Logger;
 final class ActivityClock
 {
     /**
-     * ACTIVITY_OPEN=all 开启的活动：被已移植代码按活动时间读取的活动名（grep src 得出）。
+     * ACTIVITY_OPEN=all 开启的活动：被已移植代码按活动时间读取的活动名（grep src 得出）。群服争霸 gvg 只有押注奖励与晋级奖励的
+     * 计划任务读活动表（玩法本身按每月 15 ~ 22 日计时）。春节系列：春节送福 act_newyear（只有各玩法的任务计数与主城刷新任务，
+     * 客户端没有界面）、新春签到 newyeardailysign、春节充值 newyearpay（充值返利与领奖）、转盘 springlottery、武将商城 springshop、
+     * 年兽 newyearboss。第二批节日：圣诞团购 christmasbuy、圣诞礼包 christmasgift、万圣节 halloween、中秋送月饼 moon、
+     * 国庆红包 national_day、七夕 acttanabata、国家庆典 national_celebration、周年庆 anniversary、清明祭祖 chingming。第三批：
+     * 踏青寻宝 acttreasure、我爱世界杯 worldcup、蹴鞠大赛 actkemari、七星灯 sevenstar、貔貅聚财 actenrichment、招募战友领工资
+     * paychecks、老兵召回 recall、充值送豪礼 actthirty、绝版神将 general_only、限时打折神将 general_onsale、限量神将 limitedshop。
      *
-     * 不含：节日充值返利 christmaspay / newyearpay、春节送福 act_newyear、寻宝 acttreasure、战神殿 god（只在主城图标里读，
-     * 模块未移植）、双倍强化 double_strengthen（未移植）、国庆 national_day（未移植），以及其余没有代码读取的节日 / 跨服活动。
+     * 不含：圣诞签到 christmas 与圣诞充值返利 christmaspay（客户端没有界面，旧版控制器不移植；圣诞充值的记账见 Model\Pay）、
+     * 中秋吃月饼 mooncake（客户端没有界面）、战神殿 god（按自然月计时，不读活动表；
+     * 主城图标照旧版在活动循环后写死为 1）、双倍强化 double_strengthen（未移植），以及其余没有代码读取的节日 / 跨服活动。
      */
     public const array OPENABLE = [
         'sacrifice', 'exercise', 'flop', 'dailysign', 'rebate', 'blackmarket', 'jadegamble', 'beatengod', 'jump_rebate',
         'sacredtree', 'compete', 'viprepay', 'pass_general', 'total_login', 'year_happy', 'login_reward',
         'double_tower', 'double_heaven', 'double_mine', 'double_refine', 'double_talent', 'double_vip', 'double_beauty',
-        'double_miss', 'double_sanctum', 'double_hero', 'double_copies',
+        'double_miss', 'double_sanctum', 'double_hero', 'double_copies', 'gvg',
+        'act_newyear', 'newyeardailysign', 'newyearpay', 'springlottery', 'springshop', 'newyearboss',
+        'christmasbuy', 'christmasgift', 'halloween', 'moon', 'national_day', 'acttanabata', 'national_celebration',
+        'anniversary', 'chingming',
+        'acttreasure', 'worldcup', 'actkemari', 'sevenstar', 'actenrichment', 'paychecks', 'recall', 'actthirty',
+        'general_only', 'general_onsale', 'limitedshop',
     ];
 
     /** 默认开放天数 */

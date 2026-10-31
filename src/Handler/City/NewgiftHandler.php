@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\City;
 
 use Hanjiang\Handler\Activity\MessageHandler;
+use Hanjiang\Cross\Server;
 use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\General as GeneralTemplate;
@@ -29,13 +30,22 @@ use OmniPHP\Http\Context;
  * 已拥有时按酒馆价格 8 折给宝石，前 3 天的武将已拥有时不给）。活动结束后计划任务（NewgiftCron）把可领取未领的礼包自动发放并
  * 发信件。2014-02-21 之前注册的老玩家按 2014-02-21 起算（新服不会有）。
  *
- * 旧版先用 uc 服务器的开服时间判断「新服才开启」（开服早于 2014-02-21 时回 3）；新版服务器必然晚于该日期开服，按开启处理。
+ * 先用 uc 的本服开服时间（Cross\Server::openTime，uc_server.starttime）判断「新服才开启」：开服早于 2014-02-21 时 index / get_reward
+ * 回 3、主城不显示。
  * 照旧版保留的写法：列表与领取状态按下标合并（第 31 行奖励没有 type）；领取锁 newgift_lock_{uid}（60 秒）已存在时回 -7。
  * 与旧版的差别：newgift_log 以 uid + day 为唯一键（旧版无索引，并发首次进入会建出重复记录）；get_reward 在 Member::locked
  * （玩家行锁）里执行。领取状态的 Redis 缓存 {Ymd}newgift_{uid}（get_newgift_cache 的调用方都不在客户端流程里）不移植。
  */
 final class NewgiftHandler
 {
+    /**
+     * 本服开服时间（uc_model->get_time_cache → Cross\Server::openTime）不早于活动开始时间才开启
+     */
+    private static function serverOpen(): bool
+    {
+        return Server::openTime() >= self::START;
+    }
+
     /** 活动开始时间（2014/2/21），之前注册的玩家从这天起算 */
     public const int START = 1392912000;
     /** 活动时长（30 天） */
@@ -48,6 +58,7 @@ final class NewgiftHandler
         'gift_error2' => '传递参数失败',
         'gift_error4' => '您不能重复领取奖励',
         'gift_error5' => '活动已结束',
+        'gift_error7' => '您所在的服活动未开启',
         'gift_error8' => '领取奖励失败，请稍后再试！',
         'gift_reward_equip' => '主公，今日登录奖励武器',
         'gift_reward_general' => '主公，今日登录奖励武将',
@@ -66,6 +77,12 @@ final class NewgiftHandler
         $return = ['status' => 0, 'popo' => 1];
         $member = self::member($uid);
         if ($member === null) {
+            return $return;
+        }
+        // 获取玩家所在服务器的开服时间：老服不开启
+        if (!self::serverOpen()) {
+            $return['status'] = 3;
+            $return['msg'] = self::LANG['gift_error7'];
             return $return;
         }
         $act = self::activity($member['jointime'], $now);
@@ -99,6 +116,12 @@ final class NewgiftHandler
         $uid = MemberHandler::resolveUid($ctx);
         $id = (int)$ctx->input('id', 0);
         $return = ['status' => 0, 'popo' => 1];
+        // 获取玩家所在服务器的开服时间：老服不开启
+        if (!self::serverOpen()) {
+            $return['status'] = 3;
+            $return['msg'] = self::LANG['gift_error7'];
+            return $return;
+        }
         // 增加锁标志
         $lock = self::LOCK_KEY . $uid;
         if (!Redis::instance()->set($lock, '1', ['nx', 'ex' => 60])) {
@@ -162,6 +185,10 @@ final class NewgiftHandler
     public static function memberInfo(int $uid, int $jointime, int $now): array
     {
         $return = ['newgift' => 0, 'newgift_popo' => 1, 'newgift_starttime' => 0, 'newgift_msg' => ''];
+        // 判断是否是新服，老服不开启新服礼包活动
+        if (!self::serverOpen()) {
+            return $return;
+        }
         // 30 天以内才开启
         if (!self::activity($jointime, $now)['activity']) {
             return $return;

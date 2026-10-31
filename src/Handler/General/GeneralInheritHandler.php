@@ -4,8 +4,10 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\General;
 
+use Hanjiang\Handler\Activity\ActVeteranHandler;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\GeneralInherit;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Edifice;
 use Hanjiang\Model\General;
 use Hanjiang\Model\MainQuestTask;
@@ -27,7 +29,9 @@ use OmniPHP\Http\Context;
  * 培养属性取 max(武将1 × 属性%, 武将2)。记 inherit_log。
  * 客户端 inheritpop.js 调用 index、get_inherit_info（gid）、preview / go_inherit（gid1、gid2、type、confirm）。
  *
- * 依赖未移植：老兵召回活动的免费至尊继承（recall，ActivityTime 中 2016-12-31 已结束；actveteran_model 未移植，按活动未开启处理）。
+ * 老兵召回活动（recall，ActVeteranHandler::recallFree）领过奖、还没用过时：index 补上至尊规则并标免费位 4；
+ * get_inherit_info 至尊免费；preview / go_inherit 不受 VIP 限制，go_inherit 的价格不为 0 时免费（至尊且不是赠送免费时记
+ * free_inherit 时间并标记已使用，其他规则只把返回的 free_inherit.inherit_4 写成 1，照旧版）。
  * index 记首次打开（edifice_model->add_edifice_log(4)，Model\Edifice）。
  */
 final class GeneralInheritHandler
@@ -80,6 +84,14 @@ final class GeneralInheritHandler
             ];
         }
         $rule = self::vipRule((int)$member['vip']);
+        $now = BossClock::now();
+        // 判断老兵召回活动是否领取免费至尊继承奖励
+        $veSite = 0;
+        if (ActVeteranHandler::recallFree($uid, $now) !== null) {
+            // 标示免费继承
+            $veSite = 1;
+            $rule[3] ??= array_values(GeneralInherit::ROWS)[3];
+        }
         $ruleArr = [];
         foreach ($rule as $key => $value) {
             $ruleArr[$key + 1] = [
@@ -91,11 +103,10 @@ final class GeneralInheritHandler
             ];
         }
         $field = self::field($uid);
-        $now = time();
         $endTime = max(0, (int)$field['free_inherit'] + self::INHERIT_DATE - $now);
-        // 使用赠送的免费至尊继承
+        // 使用赠送的免费至尊继承（或老兵召回的免费至尊继承）
         $freeSite = 0;
-        if ((int)$member['vip'] >= 10 && (int)$field['inherit_dateline'] === 0) {
+        if (((int)$member['vip'] >= 10 && (int)$field['inherit_dateline'] === 0) || $veSite > 0) {
             $freeSite = 4;
         }
         // 查询免费继承次数
@@ -169,6 +180,11 @@ final class GeneralInheritHandler
             if ($inheritTime['inherit_' . $i] > 0) {
                 $rule[$i - 1]['price'] = 0;
             }
+        }
+        // 判断老兵召回活动是否领取免费至尊继承奖励
+        if (ActVeteranHandler::recallFree($uid, BossClock::now()) !== null) {
+            $rule[3] = array_values(GeneralInherit::ROWS)[3];
+            $rule[3]['price'] = 0;
         }
         // 更新训练位
         Practice::updatePractice($uid, $now);
@@ -245,7 +261,8 @@ final class GeneralInheritHandler
             $return['status'] = -1;
             return $return;
         }
-        if (self::vipError((int)$member['vip'], $type)) {
+        // 判断老兵召回活动是否领取免费至尊继承奖励（领过时不受 VIP 限制）
+        if (self::vipError((int)$member['vip'], $type) && ActVeteranHandler::recallFree($uid, BossClock::now()) === null) {
             // vip等级不足
             $return['status'] = -4;
             return $return;
@@ -342,7 +359,9 @@ final class GeneralInheritHandler
                 $return['status'] = -1;
                 return $return;
             }
-            if (self::vipError($vip, $type)) {
+            // 判断老兵召回活动是否领取免费至尊继承奖励（领过时不受 VIP 限制）
+            $veVersion = ActVeteranHandler::recallFree($uid, $now);
+            if (self::vipError($vip, $type) && $veVersion === null) {
                 // vip等级不足
                 $return['status'] = -5;
                 return $return;
@@ -411,6 +430,20 @@ final class GeneralInheritHandler
             } elseif ($vip >= 2) {
                 // 没有使用免费继承也要获取倒计时
                 $endTime = $cdLeft();
+            }
+            // 老兵召回活动的免费至尊继承：价格不为 0 时免费（至尊且不是赠送免费时记 free_inherit 并标记已使用，
+            // 其他规则旧版只把返回的 inherit_4 写成 1，不标记）
+            if ($veVersion !== null && (int)$rule['price'] !== 0) {
+                $rule['price'] = 0;
+                if ($confirm !== 0) {
+                    if ($type === 4 && $useFree !== 1) {
+                        $freeUpdate = ['free_inherit' => $now];
+                        ActVeteranHandler::useRecallInherit($uid, $veVersion, $now);
+                        $endTime = self::INHERIT_DATE;
+                    } else {
+                        $inheritTimes['inherit_4'] = 1;
+                    }
+                }
             }
             if ($freeUpdate !== null) {
                 DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update($freeUpdate);

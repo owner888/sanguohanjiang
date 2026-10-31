@@ -103,6 +103,8 @@ final class RegisterHandler
         ]);
 
         self::initMemberData($uid, $username, $channel);
+        // 用户信息处理（手机号、设备、渠道、版本）
+        self::fetchMember($ctx, (int)$uid);
 
         $serverBasePort = 18100;
         $host = $ctx->host();
@@ -137,7 +139,8 @@ final class RegisterHandler
      * 旧版 uc 的 register_model 不在旧版代码包里：用户名 / 密码格式按客户端 helper.checkUserName / checkPassWord 的规则
      * （字母数字，4 ~ 16 / 6 ~ 16 位）；旧版按设备 mac 认定是本人的试玩帐号，新版试玩帐号凭登录 token 认定（开发者要求
      * 的游客密钥体系下 mac 不可信）：token 对应的 uid 与参数 uid 不一致时回 -1。绑定后 user.is_guest = 0、游客密钥作废。
-     * 依赖未移植：uc 的 fetch_member_info（记录手机号 mobile、设备、渠道、版本，新版 user 表没有这些列）。
+     * 之后同旧版记录手机号 mobile、设备、渠道、版本（fetch_member_info）；与旧版的差别：旧版不论成败都按参数 uid 记录，
+     * 这里只在 uid 是登录 token 本人时记录（不能改别人的帐号信息）。
      */
     public static function binding(Context $ctx): array
     {
@@ -158,6 +161,9 @@ final class RegisterHandler
                 -2 => '用户已绑定过',
                 default => '未知错误',
             };
+        }
+        if ($uid > 0 && MemberHandler::resolveUid($ctx) === $uid) {
+            self::fetchMember($ctx, $uid);
         }
         return [
             'status' => $status,
@@ -202,6 +208,40 @@ final class RegisterHandler
         DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->update(['username' => $username]);
         Redis::del('player:' . $uid);
         return 1;
+    }
+
+    /**
+     * 用户信息处理（uc register 控制器 fetch_member + register_model->fetch_member_info）：设备 mac（macaddr 优先；iOS 隐私限制下的
+     * 02:00:00:00:00:00 用广告标识 adid 代替）、手机号 mobile（各语言注册表单的占位文字按空）、渠道 channel、客户端版本 v 写入帐号
+     *
+     * register_model 不在旧版代码包里，按控制器与表结构还原（旧版 model 不在代码包里）：uc_member 的 mac / phone / channel / version 列
+     * 即新版 user 表的同名列，按参数原样更新（超长截断）。
+     */
+    private static function fetchMember(Context $ctx, int $uid): void
+    {
+        if ($uid <= 0) {
+            return;
+        }
+        $mac = (string)($ctx->input('macaddr', '') ?: $ctx->input('mac', ''));
+        $adid = (string)$ctx->input('adid', '');
+        if ($mac === '02:00:00:00:00:00' && $adid !== '') {
+            $mac = $adid;
+        }
+        $phone = (string)$ctx->input('mobile', '');
+        // 兼容其他语言注册时，传入表单默认值的 BUG
+        if (in_array($phone, ['僅用於找回密碼', '비번 찾기에만 사용', '비번 찾기만에 사용', 'パスワードを忘れた時にのみ使われます', '忘れる暗証番号に必要だ'], true)) {
+            $phone = '';
+        }
+        $data = [
+            'mac' => mb_substr($mac, 0, 64),
+            'phone' => mb_substr($phone, 0, 13),
+            'version' => mb_substr((string)$ctx->input('v', ''), 0, 20),
+        ];
+        // 没传渠道时保留注册时的渠道（新版注册缺省 106）
+        if ($ctx->input('channel') !== null) {
+            $data['channel'] = (int)$ctx->input('channel');
+        }
+        DB::table('user')->where('uid', $uid)->whereNull('deleted_at')->update($data);
     }
 
     /**

@@ -122,7 +122,7 @@ final class ActivityClockTest extends TestCase
         }
         $this->assertEqualsWithDelta($now + 30 * 86400, ActivityClock::byName('compete')['endtime'], 5);
         // 节日 / 跨服 / 未移植的活动不开
-        foreach (['god', 'gvg', 'acttreasure', 'act_newyear', 'christmaspay', 'newyearpay', 'halloween', 'double_strengthen', 'national_day'] as $name) {
+        foreach (['god', 'lantern', 'christmaspay', 'christmas', 'mooncake', 'double_strengthen'] as $name) {
             $this->assertNotContains($name, ActivityClock::OPENABLE);
             $this->assertFalse(ActivityClock::isOpen($name, $now), $name);
         }
@@ -132,6 +132,7 @@ final class ActivityClockTest extends TestCase
         $this->assertSame(1, $this->request($p['auth'], 'exercise', 'index')['status']);
         $flags = $this->request($p['auth'], 'member', 'index');
         $flags = $flags['member'] ?? $flags;
-        $this->assertSame([1, 1, 0, 0], [$flags['sacredtree'], $flags['exercise'], $flags['gvg'], $flags['christmaspay']]);
+        // 群服争霸的主城图标按每月 15 ~ 22 日计时，不看活动表
+        $this->assertSame([1, 1, 0], [$flags['sacredtree'], $flags['exercise'], $flags['christmaspay']]);
     }
 }

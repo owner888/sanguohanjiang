@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\City;
 
 use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\MasterData\VipWage;
+use Hanjiang\Model\ActNewyear;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
@@ -27,7 +28,7 @@ use OmniPHP\Http\Context;
  *
  * 军令 / 银币 / 声望由 Member::addCurrency 记流水，宝石由 TraderLog 记流水。
  *
- * 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 25)（act_newyear 活动未移植）。
+ * 春节送福活动开启时领工资记任务 25（ActNewyear::task，旧版 actnewyear_model->add_task_num(version, 25)）。
  */
 final class VipwageHandler
 {
@@ -211,7 +212,8 @@ final class VipwageHandler
         }
         Redis::del('player:' . $uid);
 
-        // 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 25)
+        // 添加春节送福日常任务完成次数（活动开启时）
+        ActNewyear::task($uid, 25, BossClock::now());
 
         // 成功返回
         $after = self::member($uid) ?? $member;

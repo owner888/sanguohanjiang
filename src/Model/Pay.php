@@ -4,6 +4,14 @@ declare(strict_types=1);
 
 namespace Hanjiang\Model;
 
+use Hanjiang\Handler\Activity\ActCelebrationHandler;
+use Hanjiang\Handler\Activity\ActEnrichmentHandler;
+use Hanjiang\Handler\Activity\ActMoonHandler;
+use Hanjiang\Handler\Activity\ActPaychecksHandler;
+use Hanjiang\Handler\Activity\ActTanabataHandler;
+use Hanjiang\Handler\Activity\ActThirtyHandler;
+use Hanjiang\Handler\Activity\NewyearpayHandler;
+use Hanjiang\Handler\Activity\WorldcupHandler;
 use Hanjiang\Handler\Pvp\BeatengodHandler;
 use Hanjiang\MasterData\AlipayProduct;
 use OmniPHP\Cache\Redis;
@@ -135,7 +143,7 @@ final class Pay
             return ['status' => 6];
         }
         // 查询用户信息
-        $user = DB::table('member')->select('uid', 'nickname', 'level', 'gold', 'rebate_firstpay', 'created_at')
+        $user = DB::table('member')->select('uid', 'nickname', 'level', 'gold', 'vip', 'rebate_firstpay', 'created_at')
             ->where('uid', $uid)->whereNull('deleted_at')->first();
         if ($user === null) {
             return ['status' => -4];
@@ -166,7 +174,7 @@ final class Pay
             $gold += $product['add_gold'];
         }
         // 圣诞 / 春节充值活动开启：每笔充值按比例返利（christmaspay 比例为 0；newyearpay 10%，type 1 时 20%）
-        [$christmas, $christmasRebate] = self::christmas($now);
+        [$christmas, $christmasRebate, $christmasVersion] = self::christmas($now);
         if ($christmas) {
             $extra = (int)($product['gold'] / 100 * $christmasRebate);
             $gold += $extra;
@@ -202,10 +210,22 @@ final class Pay
 
         // 暴打名将活动开启（结束前一天为止），记录本次充值金额（beatengod_model->add_beatengod_pay_order）
         BeatengodHandler::addPayOrder($uid, (int)$user['level'], $amount, $orderId, $now);
-        // 依赖未移植：圣诞 / 春节充值记录 christmas_model->add_christmas_log（christmaspay / newyearpay）、
-        // 我爱世界杯 worldcup_model->add_beatengod_pay_order、充值送豪奖 actthirty_model->add_thirty_pay_order（节日活动）
-        // 依赖未移植：pay_act_init 的充值类活动计数——七夕 acttanabata、国家庆典 actcelebration、中秋 moon、
-        // 发工资 actpaychecks、貔貅聚财 actenrichment（这些活动未移植，旧版数据也均已结束）
+        // 如果圣诞 / 春节充值活动开启，记录本次充值金额（christmas_model->add_christmas_log；春节充值 newyearpay 的领奖按它累计）
+        if ($christmas) {
+            self::addChristmasLog($uid, (int)$user['level'], $amount, $orderId, $channel, $christmasVersion, $now);
+        }
+        // 我爱世界杯活动开启（结束前一天为止），记录本次充值金额（worldcup_model->add_beatengod_pay_order）
+        WorldcupHandler::addPayOrder($uid, (int)$user['level'], $amount, $orderId, $now);
+        // 充值送豪奖活动开启，记录本次充值金额 × 10 元宝（actthirty_model->add_thirty_pay_order）
+        ActThirtyHandler::addPayOrder($uid, (int)$user['level'], $amount, $orderId, $now);
+        // 充值类型活动（pay_act_init，元宝数为商品元宝）：七夕 acttanabata、国家庆典 national_celebration 记充值订单，
+        // 中秋 moon 记充值并送月饼，发工资 paychecks、貔貅聚财 actenrichment（结束前 7 天为止）记充值订单
+        $method = Member::logText($channel, 20);
+        ActTanabataHandler::addPayOrder($uid, (string)$user['nickname'], (int)$user['level'], (int)$product['gold'], $orderId, 'pay', $method, $now);
+        ActCelebrationHandler::addPayOrder($uid, (string)$user['nickname'], (int)$user['level'], (int)$product['gold'], $orderId, 'pay', $method, $now);
+        ActMoonHandler::addPayMoon($uid, (string)$user['nickname'], (int)$user['level'], (int)$user['vip'], (int)$product['gold'], $orderId, 'pay', $method, $now);
+        ActPaychecksHandler::addPayOrder($uid, (string)$user['nickname'], (int)$user['level'], (int)$product['gold'], $orderId, 'pay', $method, $now);
+        ActEnrichmentHandler::addPayOrder($uid, (string)$user['nickname'], (int)$user['level'], (int)$product['gold'], $orderId, 'pay', $method, $now);
 
         // 跳楼返利活动开启：记录本次充值金额（上一期返利 30 天未领完时不记）
         $jumpRebate = self::activity('jump_rebate', $now);
@@ -228,19 +248,40 @@ final class Pay
     }
 
     /**
-     * 圣诞 / 春节充值返利（构造函数：christmaspay 开启时比例 0；否则 newyearpay 开启时 10%，活动 type 1 为 20%）
+     * 圣诞 / 春节充值返利（构造函数：christmaspay 开启时比例 0、版本号为活动版本；否则 newyearpay 开启时 10%（活动 type 1 为 20%）、
+     * 版本号为活动版本 + 1000）
      *
-     * @return array{0: int, 1: int} [是否开启, 返利百分比]
+     * @return array{0: int, 1: int, 2: int} [是否开启, 返利百分比, 充值记录的版本号]
      */
     private static function christmas(int $now): array
     {
-        if (self::activity('christmaspay', $now) !== null) {
-            return [1, 0];
+        $info = self::activity('christmaspay', $now);
+        if ($info !== null) {
+            return [1, 0, (int)$info['version']];
         }
         $info = self::activity('newyearpay', $now);
         if ($info !== null) {
-            return [1, (int)($info['type'] ?? 0) === 1 ? 20 : 10];
+            return [1, (int)($info['type'] ?? 0) === 1 ? 20 : 10, (int)$info['version'] + NewyearpayHandler::VERSION_OFFSET];
         }
-        return [0, 0];
+        return [0, 0, 0];
+    }
+
+    /**
+     * 圣诞 / 春节活动期间充值，添加充值记录，用于领取奖励（christmas_model->add_christmas_log → pay_reward_order）
+     *
+     * money 为本次充值的人民币金额；class / method 旧版记执行到账的控制器与方法，这里记 pay 与渠道标识。
+     */
+    private static function addChristmasLog(int $uid, int $level, int $amount, string $orderId, string $channel, int $version, int $now): void
+    {
+        DB::table('pay_reward_order')->insert([
+            'uid' => $uid,
+            'level' => $level,
+            'money' => $amount,
+            'version' => $version,
+            'orderid' => $orderId,
+            'class' => 'pay',
+            'method' => Member::logText($channel, 20),
+            'dateline' => $now,
+        ]);
     }
 }

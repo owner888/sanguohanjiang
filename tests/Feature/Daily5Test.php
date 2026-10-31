@@ -722,10 +722,10 @@ final class Daily5Test extends TestCase
     {
         $p = $this->player();
         $this->assertSame(['status' => -1], $this->request($p['auth'], 'report', 'save', ['type' => 'arena', 'id' => 999999999]));
-        $this->assertSame(['status' => -1], $this->request($p['auth'], 'report', 'save', ['type' => 'god', 'id' => '1_2']), '跨服战报');
+        $this->assertSame(['status' => -1], $this->request($p['auth'], 'report', 'save', ['type' => 'god', 'id' => '1_2']), '没有这一局的战报');
         $id = 900000000 + $p['uid'];
         DB::table('pm_report')->insert(['id' => $id, 'report' => '{"assess":1}', 'nickname' => 'a', 'userlevel' => 1, 'name' => 'b', 'level' => 1]);
-        $this->assertSame(['status' => -2], $this->request($p['auth'], 'report', 'save', ['type' => 'arena', 'id' => $id]), 'uc 分享未移植');
+        $this->assertSame(['status' => -2], $this->request($p['auth'], 'report', 'save', ['type' => 'arena', 'id' => $id]), '没有配置展示页地址（report_url），见 Cross1Test');
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -805,10 +805,13 @@ final class Daily5Test extends TestCase
     public function testNewgiftDailyUnlockRewardMemberInfoAndCron(): void
     {
         $now = time();
-        $p = $this->player(['jointime' => $now - 3600, 'silver' => 0, 'gold' => 0]);
+        // 注册时间取当天 0 点（handler 直接用 time()，不能冻结）：原先的 now - 3600 在北京时间 0~1 点落到前一天，
+        // 活动变成第 2 天，断言随时刻变化
+        $jointime = (int)strtotime(date('Ymd', $now));
+        $p = $this->player(['jointime' => $jointime, 'silver' => 0, 'gold' => 0]);
         $uid = $p['uid'];
         $member = $this->request($p['auth'], 'member', 'index');
-        $this->assertSame([1, 1, strtotime(date('Ymd', $now - 3600)) + 36000], [$member['newgift'], $member['newgift_popo'], $member['newgift_starttime']]);
+        $this->assertSame([1, 1, $jointime + 36000], [$member['newgift'], $member['newgift_popo'], $member['newgift_starttime']]);
         $this->assertCount(4, $member['newgift_msg']);
 
         $index = $this->request($p['auth'], 'newgift', 'index');

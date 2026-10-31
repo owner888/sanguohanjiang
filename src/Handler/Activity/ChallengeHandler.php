@@ -6,6 +6,8 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\ArenaHandler;
+use Hanjiang\Model\ActNewyear;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Message;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -20,7 +22,7 @@ use OmniPHP\Http\Context;
  *
  * 信件与信件战报（pm / pm_report，info.report 为信件 id，供 c=message&m=report_detail 回放）见 Model\Message。
  *
- * 依赖未移植：春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(version, 15) 计数）。
+ * 春节送福活动开启时切磋记任务 15（ActNewyear::task，旧版 actnewyear_model->add_task_num(version, 15)）。
  */
 final class ChallengeHandler
 {
@@ -104,7 +106,8 @@ final class ChallengeHandler
             'type' => 'challenge',
         ];
 
-        // 依赖未移植：春节送福活动开启时 actnewyear_model->add_task_num(version, 15) 日常任务计数
+        // 添加春节送福日常任务完成次数（活动开启时）
+        ActNewyear::task($uid, 15, BossClock::now());
 
         return $return;
     }

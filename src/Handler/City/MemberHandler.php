@@ -4,20 +4,32 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\City;
 
+use Hanjiang\Cross\Server;
+use Hanjiang\Handler\Activity\ActEnrichmentHandler;
+use Hanjiang\Handler\Activity\ActTreasureHandler;
+use Hanjiang\Handler\Activity\ChingmingHandler;
 use Hanjiang\Handler\Activity\HiteggHandler;
+use Hanjiang\Handler\Activity\SpringlotteryHandler;
 use Hanjiang\Handler\General\TavernHandler;
+use Hanjiang\Handler\Pvp\GodHandler;
 use Hanjiang\Handler\Pvp\SiegeHandler;
+use Hanjiang\Handler\Pvp\WarHandler;
+use Hanjiang\Handler\Pvp\WorldarenaHandler;
 use Hanjiang\MasterData\LevelGift;
+use Hanjiang\Model\ActNewyear;
 use Hanjiang\Model\ActivityClock;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\DailyTask;
 use Hanjiang\Model\Edifice;
 use Hanjiang\Model\General;
+use Hanjiang\Model\God;
+use Hanjiang\Model\Gvg;
 use Hanjiang\Model\Logined;
 use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OpenMap;
 use Hanjiang\Model\OwnMatrix;
+use Hanjiang\Model\WorldArena;
 use Hanjiang\Model\WorldBoss;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -162,7 +174,6 @@ final class MemberHandler
                 : (int)($field['first_recharge'] ?? 1),
             'first_recharge_an' => 0,
             'new_role_reward' => 0,
-            'opennewyearboss' => 0,
             // 世界 BOSS 开启状态（旧版 member.php:worldboss_init）
             'openboss' => 0,
             'openbossreward' => 0,
@@ -171,7 +182,6 @@ final class MemberHandler
             'onmine' => 0,
             'oncountrymine' => 0,
             'onworkshop' => 0,
-            'god_reward' => 0,
             'country_war' => 0,
             'is_saturday' => 0,
             'country_date' => '',
@@ -218,6 +228,7 @@ final class MemberHandler
         $loginedPopo = Logined::popo($uid, Logined::cache($uid, $time), $time);
         return array_merge(
             self::activityFlags($uid, $level, (int)($fieldFlags['rebate_dateline'] ?? 0), $now),
+            self::crossFlags($uid, $level, $now),
             [
                 // 征收信息（状态，次数，时间）
                 'levy' => [
@@ -264,19 +275,65 @@ final class MemberHandler
     }
 
     /**
+     * 跨服相关的主城标识（member.php index）：活动循环后写死的战神殿 god = 1；群服争霸 gvg（每月 15 日 23 点到 22 日 0:30，开服当月为 0）；
+     * 战神殿奖励预览 god_reward（每月 1 ~ 15 日 18 点、60 级以上）；战神殿报名状态 god_entry（god 为 1 时取 _god_entry_status）；
+     * 未领取的全服奖励 server_reward（61 级以上：下一个别人发放的全服福利，没有为 0）；武斗会图标 war（每月 20 日起、60 级以上）与
+     * 报名状态 war_entry（war 为 1 时取 _war_entry_status）
+     *
+     * @return array<string, mixed>
+     */
+    private static function crossFlags(int $uid, int $level, int $now): array
+    {
+        $serverReward = 0;
+        if ($level >= WorldArena::LEVEL) {
+            $rewardid = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('server_reward') ?? 0);
+            $next = WorldarenaHandler::serverRewardInfo($rewardid, $uid, $level);
+            if ($next !== []) {
+                $serverReward = $next;
+            }
+        }
+        $war = (int)date('d', $now) >= 20 && $level >= 60 ? 1 : 0;
+        return [
+            // 开启战神殿
+            'god' => 1,
+            // 群服争霸（每月 15 日 23 点到 22 日 0:30 显示图标；开服当月不显示）
+            'gvg' => Gvg::isOpen($now) && date('Ym', $now) !== date('Ym', Server::openTime()) ? 1 : 0,
+            // 战神殿奖励预览
+            'god_reward' => God::open($now, $level)['open'],
+            // 战神殿报名状态
+            'god_entry' => GodHandler::entryStatus($uid, $level, $now),
+            'server_reward' => $serverReward,
+            // 武斗会图标（每月 20 日起、60 级以上）与报名状态
+            'war' => $war,
+            'war_entry' => $war > 0 ? WarHandler::entryStatus($uid, $level, $now) : 0,
+        ];
+    }
+
+    /**
      * 运营活动开启状态（member.php index：活动表每一行输出 {name} 与 {name}_type，在开始结束时间内为 1）
      *
      * 照旧版的特例：返利 rebate 首充过（member.rebate_firstpay = 1）为 0；战神殿 god 50 级以下为 0；跳楼返利 jump_rebate
      * 达到返利标准后 30 天内为 1；寻宝 acttreasure 50 级以下为 0；春节送福 act_newyear 带版本号 act_newyear_version。
-     * 依赖未移植（节日 / 跨服活动，旧版数据中都已结束）：貔貅聚财 actenrichment 结束前 7 天的未领奖判断、春节 boss 开启状态
-     * opennewyearboss、寻宝 / 清明 / 转盘抽奖的 VIP 同步与 acttreasure_popo；旧版循环后写死的战神殿 god = 1 与群服争霸 gvg（跨服未移植，不显示）。
+     * 春节年兽开启状态 opennewyearboss：newyearboss 活动开启、不是活动最后一天（endtime - 100 的那天）且在 12:30 ~ 13:00 之间为 1；
+     * 转盘抽奖 springlottery 开启时，排行记录的 VIP 低于 2 而玩家已到 VIP 2 则同步 VIP（SpringlotteryHandler::syncVip）；
+     * 清明祭祖 chingming 开启时同样（ChingmingHandler::syncVip，旧版 get_member_info 没有记录时会先建档）。
+     * 循环后：春节送福 act_newyear 开启时刷新当天的任务列表（actnewyear_model->auto_init_task → ActNewyear::autoInitTask）；
+     * 年夜饭领奖提示 dinner_get（旧版写死 2013-02-09 23:55 ~ 24:00 之间为 1）。
+     * 貔貅聚财 actenrichment 结束日 0 点前 7 天起按是否还有可领的奖励（ActEnrichmentHandler::iconStatus）；寻宝 acttreasure 开启时
+     * 同步排行用的 VIP 并输出 acttreasure_popo（ActTreasureHandler::memberIndex）。循环后写死的战神殿 god = 1 等见 crossFlags。
      *
      * @return array<string, int>
      */
     private static function activityFlags(int $uid, int $level, int $rebateDateline, int $now): array
     {
         $return = [];
-        $rebateFirstpay = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('rebate_firstpay') ?? 0);
+        $base = DB::table('member')->select('rebate_firstpay', 'vip')->where('uid', $uid)->whereNull('deleted_at')->first() ?? [];
+        $rebateFirstpay = (int)($base['rebate_firstpay'] ?? 0);
+        $vip = (int)($base['vip'] ?? 0);
+        // 当前时间（His）
+        $nowTime = (int)date('His', $now);
+        // 年兽boss开启状态
+        $return['opennewyearboss'] = 0;
         foreach (ActivityClock::rows() as $val) {
             $name = $val['name'];
             $return[$name . '_type'] = (int)$val['type'];
@@ -294,10 +351,35 @@ final class MemberHandler
             if ($name === 'jump_rebate' && $now < strtotime(date('y-m-d', $rebateDateline)) + 86400 * 30) {
                 $return[$name] = 1;
             }
-            // 寻宝活动
+            // 春节boss开启状态
+            if ($name === 'newyearboss' && $return['newyearboss'] === 1 && date('ymd', $now) !== date('ymd', $val['endtime'] - 100)
+                && $nowTime >= 123000 && $nowTime <= 130000) {
+                $return['opennewyearboss'] = 1;
+            }
+            // 貔貅聚财活动 如奖励未完全领取7天才消失（结束日 0 点前 7 天起，没有可领的奖励时为 0）
+            if ($name === 'actenrichment') {
+                $return[$name] = ActEnrichmentHandler::iconStatus($uid, (int)$val['version'], (int)$val['endtime'], $now, $return[$name]);
+            }
+            // 寻宝活动：50 级以下为 0；活动开启时同步排行用的 VIP，集字兑换 / 集字成就有奖励可领时 acttreasure_popo 为 1
             if ($name === 'acttreasure' && $level < 50) {
                 $return[$name] = 0;
+            } elseif ($name === 'acttreasure' && $val['starttime'] <= $now && $now <= $val['endtime']) {
+                $return['acttreasure_popo'] = ActTreasureHandler::memberIndex($uid, (int)$val['version'], $vip);
             }
+            // 清明活动：取（没有则建）玩家祭祖信息，更新玩家VIP信息
+            if ($name === 'chingming' && $val['starttime'] <= $now && $now <= $val['endtime']) {
+                ChingmingHandler::syncVip($uid, (int)$val['version'], $now);
+            }
+            // 转盘抽奖活动：更新玩家VIP信息
+            if ($name === 'springlottery' && $val['starttime'] <= $now && $now <= $val['endtime']) {
+                SpringlotteryHandler::syncVip($uid, (int)$val['version'], $vip);
+            }
+        }
+        // 春节到了。提示玩家可领取奖励
+        $return['dinner_get'] = $now > 1360425300 && $now < 1360425600 ? 1 : 0;
+        // 春节送福活动自动刷新任务列表
+        if (($return['act_newyear'] ?? 0) === 1) {
+            ActNewyear::autoInitTask((int)$return['act_newyear_version'], $uid, $now);
         }
         return $return;
     }

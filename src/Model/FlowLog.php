@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Model;
 
+use Hanjiang\Handler\Activity\ActNationalDayHandler;
 use OmniPHP\Database\DB;
 use Workerman\Coroutine\Context as FiberContext;
 
@@ -19,7 +20,8 @@ use Workerman\Coroutine\Context as FiberContext;
  * 即使以后出现中途挂起的异步 IO，并发请求也不会互相串值；不在 Fiber 里（PHPUnit、命令行工具）时退化为进程级的一份。
  *
  * 由 Member::deductCurrency / addCurrency / addReputation / subReputation 与 OwnSoul 的原魂增减调用，调用方不用自己记。
- * 依赖未移植：_gold_log 在国庆节活动（activity_status('national_day')）期间另记 national_day_gold_log（节日活动，旧版数据中已结束）。
+ * 元宝花费（gold_log type 2）在国庆节活动期间另记一条 national_day_gold_log（_gold_log 的国庆节分支，
+ * ActNationalDayHandler::addGoldLog）。
  */
 final class FlowLog
 {
@@ -76,7 +78,8 @@ final class FlowLog
     ): void {
         [$column, $methodWidth] = self::TABLES[$table] ?? throw new \InvalidArgumentException("流水表不支持：{$table}");
         [$currentClass, $currentMethod] = self::current();
-        DB::table($table)->insert([
+        $now ??= time();
+        $row = [
             'uid' => $uid,
             'level' => $info['level'],
             'type' => $type,
@@ -85,8 +88,13 @@ final class FlowLog
             'class' => Member::logText($class ?? $currentClass, 20),
             'method' => Member::logText($method ?? $currentMethod, $methodWidth),
             'argument' => '',
-            'dateline' => $now ?? time(),
+            'dateline' => $now,
             'vip' => $info['vip'],
-        ]);
+        ];
+        DB::table($table)->insert($row);
+        // 国庆节活动期间的元宝消耗另记一条（_gold_log：type 2 时判断 national_day 活动）
+        if ($table === 'gold_log' && $type === self::TYPE_SUB) {
+            ActNationalDayHandler::addGoldLog($row, $now);
+        }
     }
 }

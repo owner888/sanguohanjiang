@@ -8,6 +8,8 @@ use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\ArenaHandler;
 use Hanjiang\Handler\Pvp\CountryHandler;
 use Hanjiang\MasterData\OverseasTradeShop;
+use Hanjiang\Model\ActNewyear;
+use Hanjiang\Model\BossClock;
 use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
 use OmniPHP\Database\DB;
@@ -36,7 +38,7 @@ use OmniPHP\Http\Context;
  *   不再需要；建队锁住国家行（同一位置不会建出两支队伍）；加入队伍以「位置为空、未出发」条件更新（旧版不校验，后到的会覆盖）；
  * - 回城结算以「队伍 id 未变」条件清空自己的队伍状态，结算成功才发银币（旧版并发会重复结算）；
  * - join_team 的 site 只能是 1 / 2，其他值回 -8（旧版会拼出不存在的列，SQL 报错）；队伍退出改为软删除。
- * 依赖未移植：春节送福活动计数（actnewyear_model->add_task_num 18，节日活动）。
+ * 春节送福活动开启时出海记任务 18（ActNewyear::task，旧版 actnewyear_model->add_task_num(version, 18)；组队出海两名队员各记一次）。
  */
 final class OverseasTradeHandler
 {
@@ -461,7 +463,8 @@ final class OverseasTradeHandler
                 'member2_name' => $team['member2_name'],
                 'dateline' => $now,
             ]);
-            // 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 18)
+            // 添加春节送福日常任务完成次数（活动开启时）
+            ActNewyear::task($uid, 18, BossClock::now());
             $return['status'] = 1;
             $return['team_id'] = $info['team'];
             $return['times'] = $info['times'] - 1;
@@ -593,7 +596,9 @@ final class OverseasTradeHandler
                     $return['price'] = 0;
                     $return['times'] = $info['times'] - 1;
                     $return['endtime'] = self::TIME;
-                    // 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 18)（两名队员）
+                    // 添加春节送福日常任务完成次数（活动开启时，更新 2 个人的贸易次数）
+                    ActNewyear::task((int)$team['member1'], 18, BossClock::now());
+                    ActNewyear::task((int)$team['member2'], 18, BossClock::now());
                 }
                 $return['team_id'] = $id;
             } else {

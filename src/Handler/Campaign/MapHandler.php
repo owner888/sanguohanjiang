@@ -37,6 +37,7 @@ use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\PassGeneral;
 use Hanjiang\Model\Pay;
 use Hanjiang\Model\Practice;
+use Hanjiang\Model\WorldArena;
 use Hanjiang\Model\PubLog;
 use Hanjiang\Model\StatPay;
 use OmniPHP\Cache\Redis;
@@ -59,9 +60,8 @@ use OmniPHP\Http\Context;
  * vip_model->cd_status() 恒为 1：战斗不检查、不增加攻击 CD（info.cd 恒 0），cd_model->update_attack 走不到，不移植；
  * clear_cd 仍按 member_field.attackstatus / attackdateline 计算。
  *
- * 主公升级时结算训练位经验（_update_practice → Practice::updatePractice）；有国家时帮派谏言任务 7（征战主线，按次数）。
- *
- * 依赖未移植：主公 61 级以上升级时的全服福利 worldarena_model->get_last_reward / update_server_reward（跨服）。
+ * 主公升级时结算训练位经验（_update_practice → Practice::updatePractice）；有国家时帮派谏言任务 7（征战主线，按次数）；
+ * 升级后 61 级以上时把全服福利的领取进度（member.server_reward）跳到最后一个（worldarena_model->get_last_reward）。
  */
 final class MapHandler
 {
@@ -560,7 +560,14 @@ final class MapHandler
             if ($addstatus['levelup'] > 0) {
                 // 更新训练状态
                 Practice::updatePractice($uid, $now);
-                // 依赖未移植：等级大于61时修改全服福利记录（worldarena，跨服）
+                // 等级大于 61 时修改全服福利记录：升级前别人发放的全服福利不再补领（旧版如此）
+                if ($levelNow >= WorldArena::LEVEL) {
+                    $reward = WorldArena::lastReward();
+                    if ($reward !== []) {
+                        // 更新领取状态
+                        WorldArena::updateServerReward($uid, (int)$reward['id']);
+                    }
+                }
                 // 主公等级升级提示
                 $levelFuncArr = self::levelFunc($uid, $levelNow);
                 $levelReward = $levelFuncArr['levelReward'];

@@ -8,6 +8,7 @@ use OmniPHP\Cache\Redis;
 use OmniPHP\Config;
 use OmniPHP\Database\DatabaseBootstrap;
 use OmniPHP\Database\DB;
+use PDO;
 
 /**
  * 进程级 MySQL / Redis 连接初始化
@@ -24,12 +25,19 @@ final class Connections
         // DatabaseManager 建 PDO 时不读 config/database.php 的 options，这里补上（关闭模拟预处理等），
         // 与迁移前 DB::init($config) 建出的连接一致。注意框架 DB::reconnect() 断线重连时同样不读 options，迁移前后都如此。
         // initWorker() 失败只记日志不抛异常，这里 DB::connection() 会抛「未初始化」，让进程启动失败而不是带病运行
-        $pdo = DB::connection();
-        foreach ((array)Config::get('database.mysql.options', []) as $attribute => $value) {
-            $pdo->setAttribute($attribute, $value);
-        }
+        self::applyPdoOptions(DB::connection());
 
         // Redis::init() 不传参时不会读 key 前缀（cache.redis.prefix），必须显式传入整份配置
         Redis::init((array)Config::get('cache.redis', []));
+    }
+
+    /**
+     * 补上 config/database.php 的 PDO options（DatabaseManager 建连接时不读）；master 里的迁移连接（Migrations::connect）同样要补
+     */
+    public static function applyPdoOptions(PDO $pdo): void
+    {
+        foreach ((array)Config::get('database.mysql.options', []) as $attribute => $value) {
+            $pdo->setAttribute($attribute, $value);
+        }
     }
 }

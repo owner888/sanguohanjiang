@@ -177,9 +177,25 @@ if ($gid > 0 && isset($generalMap[$gid])) {
 - `mysql` 客户端默认连接字符集不是 utf8mb4，按错误编码把 `schema.sql` 里的中文字面量写进库。
 
 ### 避坑规则
-- 导入 `database/schema.sql` 与 `database/migrations/*.sql` 一律带 `--default-character-set=utf8mb4`。
+- 导入 `database/schema.sql` 与 `database/migrations/sql/*.sql` 一律带 `--default-character-set=utf8mb4`。
 
 ### 示例
 ```bash
 mysql --default-character-set=utf8mb4 -uroot -p < database/schema.sql
 ```
+
+## 9. OmniPHP MigrationRunner 在本项目的三个坑 (表前缀 / 服务端预处理 / 回滚事务)
+
+### 症状
+- 带 `zc_sanguo_` 前缀的连接上跑 `MigrationRunner`：多出一张不带前缀的空 `migrations` 表，随后读写 `zc_sanguo_migrations` 报表不存在。
+- 关闭模拟预处理（`config/database.php` 的 `ATTR_EMULATE_PREPARES => false`）时 `Schema::hasTable()` 报 `1064 ... near '?'`。
+- `MigrationRunner::rollback()` 回滚第一个 `down()` 含 DDL 的迁移后报 `There is no active transaction` 中止。
+
+### 根因
+- `Schema::hasTable()` / `Schema::create()` 不加前缀，`DB::table()` 加前缀，两者对同一张 `migrations` 表用了不同的名字。
+- `Schema::hasTable()` 用 `prepare('SHOW TABLES LIKE ?')`，服务端预处理不接受 SHOW 里的占位符。
+- `rollback()` 把 `down()` 包在 `DB::beginTransaction()` 里，MySQL 的 DDL 隐式提交，之后 `DB::commit()` 抛异常。
+
+### 避坑规则
+- 迁移一律经 `Hanjiang\Support\Migrations`：`connect()` 前缀置空、开模拟预处理、先按 `TABLE_DDL` 建好带三个时间字段的 `migrations`；回滚用 `Migrations::rollback()`（不包事务）。
+- 迁移文件里表名写完整的 `zc_sanguo_xxx`。不改 vendor。

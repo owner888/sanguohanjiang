@@ -38,8 +38,10 @@ final class BattleRush
 
     /**
      * @param int $selfUid 当前请求的玩家（旧版 $this->member['uid']）：init_member_team_info 的 uid 为 0 时取本人、6 星战斗特效只对本人生效
+     * @param (\Closure(int): ?array<string, mixed>)|null $memberTeam 玩家队伍来源（战斗服务器按同步时保存的队伍快照打，
+     *        返回 TeamBuilder::forMember 结构；返回 null 或不传时现取 TeamBuilder::forMember）
      */
-    public function __construct(private readonly int $selfUid, ?Randomizer $rng = null)
+    public function __construct(private readonly int $selfUid, ?Randomizer $rng = null, private readonly ?\Closure $memberTeam = null)
     {
         $this->engine = new BattleEngine(rng: $rng);
     }
@@ -440,7 +442,8 @@ final class BattleRush
     {
         // 旧版 init_member_team_info：uid 为 0 时取当前玩家
         $memberUid = (int)$uid === 0 ? $this->selfUid : (int)$uid;
-        $result = TeamBuilder::forMember($memberUid, defense: $defense, pve: $pve, self: $memberUid === $this->selfUid);
+        $result = ($this->memberTeam !== null ? ($this->memberTeam)($memberUid) : null)
+            ?? TeamBuilder::forMember($memberUid, defense: $defense, pve: $pve, self: $memberUid === $this->selfUid);
         if ($result['status'] !== -1) {
             $this->matrix[$defense ? 'right' : 'left'] = ['type' => (int)$result['matrix_type'], 'coe' => (float)$result['matrix_coe']];
         }
