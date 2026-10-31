@@ -6,7 +6,7 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\TavernHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\EquipEssence;
 use Hanjiang\MasterData\General as GeneralTemplate;
@@ -419,11 +419,6 @@ final class LoginrewardHandler
      */
     private static function openActivity(int $now): ?array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === self::ACTIVITY) {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now ? $row : null;
-            }
-        }
-        return null;
+        return ActivityClock::open(self::ACTIVITY, $now);
     }
 }

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\HeroTalent;
 use Hanjiang\Model\Member;
@@ -364,12 +364,7 @@ final class TalentHandler
      */
     private static function isDouble(int $now): bool
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'double_talent') {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now;
-            }
-        }
-        return false;
+        return ActivityClock::isOpen('double_talent', $now);
     }
 
     /**

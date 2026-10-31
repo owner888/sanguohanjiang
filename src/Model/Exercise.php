@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Hanjiang\Model;
 
-use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\Exercise as ExerciseRule;
 use Hanjiang\MasterData\ExerciseAddition;
 use OmniPHP\Cache\Redis;
@@ -44,12 +43,7 @@ final class Exercise
      */
     public static function activity(): ?array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === self::ACTIVITY) {
-                return $row;
-            }
-        }
-        return null;
+        return ActivityClock::byName(self::ACTIVITY);
     }
 
     public static function isOpen(int $now): bool

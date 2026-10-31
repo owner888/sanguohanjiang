@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Hanjiang\Model;
 
-use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\NewSacredtree;
 use Hanjiang\MasterData\Sacredtree as SacredtreeTemp;
 use Hanjiang\MasterData\SacredtreeRate;
@@ -31,12 +30,7 @@ final class Sacredtree
      */
     public static function activity(): ?array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === self::ACTIVITY) {
-                return $row;
-            }
-        }
-        return null;
+        return ActivityClock::byName(self::ACTIVITY);
     }
 
     public static function isOpen(int $now): bool

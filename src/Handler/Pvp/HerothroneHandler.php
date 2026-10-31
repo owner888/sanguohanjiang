@@ -9,7 +9,7 @@ use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\Activity\EliteHandler;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\TavernHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\HerothroneMission;
 use Hanjiang\MasterData\MountTemp;
@@ -859,12 +859,7 @@ final class HerothroneHandler
      */
     private static function freeTimes(int $now): int
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'double_hero') {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now ? self::FREE_TIMES + 1 : self::FREE_TIMES;
-            }
-        }
-        return self::FREE_TIMES;
+        return ActivityClock::isOpen('double_hero', $now) ? self::FREE_TIMES + 1 : self::FREE_TIMES;
     }
 
     /**

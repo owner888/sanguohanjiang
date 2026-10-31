@@ -24,6 +24,10 @@ return [
     'socket_server_url' => getenv('SOCKET_SERVER_URL') ?: '',
     // 开发者测试充值（c=pay&m=test_info / test_grant，客户端设置弹窗「测试充值」）：仅环境变量 PAY_TEST=1 时开启，生产环境绝不能开启
     'pay_test' => getenv('PAY_TEST') === '1',
+    // 开发者活动时间开关（Hanjiang\Model\ActivityClock）：逗号分隔的活动名或 all，这些活动从今天 0 点开放到「启动后
+    // activity_open_days 天」，用于开发环境玩旧版已结束的运营活动。默认空 = 旧版活动表原样；生产环境绝不能开启
+    'activity_open' => getenv('ACTIVITY_OPEN') ?: '',
+    'activity_open_days' => in_array(getenv('ACTIVITY_OPEN_DAYS'), [false, ''], true) ? 30 : (int)getenv('ACTIVITY_OPEN_DAYS'),
     'assets' => [
         'version'    => getenv('ASSET_VERSION') ?: '20261102_1',
         'static_url' => getenv('STATIC_URL') ?: 'static/',

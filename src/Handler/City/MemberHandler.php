@@ -8,7 +8,7 @@ use Hanjiang\Handler\Activity\HiteggHandler;
 use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\Handler\Pvp\SiegeHandler;
 use Hanjiang\MasterData\LevelGift;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\DailyTask;
 use Hanjiang\Model\Edifice;
@@ -277,7 +277,7 @@ final class MemberHandler
     {
         $return = [];
         $rebateFirstpay = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('rebate_firstpay') ?? 0);
-        foreach (ActivityTime::ROWS as $val) {
+        foreach (ActivityClock::rows() as $val) {
             $name = $val['name'];
             $return[$name . '_type'] = (int)$val['type'];
             $return[$name] = $val['starttime'] <= $now && $now <= $val['endtime'] ? 1 : 0;

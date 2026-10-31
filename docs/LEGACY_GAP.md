@@ -385,6 +385,8 @@
 
 接口能用，但玩法、数值或存储不是旧版的；当前战斗不读这些数据。
 
+下表里「活动时间取 `ActivityTime`（… 已结束 / 未开启）」的运营活动，开发环境可用开发者开关 `ACTIVITY_OPEN`（`Model\ActivityClock`，见 README）临时打开；节日 / 跨服 / 未移植的活动不在 `all` 之内。
+
 | 接口 / 位置 | 现状 |
 |---|---|
 | `c=beauty`（`BeautyHandler`、`Model\Beauty`） | 依赖未移植：春节送福活动计数（`actnewyear_model->add_task_num`：掠夺 16、亲近 17） |

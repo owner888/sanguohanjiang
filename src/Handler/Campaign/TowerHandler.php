@@ -8,7 +8,7 @@ use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\SiegeHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\Price;
 use Hanjiang\MasterData\Soul;
 use Hanjiang\MasterData\SoulMission;
@@ -1348,12 +1348,7 @@ final class TowerHandler
      */
     private static function isDouble(int $now): bool
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'double_tower') {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now;
-            }
-        }
-        return false;
+        return ActivityClock::isOpen('double_tower', $now);
     }
 
     /**

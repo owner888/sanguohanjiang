@@ -7,7 +7,7 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\CopiesBuyTimesGold;
 use Hanjiang\MasterData\CopiesInfo;
 use Hanjiang\MasterData\CopiesReward;
@@ -1362,16 +1362,7 @@ final class CopiesHandler
      */
     private static function freeTimes(int $now): int
     {
-        $freeTimes = self::FREE_TIMES;
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'double_copies') {
-                if ($row['starttime'] <= $now && $row['endtime'] >= $now) {
-                    $freeTimes *= 2;
-                }
-                break;
-            }
-        }
-        return $freeTimes;
+        return ActivityClock::isOpen('double_copies', $now) ? self::FREE_TIMES * 2 : self::FREE_TIMES;
     }
 
     /**

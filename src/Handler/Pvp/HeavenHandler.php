@@ -7,7 +7,7 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\EquipEssence;
 use Hanjiang\MasterData\HeavenMission;
 use Hanjiang\Model\Equipment;
@@ -1172,12 +1172,7 @@ final class HeavenHandler
      */
     private static function isDouble(int $now): bool
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'double_heaven') {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now;
-            }
-        }
-        return false;
+        return ActivityClock::isOpen('double_heaven', $now);
     }
 
     /**

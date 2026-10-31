@@ -6,7 +6,6 @@ namespace Hanjiang\Model;
 
 use Hanjiang\Handler\Activity\MessageHandler;
 use Hanjiang\Handler\General\TavernHandler;
-use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\EquipEssence;
 use Hanjiang\MasterData\PassgeneralBoxReward;
@@ -98,12 +97,7 @@ final class PassGeneral
      */
     public static function activity(): ?array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === self::ACTIVITY) {
-                return $row;
-            }
-        }
-        return null;
+        return ActivityClock::byName(self::ACTIVITY);
     }
 
     /**

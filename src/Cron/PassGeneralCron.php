@@ -12,7 +12,7 @@ use OmniPHP\Database\DB;
 /**
  * 过关斩将计划任务（移植旧版 controllers/cron_acttask.php:pass_general「c=cron_acttask&m=pass_general&diy=4」）
  *
- * 由 server.php 在 HTTP Worker #0 上每日 RUN_AT 调用（旧版注释「每天零点重置」）。活动时间取 MasterData ActivityTime
+ * 由 server.php 在 HTTP Worker #0 上每日 RUN_AT 调用（旧版注释「每天零点重置」）。活动时间取 Model\ActivityClock（MasterData ActivityTime）
  * （pass_general 已于 2016-12-31 00:00 结束），现在三项都直接返回。
  *
  * 1. update_pass_general_info：活动期间每天把未领取的宝箱奖励自动发放并发信，再重置全部玩家的进度与免费次数；

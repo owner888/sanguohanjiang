@@ -7,7 +7,7 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\Activity\MessageHandler;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\TavernHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\CompeteReward;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\MountTemp;
@@ -636,12 +636,7 @@ final class CompeteHandler
      */
     private static function activityRow(): ?array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === self::ACTIVITY) {
-                return $row;
-            }
-        }
-        return null;
+        return ActivityClock::byName(self::ACTIVITY);
     }
 
     /**

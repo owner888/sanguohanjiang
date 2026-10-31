@@ -8,7 +8,7 @@ use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\SiegeHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\Gem;
 use Hanjiang\MasterData\SanctumMission;
 use Hanjiang\MasterData\SanctumReward;
@@ -948,12 +948,7 @@ final class SanctumHandler
      */
     private static function isDouble(int $now): bool
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'double_sanctum') {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now;
-            }
-        }
-        return false;
+        return ActivityClock::isOpen('double_sanctum', $now);
     }
 
     /**

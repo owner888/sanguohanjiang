@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\General as GeneralTemplate;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Edifice;
@@ -530,12 +530,8 @@ final class GeneralBookHandler
      */
     private static function happy(int $now): array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'year_happy' && $row['starttime'] <= $now && $row['endtime'] >= $now) {
-                return ['open' => 1, 'cd' => $row['endtime'] - $now];
-            }
-        }
-        return ['open' => 0, 'cd' => 0];
+        $row = ActivityClock::open('year_happy', $now);
+        return $row !== null ? ['open' => 1, 'cd' => $row['endtime'] - $now] : ['open' => 0, 'cd' => 0];
     }
 
     /**

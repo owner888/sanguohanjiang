@@ -7,7 +7,7 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\Activity\MessageHandler;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\TavernHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\BeatengodBoxReward;
 use Hanjiang\MasterData\BeatengodHitChip;
 use Hanjiang\MasterData\BeatengodHitReward;
@@ -612,21 +612,19 @@ final class BeatengodHandler
      */
     private static function cronWindow(int $now): int
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] !== self::ACTIVITY) {
-                continue;
-            }
-            if ($row['endtime'] > $now) {
-                // 活动未结束
-                return -2;
-            }
-            if ($row['endtime'] + 36000 < $now) {
-                // 活动结束很久了
-                return -3;
-            }
-            return (int)$row['version'];
+        $row = ActivityClock::byName(self::ACTIVITY);
+        if ($row === null) {
+            return -1;
         }
-        return -1;
+        if ($row['endtime'] > $now) {
+            // 活动未结束
+            return -2;
+        }
+        if ($row['endtime'] + 36000 < $now) {
+            // 活动结束很久了
+            return -3;
+        }
+        return (int)$row['version'];
     }
 
     /**

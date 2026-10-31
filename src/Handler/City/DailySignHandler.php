@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\City;
 
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Member;
 use OmniPHP\Database\DB;
@@ -130,11 +130,6 @@ final class DailySignHandler
      */
     private static function openActivity(int $now): ?array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === self::ACTIVITY) {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now ? $row : null;
-            }
-        }
-        return null;
+        return ActivityClock::open(self::ACTIVITY, $now);
     }
 }

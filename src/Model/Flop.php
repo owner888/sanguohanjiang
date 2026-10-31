@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Hanjiang\Model;
 
-use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\Flop as FlopRule;
 use Hanjiang\MasterData\FlopReward;
 use OmniPHP\Database\DB;
@@ -38,12 +37,7 @@ final class Flop
      */
     public static function activity(): ?array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === self::ACTIVITY) {
-                return $row;
-            }
-        }
-        return null;
+        return ActivityClock::byName(self::ACTIVITY);
     }
 
     /**

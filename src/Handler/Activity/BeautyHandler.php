@@ -7,7 +7,7 @@ namespace Hanjiang\Handler\Activity;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\ArenaHandler;
 use Hanjiang\Handler\Pvp\CountryHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\Model\Beauty;
 use Hanjiang\Model\Chat;
@@ -2710,12 +2710,7 @@ final class BeautyHandler
      */
     private static function isDouble(int $now): bool
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'double_beauty') {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now;
-            }
-        }
-        return false;
+        return ActivityClock::isOpen('double_beauty', $now);
     }
 
     /**

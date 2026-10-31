@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Hanjiang\Model;
 
 use Hanjiang\Handler\Pvp\BeatengodHandler;
-use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\AlipayProduct;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -35,12 +34,7 @@ final class Pay
      */
     public static function activity(string $name, int $now): ?array
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === $name) {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now ? $row : null;
-            }
-        }
-        return null;
+        return ActivityClock::open($name, $now);
     }
 
     /**

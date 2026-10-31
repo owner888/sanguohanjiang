@@ -7,7 +7,7 @@ namespace Hanjiang\Handler\Equip;
 use Hanjiang\Battle\LegacyStats;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
-use Hanjiang\MasterData\ActivityTime;
+use Hanjiang\Model\ActivityClock;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
@@ -1020,12 +1020,7 @@ final class RefineHandler
      */
     private static function isDouble(int $now): bool
     {
-        foreach (ActivityTime::ROWS as $row) {
-            if ($row['name'] === 'double_refine') {
-                return $row['starttime'] <= $now && $row['endtime'] >= $now;
-            }
-        }
-        return false;
+        return ActivityClock::isOpen('double_refine', $now);
     }
 
     /**
