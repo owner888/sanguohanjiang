@@ -9989,6 +9989,44 @@ background: url(../img/common/nd_platform.png) 0 0 no-repeat;
 #settingspop #platformky_btn {
 display:none;
 }
+/* 开发者测试充值：入口在「游戏设置」标题右侧，服务器 PAY_TEST=1 时才显示 */
+#settingspop #paytest_btn {
+display:none;
+position: absolute;
+right: 10px;
+top: 9px;
+margin: 0;
+}
+#paytestpop .paytest_list {
+position: absolute;
+left: 40px;
+top: 30px;
+width: 350px;
+height: 240px;
+overflow-y: auto;
+z-index: 2;
+font-size: 20px;
+}
+#paytestpop .paytest_list li {
+height: 40px;
+line-height: 40px;
+}
+#paytestpop .paytest_list span {
+display: inline-block;
+}
+#paytestpop .paytest_list .name {
+width: 110px;
+}
+#paytestpop .paytest_list .price {
+width: 70px;
+}
+#paytestpop .paytest_list .gold {
+width: 85px;
+}
+#paytestpop .paytest_list button {
+float: right;
+margin-top: 4px;
+}
 #settingspop #hidemsg {
 position: absolute;
 left: 28px;

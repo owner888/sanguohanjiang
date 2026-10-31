@@ -22,8 +22,10 @@ return [
     // 留空时 socket.io.min.js 适配层改连 HJ_CONFIG.wsUrl（页面同主机 + ws.public_port）；ws 网关在别的域名 / 端口时
     // 配成该地址（http(s):// 或 ws(s):// 均可，适配层会转换）
     'socket_server_url' => getenv('SOCKET_SERVER_URL') ?: '',
+    // 开发者测试充值（c=pay&m=test_info / test_grant，客户端设置弹窗「测试充值」）：仅环境变量 PAY_TEST=1 时开启，生产环境绝不能开启
+    'pay_test' => getenv('PAY_TEST') === '1',
     'assets' => [
-        'version'    => getenv('ASSET_VERSION') ?: '20261101_1',
+        'version'    => getenv('ASSET_VERSION') ?: '20261102_1',
         'static_url' => getenv('STATIC_URL') ?: 'static/',
         'cdn_url'    => getenv('CDN_URL') ?: 'static/',
         'api_url'    => getenv('API_URL') ?: 'index.php',

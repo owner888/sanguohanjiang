@@ -3409,6 +3409,10 @@ final class GameApiTest extends TestCase
         $this->assertSame('act_thanksgiving', $res['c']);
         $this->assertSame('index', $res['m']);
         $this->assertStringContainsString('筹备中', $res['message']);
+
+        // private 方法与带其他参数的 public static 辅助方法不可路由，按未实现接口降级
+        $this->assertSame(1, $this->request('pay', 'testEnabled')['is_fallback'] ?? 0);
+        $this->assertSame(1, $this->request('copies', 'doPk')['is_fallback'] ?? 0);
         $this->assertIsArray($res['list']);
         $this->assertIsArray($res['info']);
     }

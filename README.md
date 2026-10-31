@@ -131,6 +131,8 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 
    Developer recharge (no payment channel is wired yet): `php tools/pay_grant.php <uid> <productId>` credits product `productId` (`AlipayProduct`, run without arguments to list them) to player `uid` through the same payment core a channel callback will use (`Hanjiang\Model\Pay::complete`: gold, VIP progress, first-recharge state, mail, `pay_order` / `pay_log`) with an order id prefixed `manual_`. It is a CLI script only; no HTTP route reaches it.
 
+   In-game test recharge: start the server with `PAY_TEST=1` (config `pay_test` in `config/app.php`) and the settings popup shows a "测试充值" button listing the products; each one calls `c=pay&m=test_grant&id=<productId>`, which credits the logged-in player through the same core as `pay_grant.php` (`Pay::grantManual`, channel `manual`). `c=pay&m=test_info` returns `{enabled, list}` so the client only shows the button when enabled. When `PAY_TEST` is not `1` (the default), `test_grant` returns status `0` and does nothing. **Never enable `PAY_TEST` in production** — it lets any player credit gold for free.
+
 6. Play the game:
    Open your browser and navigate to:
    ```

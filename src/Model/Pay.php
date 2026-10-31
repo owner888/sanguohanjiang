@@ -111,6 +111,24 @@ final class Pay
     }
 
     /**
+     * 手工到账（tools/pay_grant.php 与开发者测试接口 c=pay&m=test_grant 共用）
+     *
+     * 按商品价格走 complete()，订单号 manual_<uid>_<时间>_<随机数>，渠道 manual。返回 complete() 的结果加 orderid。
+     *
+     * @return array<string, int|string>
+     */
+    public static function grantManual(int $uid, int $productId, ?int $now = null): array
+    {
+        $now ??= time();
+        $orderId = sprintf('manual_%d_%s_%04d', $uid, date('ymdHis', $now), random_int(0, 9999));
+        $product = AlipayProduct::ROWS[$productId] ?? null;
+        $result = $product === null
+            ? ['status' => 3]
+            : self::complete($uid, $productId, $orderId, 'manual', (int)$product['amount'], $now);
+        return $result + ['orderid' => $orderId];
+    }
+
+    /**
      * 到账（在玩家行锁事务里执行）
      *
      * @return array<string, mixed>

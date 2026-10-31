@@ -251,6 +251,22 @@
                 that.e.find('#music_btn').hide();
             }
 
+            // 开发者测试充值：服务器 PAY_TEST=1 时才显示入口（c=pay&m=test_info）
+            loadContents({
+                'c': 'pay',
+                'm': 'test_info'
+            }, function(res) {
+                if (!that.e || !res || !res.enabled) {
+                    return;
+                }
+                var list = res.list || [];
+                that.e.find('#paytest_btn').css('display', 'inline-block').unbind('click touchend').bind('click touchend',
+                function() {
+                    that.payTest(list);
+                    return false;
+                });
+            }, true, function() {}, true);
+
             $('#worldloading').hide();
 
         },
@@ -372,6 +388,64 @@
             that.a.show();
         },
 
+        // 开发者测试充值：商品列表，每个商品一个按钮走 c=pay&m=test_grant（到账同渠道回调核心）
+        payTest: function(list) {
+            var that = this;
+            var busy = false;
+
+            that.t = xGame.loadPopTmpl('paytest');
+            that.t.find('.hidebtn').unbind('click touchend').bind('click touchend',
+            function() {
+                that.closePayTest();
+                return false;
+            });
+
+            var ul = that.t.find('.paytest_list').empty();
+            $.each(list, function(i, item) {
+                var gold = parseInt(item.gold, 10) + parseInt(item.add_gold || 0, 10);
+                var li = $('<li></li>');
+                li.append($('<span class="name"></span>').text(item.subject));
+                li.append($('<span class="price"></span>').text(item.amount + '元'));
+                li.append($('<span class="gold"></span>').text(gold + lang('gold')));
+                var btn = $('<button class="btn pop_btn_least">充值</button>');
+                btn.bind('click touchend', function() {
+                    if (busy) {
+                        return false;
+                    }
+                    busy = true;
+                    loadContents({
+                        'c': 'pay',
+                        'm': 'test_grant',
+                        'id': item.id
+                    }, function(res) {
+                        busy = false;
+                        if (parseInt(res.status, 10) == 1) {
+                            xGame.toast.show('测试充值成功，获得' + res.gold + lang('gold'));
+                            player.reloadInfo();
+                        } else {
+                            xGame.toast.show('测试充值失败（' + res.status + '）');
+                        }
+                    }, false, function() {
+                        busy = false;
+                    });
+                    return false;
+                });
+                li.append(btn);
+                ul.append(li);
+            });
+
+            that.t.show();
+        },
+
+        closePayTest: function() {
+            if (this.t) {
+                this.t.find('.hidebtn').unbind('click touchend');
+                this.t.find('.paytest_list button').unbind('click touchend');
+                this.t.remove();
+                this.t = null;
+            }
+        },
+
         setpwd: function() {
             var that = this;
             that.p = xGame.loadPopTmpl('pwd');
@@ -445,6 +519,7 @@
                 this.e.find('#help_btn').unbind('click touchend');
                 this.e.find('#music_btn').unbind('click touchend');
                 this.e.find('#reset_account_btn').unbind('click touchend');
+                this.e.find('#paytest_btn').unbind('click touchend');
                 this.e.remove();
                 this.e = null;
             }
@@ -463,6 +538,7 @@
                 this.p.remove();
                 this.p = null;
             }
+            this.closePayTest();
         },
 
         hide: function() {

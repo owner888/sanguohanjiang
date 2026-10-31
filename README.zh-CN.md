@@ -131,6 +131,8 @@
 
    开发者手工充值（尚未接入支付渠道）：`php tools/pay_grant.php <uid> <productId>` 按商品 `productId`（`AlipayProduct`，不带参数运行可列出全部商品）给玩家 `uid` 到账，走的是渠道回调将来使用的同一个充值核心（`Hanjiang\Model\Pay::complete`：元宝、VIP 累计、首充状态、信件、`pay_order` / `pay_log`），订单号以 `manual_` 开头。只是命令行脚本，任何 HTTP 路由都调不到它。
 
+   游戏内测试充值：以 `PAY_TEST=1` 启动服务器（`config/app.php` 的 `pay_test`），设置弹窗会出现「测试充值」按钮，列出商品；每个商品调用 `c=pay&m=test_grant&id=<productId>`，给当前登录玩家走与 `pay_grant.php` 相同的核心到账（`Pay::grantManual`，渠道 `manual`）。`c=pay&m=test_info` 返回 `{enabled, list}`，客户端仅在开启时显示按钮。`PAY_TEST` 不为 `1`（默认）时 `test_grant` 返回 status `0`，什么也不做。**生产环境绝不能开启 `PAY_TEST`**——任何玩家都能免费刷元宝。
+
 6. 打开游戏：
    在浏览器中访问：
    ```

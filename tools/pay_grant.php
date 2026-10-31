@@ -8,7 +8,7 @@ declare(strict_types=1);
  * 用法: php tools/pay_grant.php <uid> <productId>
  *
  * 按商品（MasterData AlipayProduct 的 id，见 c=pay&m=get_product_list）的价格走与渠道回调相同的到账核心
- * Model\Pay::complete：发元宝、累计 VIP、首充 / 档次首充、充值信件、pay_order / pay_log 记录。
+ * Model\Pay::complete（经 Pay::grantManual，与开发者测试接口 c=pay&m=test_grant 共用）：发元宝、累计 VIP、首充 / 档次首充、充值信件、pay_order / pay_log 记录。
  * 订单号为 manual_<uid>_<时间>_<随机数>，渠道记为 manual。用于在渠道接入前测试 VIP 与首充。
  */
 
@@ -40,8 +40,8 @@ $dbConfig = require dirname(__DIR__) . '/config/database.php';
 DB::init($dbConfig['mysql']);
 Redis::init($dbConfig['redis']);
 
-$orderId = sprintf('manual_%d_%s_%04d', $uid, date('ymdHis'), random_int(0, 9999));
-$result = Pay::complete($uid, $productId, $orderId, 'manual', (int)$product['amount']);
+$result = Pay::grantManual($uid, $productId);
+$orderId = $result['orderid'];
 
 $messages = [
     1 => '到账成功',

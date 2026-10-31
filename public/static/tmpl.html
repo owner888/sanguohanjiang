@@ -1632,10 +1632,25 @@
                 <p>游戏设置</p>
                 <button class="btn pop_btn_middle" id="music_btn">关闭音乐</button>
                 <button class="btn pop_btn_middle" id="help_btn">游戏帮助</button>
+                <button class="btn pop_btn_least" id="paytest_btn">测试充值</button>
             </div>
         </div>
     </div>
 
+</script>
+
+<!-- 开发者测试充值（服务器 PAY_TEST=1 时设置弹窗才显示入口） -->
+<script type="text/html" id="paytestpop_tmpl">
+    <div id="paytestpop" class="pop_page pop_page_small">
+        <div class="mask"></div>
+        <div class="content">
+            <div class="bg_center"></div>
+            <div class="bg_left"></div>
+            <div class="bg_right"></div>
+            <button class="hidebtn btn"></button>
+            <ul class="paytest_list"></ul>
+        </div>
+    </div>
 </script>
 
 <!--竞速奖励-->

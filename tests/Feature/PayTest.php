@@ -54,6 +54,7 @@ final class PayTest extends TestCase
     protected function tearDown(): void
     {
         BossClock::freeze(null);
+        putenv('PAY_TEST');
     }
 
     /**
@@ -489,5 +490,56 @@ final class PayTest extends TestCase
         DB::table('member_field')->where('uid', $q['uid'])->update(['rebate_dateline' => $now, 'rebate_version' => 70]);
         $this->assertSame(['status' => 1, 'get' => 0, 'gold' => 60, 'day' => 30, 'surplus' => 3000, 'cd' => 0, 'type' => 0], $this->request($q['auth'], 'rebate', 'index'));
         $this->assertSame(-3, $this->request($q['auth'], 'rebate', 'get_reward')['status']);
+    }
+
+    public function testDeveloperTestGrantIsOffUnlessPayTestEnabled(): void
+    {
+        $p = $this->player(['gold' => 0]);
+        $uid = $p['uid'];
+
+        // 未开启（PAY_TEST 不为 1）：test_info 不给商品，test_grant 返回 0 且不到账、不建订单
+        foreach ([false, '0', 'true'] as $env) {
+            putenv($env === false ? 'PAY_TEST' : 'PAY_TEST=' . $env);
+            $this->assertSame(['status' => 1, 'enabled' => false, 'list' => []], $this->request($p['auth'], 'pay', 'test_info'));
+            $this->assertSame(['status' => 0], $this->request($p['auth'], 'pay', 'test_grant', ['id' => 1]));
+        }
+        $this->assertSame([0, 0], [self::memberValue($uid, 'gold'), self::memberValue($uid, 'vip')]);
+        $this->assertSame(0, DB::table('pay_order')->where('uid', $uid)->count());
+
+        // 开启：test_info 的 list 同 get_product_list
+        putenv('PAY_TEST=1');
+        $info = $this->request($p['auth'], 'pay', 'test_info');
+        $this->assertSame([1, true], [$info['status'], $info['enabled']]);
+        $this->assertSame($this->request($p['auth'], 'pay', 'get_product_list')['list'], $info['list']);
+
+        // 不存在的商品：3，不到账
+        $this->assertSame(3, $this->request($p['auth'], 'pay', 'test_grant', ['id' => 99])['status']);
+        $this->assertSame(0, DB::table('pay_order')->where('uid', $uid)->count());
+
+        // 到账走 Pay::complete（渠道 manual）：60 元宝、VIP 6、首充
+        $res = $this->request($p['auth'], 'pay', 'test_grant', ['id' => 1]);
+        $orderId = (string)$res['orderid'];
+        $this->assertStringStartsWith('manual_' . $uid . '_', $orderId);
+        unset($res['orderid']);
+        $this->assertSame(['status' => 1, 'gold' => 60, 'add_gold' => 0, 'vip' => 6, 'viptype' => 1], $res);
+        $this->assertSame([60, 6], [self::memberValue($uid, 'gold'), self::memberValue($uid, 'vip')]);
+        $order = DB::table('pay_order')->where('uid', $uid)->first();
+        $this->assertSame([$orderId, 'manual'], [$order['orderid'], $order['paychannel']]);
+
+        // 同一订单号再次到账由核心拦下（6），不重复发元宝
+        $this->assertSame(['status' => 6], Pay::complete($uid, 1, $orderId, 'manual', 6));
+        $this->assertSame(60, self::memberValue($uid, 'gold'));
+        $this->assertSame(1, DB::table('pay_order')->where('uid', $uid)->count());
+
+        // 每次测试充值是新订单：再充一次累计到账
+        $this->assertSame(1, $this->request($p['auth'], 'pay', 'test_grant', ['id' => 1])['status']);
+        $this->assertSame(2, DB::table('pay_order')->where('uid', $uid)->count());
+        $this->assertGreaterThanOrEqual(120, self::memberValue($uid, 'gold'));
+
+        // 关闭后立即失效
+        putenv('PAY_TEST');
+        $gold = self::memberValue($uid, 'gold');
+        $this->assertSame(['status' => 0], $this->request($p['auth'], 'pay', 'test_grant', ['id' => 1]));
+        $this->assertSame($gold, self::memberValue($uid, 'gold'));
     }
 }
