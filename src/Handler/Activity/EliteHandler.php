@@ -16,8 +16,11 @@ use Hanjiang\MasterData\Price;
 use Hanjiang\MasterData\TalentScroll;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
+use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
+use Hanjiang\Model\OpenMap;
+use Hanjiang\Model\StatPay;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 use Workerman\Protocols\Http\Response as WorkermanResponse;
@@ -39,10 +42,9 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  *
  * 依赖未移植：
  * - 春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(…, 24, uid) 计数）；
- * - 主线任务 mainquest_model->task_action(10, 1, uid)（参加一次多人副本）；
- * - 消费统计 stat_model->elite_times；member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、
- *   四方来朝元宝计数；
- * - 征战进度：旧版 map_model->get_mission_max 读 zc_sanguo_open_map（未移植），这里按新版 zc_sanguo_map 推算。
+ * - sub_gold 的四方来朝（翻牌活动 flop）元宝计数（旧版数据中已结束）；
+ * （主线任务 10「参加一次多人副本」按参战玩家计数；元宝流水与日常任务 5 由 Member::deductCurrency 记；
+ *  消费统计 stat_model->elite_times 旧版不在付费点列表里，是空操作）
  */
 final class EliteHandler
 {
@@ -162,7 +164,7 @@ final class EliteHandler
         // 获取军团列表
         $list = self::getCityList();
         // 取通过的最大军团
-        $maxCity = self::getMaxCity(self::getMissionMax($uid));
+        $maxCity = self::getMaxCity(OpenMap::missionMax($uid)['id']);
         if ($list === []) {
             $return['status'] = -1;
             return $return;
@@ -321,7 +323,7 @@ final class EliteHandler
             }
             // 判断该关卡是否开启（get_mission_max 的 uid 为 0 时取当前玩家）
             $missionUid = (int)$val === 0 ? $selfUid : (int)$val;
-            if ($id > self::getMaxCity(self::getMissionMax($missionUid))) {
+            if ($id > self::getMaxCity(OpenMap::missionMax($missionUid, $selfUid)['id'])) {
                 $return['status'] = -4;
                 return $return;
             }
@@ -513,8 +515,11 @@ final class EliteHandler
             'dateline' => $now,
         ]);
 
-        // 依赖未移植：主线任务 mainquest_model->task_action(10, 1, uid)（参加一次多人副本，无论胜负）
-        // 依赖未移植：春节送福活动 actnewyear_model->add_task_num(version, 24, uid)
+        // 主线任务 10参加一次多人副本（无论胜负）
+        foreach ($team as $val) {
+            MainQuestTask::action((int)$val, 10, 1);
+            // 依赖未移植：春节送福活动 actnewyear_model->add_task_num(version, 24, uid)
+        }
 
         // 成功返回
         $return['status'] = 1;
@@ -576,7 +581,8 @@ final class EliteHandler
             $price = self::getBuyPrice($number + 2);
             $return['price'] = $price;
 
-            // 依赖未移植：消费统计 stat_model->elite_times
+            // 消费统计 stat_model->elite_times：旧版不在付费点列表里，是空操作（StatPay 同样不记）
+            StatPay::record($uid, 'elite_times', $price);
 
             // 返回剩余金币和次数
             $return['all_gold'] = (int)DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('gold');
@@ -612,7 +618,7 @@ final class EliteHandler
         }
 
         // 取通过的最大军团
-        if ($id > self::getMaxCity(self::getMissionMax((int)$member['uid']))) {
+        if ($id > self::getMaxCity(OpenMap::missionMax((int)$member['uid'])['id'])) {
             $return['status'] = -2;
             return $return;
         }
@@ -640,7 +646,7 @@ final class EliteHandler
      */
     public static function cityOpen(int $uid, int $id): bool
     {
-        return isset(EliteCity::ROWS[$id]) && $id <= self::getMaxCity(self::getMissionMax($uid));
+        return isset(EliteCity::ROWS[$id]) && $id <= self::getMaxCity(OpenMap::missionMax($uid)['id']);
     }
 
     /**
@@ -715,38 +721,6 @@ final class EliteHandler
             }
         }
         return $max['city'];
-    }
-
-    /**
-     * 主线已通关的最大关卡 id（map_model->get_mission_max 的 id）
-     *
-     * 旧版读 zc_sanguo_open_map（每势力一行：stage 最大场景、mission 该场景已过关卡）取 level 最大的一行，
-     * mission 为 0 时按 1，再按 (level, stage, mission) 查 zc_sanguo_mission 的 id；查不到时取 mission 表最后一关；
-     * 没有记录为 0。依赖未移植：open_map，新版征战进度在 zc_sanguo_map（每势力每场景一行，mission 为该场景已通关据点），
-     * 这里取 level、stage 最大的一行代替。
-     */
-    private static function getMissionMax(int $uid): int
-    {
-        $row = DB::table('map')->where('uid', $uid)->whereNull('deleted_at')
-            ->orderBy('level', 'DESC')->orderBy('stage', 'DESC')->first();
-        if ($row === null) {
-            return 0;
-        }
-        $mission = (int)$row['mission'];
-        if ($mission === 0) {
-            $mission = 1;
-        }
-        $last = null;
-        foreach (Mission::ROWS as $value) {
-            if ($value['missionlevel'] === (int)$row['level'] && $value['missionstage'] === (int)$row['stage'] && $value['missionid'] === $mission) {
-                return $value['id'];
-            }
-            if ($last === null || [$value['missionlevel'], $value['missionstage'], $value['missionid']] > [$last['missionlevel'], $last['missionstage'], $last['missionid']]) {
-                $last = $value;
-            }
-        }
-        // 如果没有查询到关卡信息，就取最大的关卡信息
-        return $last['id'] ?? 0;
     }
 
     /**

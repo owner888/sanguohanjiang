@@ -9,17 +9,18 @@ use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\Advanced;
+use Hanjiang\Model\Beauty;
 use Hanjiang\Model\General;
 use Hanjiang\Model\GeneralBook;
 use Hanjiang\Model\HeroTalent;
 use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\OwnSoul;
-use Hanjiang\Model\Beauty;
 use Hanjiang\Model\OwnStar;
 use Hanjiang\Model\Refine;
-use OmniPHP\Http\Context;
+use Hanjiang\Model\WarCollege;
 use OmniPHP\Database\DB;
+use OmniPHP\Http\Context;
 
 /**
  * 将领界面（移植旧版 controllers/general.php 的客户端接口 index / get_info / equip / unequip）
@@ -31,10 +32,11 @@ use OmniPHP\Database\DB;
  * 主公天赋生命（_hero_talent_hp，主公 91 级起，HeroTalent）、美人（_get_beauty_info，主公 60 级起，Beauty::addition 的三围）、
  * 主公星魄（_get_star_info，主公 80 级起，OwnStar 命格加成的三围与血量）、
  * 将魂（_get_soul_info，转生过或 50 级以上的将领，OwnSoul 的武力 / 智力 / 生命将魂）、
- * 名将进阶（_get_advanced_info，主公 100 级起，Advanced）、名将成就（_get_achievement_info，主公 81 级起，GeneralBook 的名将谱加成）。
+ * 名将进阶（_get_advanced_info，主公 100 级起，Advanced）、名将成就（_get_achievement_info，主公 81 级起，GeneralBook 的名将谱加成）、
+ * 国家学院（_get_war_college_info，国家 30 级起且学院 buff 未结束，WarCollege 的三围）。
  *
  * 依赖未移植（界面血量 / 三围加成，均按 0 计入 LegacyStats::infoHp 与 wuliup/zhiliup/tiliup）：
- * 国家学院 _get_war_college_info（国家 30 级）、套装 _get_siut_info、神树活动 _get_sacredtree_info（index 的 tree 恒为 0）。
+ * 套装 _get_siut_info、神树活动 _get_sacredtree_info（index 的 tree 恒为 0）。
  */
 final class GeneralHandler
 {
@@ -394,6 +396,8 @@ final class GeneralHandler
             $general['tiliup'] = (int)$general['tiliup'] + $addition['tili'];
             $flatAdd += $addition['blood'];
         }
+        // 国家加成（_get_war_college_info：国家 30 级以上、学院 buff 未结束时，学院武力 / 智力 / 体力加到 wuliup / zhiliup / tiliup）
+        WarCollege::applyInfo($uid, $general);
         // 获取将魂加成（_get_soul_info：转生过或 50 级以上的将领，武力 / 智力将魂加到 wuliup / zhiliup，生命将魂按百分比乘到 hp 上）
         $percentMultiplier = 1.0;
         if ((int)$general['turn'] > 0 || (int)$general['level'] > 49) {

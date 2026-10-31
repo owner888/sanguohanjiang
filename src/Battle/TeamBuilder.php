@@ -27,6 +27,7 @@ use Hanjiang\Model\OwnMatrix;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\OwnStar;
+use Hanjiang\Model\WarCollege;
 use OmniPHP\Database\DB;
 use RuntimeException;
 
@@ -92,17 +93,17 @@ final class TeamBuilder
      * @param bool $defense 防守方（旧版 $defense，只决定阵法记录到左 / 右侧；这里两侧同样返回 matrix_type / matrix_coe）
      * @param bool $pve     旧版 $this->_pve：PVE 战斗阵法加成系数上限 0.5
      * @param bool $self    是否为当前请求的玩家本人（旧版 $uid == $this->member['uid']），只影响 6 星战斗特效 star
+     * @param int $arguGid  神将之门上阵武将 id（旧版 $argu_gid：不用阵法，将领站 4 号位，没有阵法加成）
      * @return array{status: int, team: array<int, array<string, mixed>>, matrix_type: int, matrix_coe: float}
      */
-    public static function forMember(int $uid, bool $defense = false, bool $pve = false, bool $self = true): array
+    public static function forMember(int $uid, bool $defense = false, bool $pve = false, bool $self = true, int $arguGid = 0): array
     {
         $return = ['status' => 0, 'team' => [], 'matrix_type' => 0, 'matrix_coe' => 0.0];
 
         // 主公等级（旧版本人取 $this->member['level']，他人取 get_base_info；玩家不存在按 0）
         $level = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('level') ?? 0);
 
-        // 依赖未移植（以下加成在旧版此处预取，均未移植，按 0 计入下方各步）：
-        // 国家学院 warcollege_model->get_warcollege_addition（国家 30 级）、神树 sacredtree_model->get_tree_by_uid（活动开启时）
+        // 依赖未移植（旧版此处预取，按 0 计入下方各步）：神树 sacredtree_model->get_tree_by_uid（活动开启时）
 
         // 名将成就加成（general_model->get_own_addition：主公 81 级开启，battle_model.php:1347；没有记录时为空，不加成）。
         // 旧版记在 _addition_arr[uuid]，这里记在本队每个单位的 addition_arr 上（BattleEngine 读取暴击率 / 闪避率 / 识破率）
@@ -116,32 +117,40 @@ final class TeamBuilder
         // 旧版记在 _beauty_arr[uuid]，这里记在本队每个单位的 beauty_arr 上（BattleEngine 读取闪避 / 识破 / 暴击伤害）
         $beautyArr = $level >= self::BEAUTY_OPEN_LEVEL ? Beauty::addition($uid, time()) : null;
 
-        // 阵法：旧版 member_field.matrixid 为 0 返回 -1
-        $matrixid = OwnMatrix::activeId($uid);
-        if ($matrixid === 0) {
-            $return['status'] = -1;
-            return $return;
-        }
-        $matrixInfo = OwnMatrix::own($uid, $matrixid);
-        $matrix = [];
-        for ($i = 1; $i <= 9; $i++) {
-            $gid = $matrixInfo['position' . $i] ?? 0;
-            if ($gid > 0) {
-                $matrix[$i] = $gid;
-            }
-        }
+        // 国家学院加成（warcollege_model->get_warcollege_addition：国家 30 级以上、学院 buff 未结束时）
+        $warcollegeArr = self::warcollegeAddition($uid);
 
-        // 阵法类型与加成（matrix_model->get_rule_by_id：percent = 阵法等级 × intval(Matrix.addition)，coe = percent × 0.01）
-        // 旧版阵法模板不存在时 get_rule_by_id 不返回 addition，type 取到 null、coe 为 0；这里同样按 0
-        $rule = OwnMatrix::rule($matrixid, $matrixInfo['level'] ?? 0);
-        $matrixType = $rule !== null ? $rule['addition']['type'] : 0;
-        $matrixCoe = $rule !== null ? $rule['addition']['percent'] * 0.01 : 0.0;
-        // PVE 阵法加成上限控制（攻守两侧同）
-        if ($pve && $matrixCoe > 0.5) {
-            $matrixCoe = 0.5;
+        if ($arguGid > 0) {
+            // 神将之门 不适用阵法 将领默认站4号位
+            $matrix = [4 => $arguGid];
+        } else {
+            // 阵法：旧版 member_field.matrixid 为 0 返回 -1
+            $matrixid = OwnMatrix::activeId($uid);
+            if ($matrixid === 0) {
+                $return['status'] = -1;
+                return $return;
+            }
+            $matrixInfo = OwnMatrix::own($uid, $matrixid);
+            $matrix = [];
+            for ($i = 1; $i <= 9; $i++) {
+                $gid = $matrixInfo['position' . $i] ?? 0;
+                if ($gid > 0) {
+                    $matrix[$i] = $gid;
+                }
+            }
+
+            // 阵法类型与加成（matrix_model->get_rule_by_id：percent = 阵法等级 × intval(Matrix.addition)，coe = percent × 0.01）
+            // 旧版阵法模板不存在时 get_rule_by_id 不返回 addition，type 取到 null、coe 为 0；这里同样按 0
+            $rule = OwnMatrix::rule($matrixid, $matrixInfo['level'] ?? 0);
+            $matrixType = $rule !== null ? $rule['addition']['type'] : 0;
+            $matrixCoe = $rule !== null ? $rule['addition']['percent'] * 0.01 : 0.0;
+            // PVE 阵法加成上限控制（攻守两侧同）
+            if ($pve && $matrixCoe > 0.5) {
+                $matrixCoe = 0.5;
+            }
+            $return['matrix_type'] = $matrixType;
+            $return['matrix_coe'] = $matrixCoe;
         }
-        $return['matrix_type'] = $matrixType;
-        $return['matrix_coe'] = $matrixCoe;
 
         if ($matrix === []) {
             // 阵法里没有武将
@@ -362,7 +371,24 @@ final class TeamBuilder
                 $general['kcrit'] += $starArr['kcrit'];
             }
 
-            // 依赖未移植：国家学院加成 _warcollege_arr（国家 30 级；三围、士气、攻防、命中）
+            // 国家学院加成（battle_model.php:1950 ~ 1979）：武力 智力 体力 士气，物攻 / 命中（猛将）、策攻 / 精准（谋士），物防 策防。
+            // 旧版记在 _warcollege_arr[uuid]，这里记在单位的 warcollege_arr 上（BattleEngine 读取闪避率 / 识破率）
+            if ($warcollegeArr !== null) {
+                $general['warcollege_arr'] = $warcollegeArr;
+                $general['wuli'] += $warcollegeArr['wuli'];
+                $general['zhili'] += $warcollegeArr['zhili'];
+                $general['tili'] += $warcollegeArr['tili'];
+                $general['power'] += $warcollegeArr['power'];
+                if ((int)$general['type'] === 1) {
+                    $general['attack'] += $warcollegeArr['attack'];
+                    $general['mingzhong'] += $warcollegeArr['mingzhong'];
+                } elseif ((int)$general['type'] === 2) {
+                    $general['attack'] += $warcollegeArr['pattack'];
+                    $general['mingzhong'] += $warcollegeArr['jingzhun'];
+                }
+                $general['defense1'] += $warcollegeArr['defense'];
+                $general['defense2'] += $warcollegeArr['pdefense'];
+            }
 
             // 将魂命中（猛将 9）/ 精准（其他 10）：已有命中时累加，否则直接取将魂值
             $mingzhongSoul = (int)$general['type'] === 1 ? ($soul[9] ?? null) : ($soul[10] ?? null);
@@ -743,6 +769,16 @@ final class TeamBuilder
             $return[(int)$gem['eid']] = ($return[(int)$gem['eid']] ?? 0) + (int)$gem['power'];
         }
         return $return;
+    }
+
+    /**
+     * 国家学院加成（battle_model.php:1361 ~ 1367：国家 30 级以上才取 get_warcollege_addition）；没有加成为 null
+     *
+     * @return array<string, int>|null
+     */
+    private static function warcollegeAddition(int $uid): ?array
+    {
+        return WarCollege::addition($uid);
     }
 
     /**

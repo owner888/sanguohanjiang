@@ -9,16 +9,12 @@ declare(strict_types=1);
  * 逐个订单调用 Model\Pay::complete，输出各次的状态码（逗号分隔）。
  */
 
-require dirname(__DIR__, 2) . '/vendor/autoload.php';
+require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Hanjiang\Model\Pay;
-use OmniPHP\Cache\Redis;
-use OmniPHP\Database\DB;
+use Hanjiang\Support\Connections;
 
-date_default_timezone_set('Asia/Shanghai');
-$dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-DB::init($dbConfig['mysql']);
-Redis::init($dbConfig['redis']);
+Connections::init();
 
 $uid = (int)($argv[1] ?? 0);
 $productId = (int)($argv[2] ?? 0);

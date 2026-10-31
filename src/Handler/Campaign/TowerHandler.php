@@ -16,9 +16,11 @@ use Hanjiang\MasterData\SoulReward;
 use Hanjiang\MasterData\SoulScene;
 use Hanjiang\MasterData\SoulType;
 use Hanjiang\Model\Chat;
+use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\MemberActivity;
+use Hanjiang\Model\StatPay;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -39,10 +41,9 @@ use OmniPHP\Http\Context;
  * 将魂背包满（member.soulpack <= souluse，OwnSoul::isPackFull）时掉落将魂的关卡返回 2；将魂掉落发进 own_soul
  * （OwnSoul::addHeroSoul，失败时扫荡返回 -10、挑战返回 -9）。
  *
- * 依赖未移植：
- * - 主线任务 mainquest_model->task_action(15, 1)（获得任意将魂）；
- * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、四方来朝元宝计数；
- *   add_soul 的原魂流水 _soul_log；stat_model 消费统计（tower_buy / tower_jiabei）。
+ * 获得将魂计主线任务 15；元宝 / 原魂增减由 Member 记流水（元宝消耗另计日常任务 5）；付费点统计 tower_buy / tower_jiabei（StatPay）。
+ *
+ * 依赖未移植：sub_gold 的四方来朝（翻牌活动 flop）元宝计数（旧版数据中已结束）。
  */
 final class TowerHandler
 {
@@ -618,7 +619,8 @@ final class TowerHandler
                     $return['status'] = -10;
                     return $return;
                 }
-                // 依赖未移植：主线任务 mainquest_model->task_action(15, 1)（获得任意将魂）
+                // 主线任务 15获得任意将魂
+                MainQuestTask::action($uid, 15, 1);
                 foreach (['name', 'quality', 'level', 'num'] as $value) {
                     $heroSoulArr[$value] = $add[$value];
                 }
@@ -787,7 +789,8 @@ final class TowerHandler
                         $return['status'] = -9;
                         return $return;
                     }
-                    // 依赖未移植：主线任务 mainquest_model->task_action(15, 1)（获得任意将魂）
+                    // 主线任务 15获得任意将魂
+                    MainQuestTask::action($uid, 15, 1);
                     $heroSoulArr = [];
                     foreach (['id', 'image', 'name', 'quality', 'power'] as $value) {
                         $heroSoulArr[$value] = $add[$value];
@@ -1010,7 +1013,8 @@ final class TowerHandler
         $daytimes += 1;
         $next = self::actPrice($daytimes);
 
-        // 依赖未移植：消费统计 stat_model->tower_buy
+        // 消费统计记录
+        StatPay::record($uid, 'tower_buy', $gold);
 
         $return['status'] = 1;
         $return['times'] = $times;
@@ -1227,7 +1231,8 @@ final class TowerHandler
 
         self::updateActivityInfo($uid, ['souldate' => $now]);
 
-        // 依赖未移植：消费统计 stat_model->tower_jiabei
+        // 消费统计记录（旧版不论是否花了元宝都记）
+        StatPay::record($uid, 'tower_jiabei', $gold);
 
         $return['status'] = 1;
         $return['gold'] = self::memberValue($uid, 'gold');

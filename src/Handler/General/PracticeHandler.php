@@ -5,1087 +5,881 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
-use OmniPHP\Cache\Redis;
+use Hanjiang\Model\DailyTask;
+use Hanjiang\Model\FreeLeap;
+use Hanjiang\Model\General;
+use Hanjiang\Model\MainQuestTask;
+use Hanjiang\Model\Member;
+use Hanjiang\Model\Practice;
+use Hanjiang\Model\StatPay;
+use Hanjiang\Model\Vip;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
 /**
- * 校场演武与武将挂机训练/突飞猛进处理器 (DDD General Domain)
+ * 校场（移植旧版 controllers/practice.php，训练位 / 突飞规则见 Model\Practice，突飞卡见 Model\FreeLeap）
+ *
+ * 客户端 practicepop.js / practiceleappop.js 调用 index、go_leap（gid）、mop（gid、times）、turn（gid）、get_unlock_price（squence）、
+ * unlock、practice_start（pid、gid、type）、get_levelup_price（pid）、levelup（pid）、practice_stop（pid）。
+ * 同一玩家的突飞 / 训练 / 解锁 / 升级在玩家行锁里串行执行。
+ *
+ * 旧版 index 的首次打开记录 edifice_model->add_edifice_log(1) 只写日志、不影响返回，不移植。
  */
 final class PracticeHandler
 {
-    /**
-     * 训练位强化等级字典
-     */
-    public const array LEVEL_INFO = [
-        1 => ['name' => '普通', 'result' => 100, 'price' => 0],
-        2 => ['name' => '加强', 'result' => 150, 'price' => 50],
-        3 => ['name' => '白金', 'result' => 200, 'price' => 100],
-        4 => ['name' => '极品', 'result' => 250, 'price' => 200],
-        5 => ['name' => '至尊', 'result' => 300, 'price' => 300],
-        6 => ['name' => '神级', 'result' => 400, 'price' => 600],
-    ];
+    /** 突飞扫荡次数（2014/03/24 起固定） */
+    private const array MOP = [5, 10, 50, 100];
 
     /**
-     * 训练位解锁价格与 VIP 限制字典 (序号 3~8)
-     */
-    public const array SQUENCE_PRICES = [
-        3 => ['gold' => 50, 'vip' => 0],
-        4 => ['gold' => 100, 'vip' => 1],
-        5 => ['gold' => 500, 'vip' => 2],
-        6 => ['gold' => 1000, 'vip' => 4],
-        7 => ['gold' => 2000, 'vip' => 6],
-        8 => ['gold' => 5000, 'vip' => 7],
-    ];
-
-    /**
-     * 校场主界面初始化: c=practice&m=index
+     * 初始化: c=practice&m=index
      */
     public static function index(Context $ctx): array
     {
-        $uid = MemberHandler::resolveUid($ctx);
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        /**
+         * 接口返回值
+         * -4 获取突飞规则失败
+         * -3 获取扩展信息失败
+         * -1 获取训练列表失败
+         *  0 失败
+         *  1 成功
+         *  2 没有出征将领
+         */
+        $return = ['status' => 0, 'list' => [], 'rule' => [], 'place' => [], 'leap' => 0];
+        $member = self::member(MemberHandler::resolveUid($ctx));
         if ($member === null) {
-            return [
-                'status' => 0,
-                'message' => '玩家数据不存在',
+            return $return;
+        }
+        $uid = (int)$member['uid'];
+        // 更新所有训练将领信息
+        Practice::updatePractice($uid);
+        // [将领模型]出征将领列表,按等级排序
+        $battle = General::battleList($uid);
+        if ($battle === []) {
+            // 没有出征将领
+            $return['status'] = 2;
+            return $return;
+        }
+        $battleArr = [];
+        $imagearr = [];
+        $qualityarr = [];
+        foreach ($battle as $key => $value) {
+            $imagearr[(int)$value['id']] = (int)$value['image'];
+            $qualityarr[(int)$value['id']] = (int)$value['quality'];
+            // 设置转生系数
+            $isturn = 0;
+            $ratio = 1;
+            if (General::turnRule((int)$value['turn']) === (int)$value['level']) {
+                $isturn = 1;
+                // 下转系数
+                $ratio = General::nextTurnRatio((int)$value['turn']);
+            }
+            $battleArr[$key] = [
+                'id' => (int)$value['id'],
+                'name' => (string)$value['name'],
+                'quality' => (int)$value['quality'],
+                'level' => (int)$value['level'],
+                'exp' => (int)$value['exp'],
+                'levelupexp' => (int)$value['levelupexp'],
+                'image' => (int)$value['image'],
+                'type' => (int)$value['type'],
+                'turn' => (int)$value['turn'],
+                'isturn' => $isturn,
+                'ratio' => $ratio,
             ];
         }
 
-        $memberLevel = max(1, (int)$member['level']);
-        $field = self::getOrCreateMemberField($uid);
-        $practiceAll = max(2, min(8, (int)($field['practiceall'] ?? 2)));
-
-        // 1. 初始化并同步开启的训练位
-        self::ensurePracticeSlots($uid, $practiceAll);
-
-        // 2. 结算训练中的经验进度
-        self::updatePracticesProgress($uid, $memberLevel);
-
-        // 3. 读取并装配武将出征列表 (按出征优先级与等级排序)
-        $generals = DB::table('general')
-            ->where('uid', $uid)
-            ->whereNull('deleted_at')
-            ->get();
-
-        if (empty($generals)) {
-            return [
-                'status' => 2,
-                'message' => '没有出征将领',
-            ];
+        // [训练模型]获得训练列表
+        $practice = Practice::practiceList($uid);
+        if ($practice['status'] !== 1) {
+            // 获取训练列表失败 -1
+            $return['status'] = -1;
+            return $return;
         }
-
-        // 优先出征武将 (goout = 1)，按等级降序、转生降序排序
-        usort($generals, static function (array $a, array $b): int {
-            $aOut = (int)$a['goout'];
-            $bOut = (int)$b['goout'];
-            if ($aOut !== $bOut) {
-                return $bOut <=> $aOut;
-            }
-            $aLevel = (int)($a['level'] ?? 1);
-            $bLevel = (int)($b['level'] ?? 1);
-            if ($aLevel !== $bLevel) {
-                return $bLevel <=> $aLevel;
-            }
-            return ((int)($a['id'] ?? 0)) <=> ((int)($b['id'] ?? 0));
-        });
-
-        // 获取训练位数据
-        $practiceSlots = DB::table('practice')
-            ->where('uid', $uid)
-            ->whereNull('deleted_at')
-            ->get();
-
-        $activeSlotMap = []; // gid => slot
-        $slotBySquence = []; // squence => slot
-        foreach ($practiceSlots as $slot) {
-            $seq = (int)$slot['squence'];
-            $slotBySquence[$seq] = $slot;
-            $gid = (int)$slot['generalid'];
-            if ($gid > 0) {
-                $activeSlotMap[$gid] = $slot;
-            }
-        }
-
-        // 4. 构建出征武将字典 (1-based: 1..8)
-        $heroList = [];
-        $heroIdx = 1;
-        $generalMap = [];
-        foreach ($generals as $g) {
-            $gid = (int)$g['id'];
-            $generalMap[$gid] = $g;
-
-            if ($heroIdx <= 8) {
-                $isPracticing = isset($activeSlotMap[$gid]);
-                $pid = $isPracticing ? (int)$activeSlotMap[$gid]['id'] : 0;
-                $gLevel = max(1, (int)$g['level']);
-                $gTurn = (int)($g['turn'] ?? 0);
-                $isTurn = ($gLevel >= 100) ? 1 : 0;
-
-                $heroList[(string)$heroIdx] = [
-                    'id' => $gid,
-                    'name' => (string)$g['name'],
-                    'quality' => (int)($g['quality'] ?? 3),
-                    'level' => $gLevel,
-                    'exp' => (int)$g['exp'],
-                    'levelupexp' => GeneralHandler::getLevelUpExp($gLevel),
-                    'image' => (int)($g['image'] ?? $g['generalid'] ?? 1),
-                    'type' => (int)($g['type'] ?? 1),
-                    'turn' => $gTurn,
-                    'isturn' => $isTurn,
-                    'ratio' => 1,
-                    'pid' => $pid,
-                    'ispractice' => $isPracticing ? 1 : 0,
-                ];
-                $heroIdx++;
-            }
-        }
-
-        // 5. 构建训练位字典 (1-based: 1..8)
         $now = time();
-        $placeList = [];
-        for ($i = 1; $i <= $practiceAll; $i++) {
-            $slot = $slotBySquence[$i] ?? null;
-            if ($slot === null) {
-                continue;
-            }
-
-            $gid = (int)$slot['generalid'];
-            $general = $gid > 0 ? ($generalMap[$gid] ?? null) : null;
-            $endTime = (int)($slot['endtime'] ?? 0);
-            $cd = ($gid > 0 && $endTime > $now) ? ($endTime - $now) : 0;
-
-            $placeList[(string)$i] = [
-                'id' => (int)$slot['id'],
-                'gid' => $gid,
-                'image' => $general ? (int)($general['image'] ?? $general['generalid'] ?? 1) : 0,
-                'squence' => $i,
-                'level' => (int)$slot['level'],
-                'type' => (int)$slot['type'],
-                'quality' => $general ? (int)($general['quality'] ?? 3) : 0,
-                'cd' => $cd,
+        $gidarr = [];
+        $practiceArr = [];
+        foreach ($practice['list'] as $key => $value) {
+            // 训练中的将领（旧版空闲训练位也记 gid 0）
+            $gidarr[$value['gid']] = $value['id'];
+            $practiceArr[$key] = [
+                'id' => $value['id'],
+                'gid' => $value['gid'],
+                'image' => $value['gid'] !== 0 ? ($imagearr[$value['gid']] ?? null) : 0,
+                'squence' => $value['squence'],
+                'level' => $value['level'],
+                'type' => $value['type'],
+                'quality' => $value['gid'] !== 0 ? ($qualityarr[$value['gid']] ?? null) : 0,
+                'cd' => $value['starttime'] !== 0 ? $value['endtime'] - $now : 0,
             ];
         }
-
-        // 6. 训练规则 (1-based: 1..4)
-        $ruleList = [
-            '1' => ['paytype' => 1, 'hour' => 8, 'cost' => 100 * $memberLevel],
-            '2' => ['paytype' => 1, 'hour' => 24, 'cost' => 255 * $memberLevel],
-            '3' => ['paytype' => 2, 'hour' => 24, 'cost' => 2],
-            '4' => ['paytype' => 2, 'hour' => 72, 'cost' => 20],
-        ];
-
-        // 7. 突飞花费与免费次数
-        $freeTimes = (int)($field['freeleap'] ?? 10);
-        $leapTimes = (int)($field['leaptimes'] ?? 0);
-        $leapCost = ($freeTimes > 0) ? 0 : min(50, 2 + $leapTimes * 2);
-
-        return [
-            'status' => 1,
-            'maxnum' => 8,
-            'opennum' => $practiceAll,
-            'list' => $heroList,
-            'place' => $placeList,
-            'rule' => $ruleList,
-            'freetimes' => $freeTimes,
-            'leap' => $leapCost,
-            'mop' => [5, 10, 50, 100],
-            'message' => 'ok',
-        ];
-    }
-
-    /**
-     * 开始训练: c=practice&m=practice_start
-     */
-    public static function practice_start(Context $ctx): array
-    {
-        $uid = MemberHandler::resolveUid($ctx);
-        $pid = (int)($ctx->input('pid', 1));
-        $gid = (int)($ctx->input('gid', 0));
-        $type = (int)($ctx->input('type', 1));
-
-        if ($gid <= 0) {
-            return ['status' => 0, 'message' => '请选择需要训练的武将'];
-        }
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        if ($member === null) {
-            return ['status' => 0, 'message' => '玩家不存在'];
-        }
-
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
-        if ($general === null) {
-            return ['status' => -1, 'message' => '武将不存在'];
-        }
-
-        $memberLevel = max(1, (int)$member['level']);
-        $generalLevel = (int)$general['level'];
-
-        if ($generalLevel >= $memberLevel && (int)$general['exp'] >= GeneralHandler::getLevelUpExp($generalLevel)) {
-            return ['status' => 7, 'message' => '武将等级已达主公等级上限'];
-        }
-
-        // 检查武将是否已在训练中
-        $isTraining = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('generalid', $gid)
-            ->whereNull('deleted_at')
-            ->first();
-        if ($isTraining !== null) {
-            return ['status' => 6, 'message' => '该武将已在训练中'];
-        }
-
-        // 查找指定训练位 (支持通过 id 或 squence 定位)
-        $slot = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('id', $pid)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if ($slot === null) {
-            $slot = DB::table('practice')
-                ->where('uid', $uid)
-                ->where('squence', $pid)
-                ->whereNull('deleted_at')
-                ->first();
-        }
-
-        if ($slot === null) {
-            return ['status' => -2, 'message' => '未找到对应的训练位'];
-        }
-
-        if ((int)$slot['generalid'] > 0) {
-            return ['status' => 3, 'message' => '该训练位已被占用'];
-        }
-
-        // 计算训练时长与扣费规则
-        $rule = self::getPracticeRule($type, $memberLevel);
-        if ($rule['paytype'] === 1) {
-            if ((int)$member['silver'] < $rule['cost']) {
-                return ['status' => 4, 'message' => '银两不足'];
+        foreach ($battleArr as $key => $value) {
+            $battleArr[$key]['pid'] = 0;
+            $battleArr[$key]['ispractice'] = 0;
+            if (isset($gidarr[$value['id']])) {
+                $battleArr[$key]['pid'] = $gidarr[$value['id']];
+                $battleArr[$key]['ispractice'] = 1;
             }
-            $remainSilver = (int)$member['silver'] - $rule['cost'];
-            $remainGold = (int)$member['gold'];
-            DB::table('member')->where('uid', $uid)->update(['silver' => $remainSilver]);
-        } else {
-            if ((int)$member['gold'] < $rule['cost']) {
-                return ['status' => 5, 'message' => '元宝不足'];
-            }
-            $remainGold = (int)$member['gold'] - $rule['cost'];
-            $remainSilver = (int)$member['silver'];
-            DB::table('member')->where('uid', $uid)->update(['gold' => $remainGold]);
         }
 
-        $now = time();
-        $durationSeconds = $rule['hour'] * 3600;
-        $endTime = $now + $durationSeconds;
+        // 获取本日突飞次数
+        $field = self::field($uid);
+        if ($field === null) {
+            // 获取扩展信息失败 -3
+            $return['status'] = -3;
+            return $return;
+        }
+        $leap = null;
+        if ((int)$field['freeleap'] === 0) {
+            $leap = Practice::leapRule((int)$field['leaptimes'] + 1, 0, (int)$member['level'], (int)$member['vip']);
+        }
 
-        DB::table('practice')->where('id', (int)$slot['id'])->update([
-            'generalid' => $gid,
-            'type' => $type,
-            'starttime' => $now,
-            'endtime' => $endTime,
-        ]);
-
-        // 更新 member_field 的活跃训练位计数
-        $practicingCount = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('generalid', '>', 0)
-            ->whereNull('deleted_at')
-            ->count();
-
-        DB::table('member_field')->where('uid', $uid)->update([
-            'practicenow' => $practicingCount,
-            'practicetime' => $endTime,
-        ]);
-
-        Redis::del('player:' . $uid);
-
-        $practiceAll = max(2, (int)($field['practiceall'] ?? 2));
-        $emptySlots = $practiceAll - $practicingCount;
-        $practiceTimeCd = ($emptySlots > 0) ? 0 : $durationSeconds;
-
-        return [
-            'status' => 1,
-            'info' => [
-                'id' => (int)$slot['id'],
-                'squence' => (int)$slot['squence'],
-                'level' => (int)$slot['level'],
-                'gid' => $gid,
-                'type' => $type,
-                'cost' => $rule['cost'],
-                'paytype' => $rule['paytype'],
-                'cd' => $durationSeconds,
-                'practicetime' => $practiceTimeCd,
-                'gold' => $remainGold,
-                'silver' => $remainSilver,
-            ],
-            'message' => '训练开始',
-        ];
+        $return['mop'] = self::MOP;
+        $return['list'] = $battleArr;
+        $return['place'] = $practiceArr;
+        $return['rule'] = Practice::typeList((int)$member['level']);
+        $return['freetimes'] = (int)$field['freeleap'];
+        $return['leap'] = $leap !== null ? (int)$leap['gold'] : 0;
+        $return['status'] = 1;
+        return $return;
     }
 
     /**
-     * 终止训练: c=practice&m=practice_stop
-     */
-    public static function practice_stop(Context $ctx): array
-    {
-        $uid = MemberHandler::resolveUid($ctx);
-        $pid = (int)($ctx->input('pid', 1));
-
-        $slot = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('id', $pid)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if ($slot === null) {
-            $slot = DB::table('practice')
-                ->where('uid', $uid)
-                ->where('squence', $pid)
-                ->whereNull('deleted_at')
-                ->first();
-        }
-
-        if ($slot === null || (int)$slot['generalid'] <= 0) {
-            return ['status' => 1, 'message' => '训练已终止'];
-        }
-
-        $gid = (int)$slot['generalid'];
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $memberLevel = max(1, (int)($member['level'] ?? 1));
-
-        // 结算并赋予已积累的经验
-        $earnedExp = self::settleSlotExp($uid, $slot, $memberLevel);
-
-        // 重置训练位
-        DB::table('practice')->where('id', (int)$slot['id'])->update([
-            'generalid' => 0,
-            'starttime' => 0,
-            'endtime' => 0,
-            'type' => 0,
-        ]);
-
-        $practicingCount = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('generalid', '>', 0)
-            ->whereNull('deleted_at')
-            ->count();
-
-        DB::table('member_field')->where('uid', $uid)->update([
-            'practicenow' => $practicingCount,
-        ]);
-
-        Redis::del('player:' . $uid);
-
-        return [
-            'status' => 1,
-            'earned_exp' => max(1, $earnedExp),
-            'message' => '训练已终止',
-        ];
-    }
-
-    /**
-     * 将领所在的训练位（移植旧版 practice_model::check_practice）
-     *
-     * @return int 训练位 id，0 为不在训练
-     */
-    public static function checkPractice(int $uid, int $gid): int
-    {
-        return (int)(DB::table('practice')
-            ->where('uid', $uid)
-            ->where('generalid', $gid)
-            ->whereNull('deleted_at')
-            ->value('id') ?? 0);
-    }
-
-    /**
-     * 终止训练（移植旧版 practice_model::practice_stop，供 c=muster&m=go_rest 使用）
-     *
-     * 清空训练位；训练位结束时间等于 member_field.practicetime 时改为其余训练中位置的最早结束时间（没有则 0），
-     * practicenow > 0 时减 1。旧版这里算出的经验只放在返回值里、不发给将领（go_rest 也不发），这里同样不发。
-     * c=practice&m=practice_stop 仍是新版实现，与本方法无关。
-     *
-     * @return int 1 成功；-5 更新扩展表失败；-4 获取训练位等级失败；-3 没有武将；-2 获取训练信息失败；-1 更新训练位失败
-     */
-    public static function legacyStop(int $uid, int $pid, int $practicetime, int $practicenow): int
-    {
-        $info = DB::table('practice')->where('uid', $uid)->where('id', $pid)->whereNull('deleted_at')->first();
-        if ($info === null) {
-            return -2;
-        }
-        if ((int)$info['generalid'] === 0) {
-            return -3;
-        }
-        $end = (int)$info['endtime'];
-        if (!isset(self::LEVEL_INFO[(int)$info['level']])) {
-            return -4;
-        }
-
-        $affected = DB::table('practice')->where('uid', $uid)->where('id', $pid)->whereNull('deleted_at')->update([
-            'type' => 0,
-            'generalid' => 0,
-            'starttime' => 0,
-            'endtime' => 0,
-        ]);
-        if ($affected <= 0) {
-            return -1;
-        }
-
-        $result = [];
-        if ($end === $practicetime) {
-            $endarr = array_map(
-                static fn (array $row): int => (int)$row['endtime'],
-                DB::table('practice')->where('uid', $uid)->where('generalid', '>', 0)->whereNull('deleted_at')->get(),
-            );
-            $result['practicetime'] = $endarr === [] ? 0 : min($endarr);
-        }
-        if ($practicenow > 0) {
-            $result['practicenow'] = $practicenow - 1;
-        }
-        // 旧版 $result 为空时 CI 不执行 UPDATE，affected_rows 仍是上一条训练位更新的结果（> 0），视为成功
-        if ($result !== []
-            && DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update($result) === 0) {
-            return -5;
-        }
-
-        Redis::del('player:' . $uid);
-        return 1;
-    }
-
-    /**
-     * 单次突飞猛进: c=practice&m=go_leap
+     * 突飞: c=practice&m=go_leap（gid）
      */
     public static function go_leap(Context $ctx): array
     {
+        /**
+         * -8 获取将领信息失败
+         * -6 获取规则失败
+         * -5 突飞次数获取失败
+         * -4 加经验失败
+         * -3 参数错误
+         * -2 扣除金币失败
+         * -1 获取规则失败
+         *  0 失败
+         *  1 成功
+         *  2 金币不足
+         *  3 等级已达主公等级上限
+         *  4 训练才能突飞
+         */
         $uid = MemberHandler::resolveUid($ctx);
-        $gid = (int)($ctx->input('gid', 0));
-
-        if ($gid <= 0) {
-            return ['status' => -3, 'message' => '参数错误'];
+        $gid = max(0, (int)$ctx->input('gid', 0));
+        if ($gid === 0) {
+            // 参数错误 -3
+            return ['status' => -3, 'info' => []];
         }
-
-        $slot = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('generalid', $gid)
-            ->whereNull('deleted_at')
-            ->first();
-
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
-        if ($general === null) {
-            return ['status' => -8, 'message' => '获取将领信息失败'];
+        if (self::member($uid) === null) {
+            return ['status' => 0, 'info' => []];
         }
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        if ($member === null) {
-            return ['status' => 0, 'message' => '玩家数据异常'];
-        }
-
-        $memberLevel = max(1, (int)$member['level']);
-        $gLevel = (int)$general['level'];
-        $gExp = (int)$general['exp'];
-        $nextExp = GeneralHandler::getLevelUpExp($gLevel);
-
-        if ($gLevel >= $memberLevel && $gExp >= $nextExp) {
-            return ['status' => 3, 'message' => '等级已达主公等级上限'];
-        }
-
-        $field = self::getOrCreateMemberField($uid);
-        $freeLeap = (int)($field['freeleap'] ?? 0);
-        $leapTimes = (int)($field['leaptimes'] ?? 0);
-        $remainGold = (int)$member['gold'];
-
-        if ($freeLeap > 0) {
-            // 消耗突飞卡
-            $remainFreeLeap = $freeLeap - 1;
-            DB::table('member_field')->where('uid', $uid)->update(['freeleap' => $remainFreeLeap]);
-        } else {
-            // 消耗金币
-            $costGold = min(50, 2 + $leapTimes * 2);
-            if ($remainGold < $costGold) {
-                return ['status' => 2, 'message' => '金币不足'];
+        $now = time();
+        $result = Member::locked($uid, static function () use ($uid, $gid, $now): array {
+            $return = ['status' => 0, 'info' => []];
+            $member = self::member($uid);
+            // [训练模型]将领是否在训练中
+            if (Practice::checkPractice($uid, $gid) === 0) {
+                // 训练才能突飞 4
+                $return['status'] = 4;
+                return $return;
             }
-            $remainGold -= $costGold;
-            $leapTimes++;
-            DB::table('member')->where('uid', $uid)->update(['gold' => $remainGold]);
-            DB::table('member_field')->where('uid', $uid)->update(['leaptimes' => $leapTimes]);
-            $remainFreeLeap = 0;
-        }
+            // 获取本日突飞次数
+            $field = self::field($uid);
+            if ($field === null) {
+                $return['status'] = -5;
+                return $return;
+            }
+            // 当次突飞次数
+            $leaptimes = (int)$field['leaptimes'] + 1;
+            $general = General::own($uid, $gid);
+            if ($general === null) {
+                // 获取将领信息失败 返回-8
+                $return['status'] = -8;
+                return $return;
+            }
+            if ((int)$general['level'] === (int)$member['level'] && (int)$general['exp'] === (int)$general['levelupexp']) {
+                $return['status'] = 3;
+                return $return;
+            }
+            $free = (int)$field['freeleap'] > 0 ? 1 : 0;
+            // 新手引导突飞免费5次,武将为周仓,模板id为2
+            $guide = null;
+            if ((int)$general['generalid'] === 2) {
+                $guide = Practice::guideInfo($uid);
+                if ($guide['leaptimes'] < 5) {
+                    $free = 1;
+                }
+            }
+            // 获得突飞规则
+            $rule = Practice::leapRule($leaptimes, (int)$general['level'], (int)$member['level'], (int)$member['vip']);
+            $hit = $rule['hit'] ? 1 : 0;
+            // 取得金币
+            $gold = $rule['gold'];
+            if ($free) {
+                $next = $leaptimes;
+                if ((int)$field['freeleap'] > 0) {
+                    // 突飞卡突飞
+                    FreeLeap::sub($uid, 1, $now);
+                    // 最后一张突飞卡
+                    if ((int)$field['freeleap'] <= 1) {
+                        $free = 0;
+                    }
+                }
+                if ($guide !== null) {
+                    // 新手引导突飞,记录次数
+                    $guidetimes = $guide['leaptimes'] + 1;
+                    Practice::addGuideLeaptimes($uid, $guidetimes);
+                    // 最后一次免费突飞
+                    if ($guidetimes > 4) {
+                        $free = 0;
+                    }
+                }
+            } else {
+                // 下次突飞次数
+                $next = $leaptimes + 1;
+                // 扣除金币
+                if (!Member::deductCurrency($uid, gold: $gold)) {
+                    // 金币不足 2
+                    $return['status'] = 2;
+                    return $return;
+                }
+                if (Practice::updateLeaptimes($uid, $leaptimes) !== 1) {
+                    $return['status'] = -5;
+                    return $return;
+                }
+            }
 
-        // 计算突飞经验 (主公等级 * 562.5，VIP 5+ 概率暴击双倍)
-        $vip = (int)($member['vip'] ?? 1);
-        $isCrit = ($vip >= 5 && mt_rand(1, 100) <= 25);
-        $addition = $isCrit ? 2 : 1;
-        $addExp = max(500, (int)ceil($memberLevel * 562.5 * $addition));
+            // 取得经验，加经验并判断是否升级
+            $exp = $rule['exp'];
+            $info = General::addExp($uid, $gid, (int)$exp);
+            if ($info['status'] !== 1) {
+                if ($info['status'] === 2) {
+                    // 不在出征队列中 2
+                    $return['status'] = 2;
+                } elseif ($info['status'] === 3) {
+                    // 等级已达主公等级上限 3
+                    $return['status'] = 3;
+                } else {
+                    // 加经验失败 -4
+                    $return['status'] = -4;
+                    $return['error'] = $info;
+                }
+                return $return;
+            }
 
-        // 加经验并升级
-        $curExp = $gExp + $addExp;
-        $curLevel = $gLevel;
-        while ($curLevel < $memberLevel && $curExp >= GeneralHandler::getLevelUpExp($curLevel)) {
-            $curExp -= GeneralHandler::getLevelUpExp($curLevel);
-            $curLevel++;
-        }
+            // 获得突飞规则,取下次突飞花费
+            $nextrule = null;
+            if ($free === 0) {
+                $nextrule = Practice::leapRule($next, 0, (int)$member['level'], (int)$member['vip']);
+            }
+            $infoArr = [];
+            foreach (['gid', 'level', 'addexp', 'exp', 'levelupexp', 'isturn'] as $value) {
+                $infoArr[$value] = $info['info'][$value];
+            }
+            if ($infoArr['isturn'] === 1) {
+                $infoArr['ratio'] = General::nextTurnRatio((int)$general['turn']);
+            }
+            $after = self::member($uid);
+            $return['status'] = 1;
+            $return['info'] = $infoArr;
+            $return['info']['gold'] = (int)$after['gold'];
+            $return['info']['next'] = $nextrule !== null ? $nextrule['gold'] : 0;
+            $return['info']['freetimes'] = (int)$field['freeleap'] > 0 ? (int)$field['freeleap'] - 1 : 0;
+            $return['info']['hit'] = $hit;
 
-        // 到达主公等级上限时截断溢出经验
-        if ($curLevel >= $memberLevel) {
-            $curLevel = $memberLevel;
-            $curExp = min($curExp, GeneralHandler::getLevelUpExp($curLevel));
-        }
-
-        DB::table('general')->where('id', $gid)->update([
-            'level' => $curLevel,
-            'exp' => $curExp,
-        ]);
-
-        $nextCost = ($remainFreeLeap > 0) ? 0 : min(50, 2 + $leapTimes * 2);
-        Redis::del('player:' . $uid);
-
-        return [
-            'status' => 1,
-            'add_exp' => $addExp,
-            'level' => $curLevel,
-            'exp' => $curExp,
-            'info' => [
-                'gid' => $gid,
-                'level' => $curLevel,
-                'exp' => $curExp,
-                'levelupexp' => GeneralHandler::getLevelUpExp($curLevel),
-                'addexp' => $addExp,
-                'isturn' => ($curLevel >= 100) ? 1 : 0,
-                'ratio' => 1,
-                'gold' => $remainGold,
-                'next' => $nextCost,
-                'freetimes' => $remainFreeLeap,
-                'hit' => $isCrit ? 1 : 0,
-            ],
-            'message' => '突飞成功',
-        ];
+            // 消费统计记录（旧版免费突飞也按本次规则的价格记）
+            StatPay::record($uid, 'tufei', $gold);
+            // 日常任务(1是突飞对应的类型)
+            if ((int)$member['level'] >= DailyTask::OPEN_LEVEL) {
+                DailyTask::action($uid, DailyTask::TYPE_LEAP, 1, $now);
+            }
+            Practice::addLeapLog($uid, $gid, $exp, $hit, $general, $return['info'], $now);
+            return $return;
+        });
+        return $result;
     }
 
     /**
-     * 突飞扫荡: c=practice&m=mop
+     * 突飞扫荡: c=practice&m=mop（gid、times）
      */
     public static function mop(Context $ctx): array
     {
+        /**
+         * -8 增加经验失败
+         * -7 扣除突飞次数失败
+         * -6 获取规则失败
+         * -5 计算经验失败
+         * -4 突飞暴击率错误
+         * -3 获取将领信息失败
+         * -2 该武将不在训练位上
+         *  0 失败
+         *  1 成功
+         *  2 突飞次数不足
+         *  3 等级已达主公等级上限
+         *  4 转生等级上限
+         */
         $uid = MemberHandler::resolveUid($ctx);
-        $gid = (int)($ctx->input('gid', 0));
-        $times = (int)($ctx->input('times', 5));
-
-        if ($gid <= 0 || $times <= 0) {
-            return ['status' => -1, 'message' => '参数错误'];
+        $times = (int)$ctx->input('times', 0);
+        $gid = (int)$ctx->input('gid', 0);
+        if (self::member($uid) === null) {
+            return ['status' => 0];
         }
-
-        $slot = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('generalid', $gid)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if ($slot === null) {
-            return ['status' => -2, 'message' => '该武将不在训练位上'];
-        }
-
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
-        if ($general === null) {
-            return ['status' => -3, 'message' => '获取将领信息失败'];
-        }
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $memberLevel = max(1, (int)($member['level'] ?? 1));
-
-        $field = self::getOrCreateMemberField($uid);
-        $freeLeap = (int)($field['freeleap'] ?? 0);
-
-        if ($times > $freeLeap) {
-            return ['status' => 2, 'message' => '突飞次数不足'];
-        }
-
-        $gLevel = (int)$general['level'];
-        $gExp = (int)$general['exp'];
-        if ($gLevel >= $memberLevel && $gExp >= GeneralHandler::getLevelUpExp($gLevel)) {
-            return ['status' => 3, 'message' => '等级已达主公等级上限'];
-        }
-
-        // 扣除突飞卡
-        $remainFreeLeap = $freeLeap - $times;
-        DB::table('member_field')->where('uid', $uid)->update(['freeleap' => $remainFreeLeap]);
-
-        $baseExp = (int)floor($memberLevel * 562.5 * $times);
-        $vip = (int)($member['vip'] ?? 1);
-        $critRate = ($vip >= 5) ? mt_rand(10, 20) : 0;
-        $extExp = (int)floor($baseExp * $critRate / 100);
-        $totalAddExp = $baseExp + $extExp;
-
-        $curExp = $gExp + $totalAddExp;
-        $curLevel = $gLevel;
-        while ($curLevel < $memberLevel && $curExp >= GeneralHandler::getLevelUpExp($curLevel)) {
-            $curExp -= GeneralHandler::getLevelUpExp($curLevel);
-            $curLevel++;
-        }
-
-        if ($curLevel >= $memberLevel) {
-            $curLevel = $memberLevel;
-            $curExp = min($curExp, GeneralHandler::getLevelUpExp($curLevel));
-        }
-
-        DB::table('general')->where('id', $gid)->update([
-            'level' => $curLevel,
-            'exp' => $curExp,
-        ]);
-
-        $leapTimes = (int)($field['leaptimes'] ?? 0);
-        $nextCost = ($remainFreeLeap > 0) ? 0 : min(50, 2 + $leapTimes * 2);
-
-        Redis::del('player:' . $uid);
-
-        return [
-            'status' => 1,
-            'general' => [
-                'level' => $curLevel,
-                'exp' => $curExp,
-                'levelupexp' => GeneralHandler::getLevelUpExp($curLevel),
-            ],
-            'exp' => $baseExp,
-            'ext_exp' => $extExp,
-            'freeleap' => $remainFreeLeap,
-            'next' => $nextCost,
-        ];
+        $now = time();
+        return Member::locked($uid, static function () use ($uid, $times, $gid, $now): array {
+            $return = ['status' => 0];
+            $member = self::member($uid);
+            $field = self::field($uid);
+            $freeleap = (int)($field['freeleap'] ?? 0);
+            if ($times > $freeleap) {
+                // 突飞次数不足
+                $return['status'] = 2;
+                return $return;
+            }
+            // [训练模型]将领是否在训练中
+            if (Practice::checkPractice($uid, $gid) === 0) {
+                // 该武将不在训练位上
+                $return['status'] = -2;
+                return $return;
+            }
+            $general = General::own($uid, $gid);
+            if ($general === null) {
+                // 获取将领信息失败
+                $return['status'] = -3;
+                return $return;
+            }
+            if ((int)$general['level'] === (int)$member['level'] && (int)$general['exp'] === (int)$general['levelupexp']) {
+                // 等级已达主公等级上限
+                $return['status'] = 3;
+                return $return;
+            }
+            $glevel = (int)$general['level'];
+            // 计算突飞获得经验
+            $crit = Practice::leapCrit($glevel);
+            if ($crit < 0) {
+                // 突飞暴击率错误
+                $return['status'] = -4;
+                return $return;
+            }
+            $mop = Practice::mopExp($times, $crit, (int)$member['level']);
+            if ($mop === []) {
+                // 计算经验失败
+                $return['status'] = -5;
+                return $return;
+            }
+            // vip 5 时有暴击
+            if ((int)$member['vip'] < 5) {
+                $mop['ext_exp'] = 0;
+            }
+            $addExp = $mop['exp'] + $mop['ext_exp'] + (int)$general['exp'];
+            // 计算武将突飞后等级
+            $result = General::inheritLevelup((int)$member['level'], (int)$general['turn'], $glevel, $addExp, false);
+            if (($result['status'] ?? 0) !== 1) {
+                if (($result['status'] ?? 0) === 2) {
+                    // 等级已达主公等级上限
+                    $return['status'] = 3;
+                } elseif (($result['status'] ?? 0) === 3) {
+                    // 转生等级上限
+                    $return['status'] = 4;
+                } else {
+                    $return['status'] = -6;
+                }
+                return $return;
+            }
+            // 扣除突飞次数
+            $sub = FreeLeap::sub($uid, $times, $now);
+            if ($sub !== 1) {
+                $return['status'] = $sub === -1 ? 2 : -7;
+                return $return;
+            }
+            // 增加经验
+            $add = General::addExp($uid, $gid, (int)($mop['exp'] + $mop['ext_exp']));
+            if ($add['status'] !== 1) {
+                $return['status'] = -8;
+                return $return;
+            }
+            // 日常任务(1是突飞对应的类型)
+            if ((int)$member['level'] >= DailyTask::OPEN_LEVEL) {
+                DailyTask::action($uid, DailyTask::TYPE_LEAP, $times, $now);
+            }
+            $return['status'] = 1;
+            $return['general'] = [
+                'level' => $add['info']['level'],
+                'exp' => $add['info']['exp'],
+                'levelupexp' => $add['info']['levelupexp'],
+            ];
+            $return['exp'] = $mop['exp'];
+            $return['ext_exp'] = $mop['ext_exp'];
+            $return['freeleap'] = $freeleap - $times;
+            // 2014/03/21:突飞扫荡bug修复（突飞卡用完时返回下次突飞的元宝）
+            if ($return['freeleap'] === 0) {
+                $after = self::field($uid);
+                $nextrule = Practice::leapRule((int)($after['leaptimes'] ?? 0) + 1, 0, (int)$member['level'], (int)$member['vip']);
+                $return['next'] = $nextrule['gold'];
+            }
+            return $return;
+        });
     }
 
     /**
-     * 获取训练位升级价格: c=practice&m=get_levelup_price
-     */
-    public static function get_levelup_price(Context $ctx): array
-    {
-        $uid = MemberHandler::resolveUid($ctx);
-        $pid = (int)($ctx->input('pid', 1));
-
-        $slot = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('id', $pid)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if ($slot === null) {
-            $slot = DB::table('practice')
-                ->where('uid', $uid)
-                ->where('squence', $pid)
-                ->whereNull('deleted_at')
-                ->first();
-        }
-
-        if ($slot === null) {
-            return ['status' => -1, 'message' => '获得拥有训练位信息失败'];
-        }
-
-        $nextLevel = (int)$slot['level'] + 1;
-        if ($nextLevel > 6) {
-            return ['status' => 2, 'message' => '训练位已达最高等级'];
-        }
-
-        $info = self::LEVEL_INFO[$nextLevel] ?? null;
-        if ($info === null) {
-            return ['status' => -2, 'message' => '获取升级规则失败'];
-        }
-
-        return [
-            'status' => 1,
-            'info' => [
-                'level' => $nextLevel,
-                'gold' => $info['price'],
-                'result' => $info['result'],
-            ],
-        ];
-    }
-
-    /**
-     * 升级训练位: c=practice&m=levelup
-     */
-    public static function levelup(Context $ctx): array
-    {
-        $uid = MemberHandler::resolveUid($ctx);
-        $pid = (int)($ctx->input('pid', 1));
-
-        $slot = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('id', $pid)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if ($slot === null) {
-            $slot = DB::table('practice')
-                ->where('uid', $uid)
-                ->where('squence', $pid)
-                ->whereNull('deleted_at')
-                ->first();
-        }
-
-        if ($slot === null) {
-            return ['status' => -1, 'message' => '训练位不存在'];
-        }
-
-        $nextLevel = (int)$slot['level'] + 1;
-        if ($nextLevel > 6) {
-            return ['status' => 2, 'message' => '训练位已满级'];
-        }
-
-        $rule = self::LEVEL_INFO[$nextLevel] ?? null;
-        if ($rule === null) {
-            return ['status' => -2, 'message' => '规则不存在'];
-        }
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $costGold = $rule['price'];
-        if ((int)($member['gold'] ?? 0) < $costGold) {
-            return ['status' => 4, 'message' => '金币不足'];
-        }
-
-        $remainGold = (int)$member['gold'] - $costGold;
-        DB::table('member')->where('uid', $uid)->update(['gold' => $remainGold]);
-        DB::table('practice')->where('id', (int)$slot['id'])->update(['level' => $nextLevel]);
-
-        Redis::del('player:' . $uid);
-
-        return [
-            'status' => 1,
-            'info' => [
-                'id' => (int)$slot['id'],
-                'level' => $nextLevel,
-                'price' => $costGold,
-                'name' => $rule['name'],
-                'gold' => $remainGold,
-            ],
-            'message' => '升级成功',
-        ];
-    }
-
-    /**
-     * 获取解锁训练位价格: c=practice&m=get_unlock_price
-     */
-    public static function get_unlock_price(Context $ctx): array
-    {
-        $squence = (int)($ctx->input('squence', 3));
-        $price = self::SQUENCE_PRICES[$squence] ?? null;
-
-        if ($price === null) {
-            return ['status' => -1, 'message' => '训练位序号不合法'];
-        }
-
-        return [
-            'status' => 1,
-            'gold' => $price['gold'],
-            'vip' => $price['vip'],
-        ];
-    }
-
-    /**
-     * 解锁新训练位: c=practice&m=unlock
-     */
-    public static function unlock(Context $ctx): array
-    {
-        $uid = MemberHandler::resolveUid($ctx);
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $field = self::getOrCreateMemberField($uid);
-
-        $currentAll = max(2, (int)($field['practiceall'] ?? 2));
-        $nextSquence = $currentAll + 1;
-
-        if ($nextSquence > 8) {
-            return ['status' => 0, 'message' => '训练位已达上限'];
-        }
-
-        $priceInfo = self::SQUENCE_PRICES[$nextSquence] ?? null;
-        if ($priceInfo === null) {
-            return ['status' => -2, 'message' => '价格配置异常'];
-        }
-
-        $costGold = (int)$priceInfo['gold'];
-        if ((int)($member['gold'] ?? 0) < $costGold) {
-            return ['status' => 2, 'message' => '元宝不足'];
-        }
-
-        $remainGold = (int)$member['gold'] - $costGold;
-        DB::table('member')->where('uid', $uid)->update(['gold' => $remainGold]);
-        DB::table('member_field')->where('uid', $uid)->update(['practiceall' => $nextSquence]);
-
-        // 插入或激活训练位记录
-        $existing = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('squence', $nextSquence)
-            ->first();
-
-        if ($existing !== null) {
-            DB::table('practice')->where('id', (int)$existing['id'])->update([
-                'deleted_at' => null,
-                'level' => 1,
-                'generalid' => 0,
-                'type' => 1,
-                'starttime' => 0,
-                'endtime' => 0,
-            ]);
-            $slotId = (int)$existing['id'];
-        } else {
-            DB::table('practice')->insert([
-                'uid' => $uid,
-                'squence' => $nextSquence,
-                'generalid' => 0,
-                'level' => 1,
-                'type' => 1,
-                'starttime' => 0,
-                'endtime' => 0,
-            ]);
-            $newSlot = DB::table('practice')
-                ->where('uid', $uid)
-                ->where('squence', $nextSquence)
-                ->first();
-            $slotId = (int)($newSlot['id'] ?? $nextSquence);
-        }
-
-        Redis::del('player:' . $uid);
-
-        return [
-            'status' => 1,
-            'info' => [
-                'id' => $slotId,
-                'squence' => $nextSquence,
-                'level' => 1,
-                'gold' => $remainGold,
-            ],
-            'message' => '解锁成功',
-        ];
-    }
-
-    /**
-     * 武将转生: c=practice&m=turn
+     * 转生: c=practice&m=turn（gid）
      */
     public static function turn(Context $ctx): array
     {
+        /**
+         * -3 转生失败
+         * -2 获取将领失败
+         * -1 参数错误
+         *  0 失败
+         *  1 成功
+         *  2 等级已达200上限
+         *  3 等级不足
+         */
+        $return = ['status' => 0, 'info' => []];
         $uid = MemberHandler::resolveUid($ctx);
-        $gid = (int)($ctx->input('gid', 0));
-
-        if ($gid <= 0) {
-            return ['status' => -1, 'message' => '参数错误'];
+        $gid = max(0, (int)$ctx->input('gid', 0));
+        if ($gid === 0) {
+            // 参数错误 -1
+            $return['status'] = -1;
+            return $return;
         }
-
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
+        $general = General::own($uid, $gid);
         if ($general === null) {
-            return ['status' => -2, 'message' => '武将不存在'];
+            // 获取将领失败 -2
+            $return['status'] = -2;
+            return $return;
         }
-
-        $level = (int)$general['level'];
-        if ($level < 100) {
-            return ['status' => 3, 'message' => '等级不足100级，暂不可转生'];
+        // [将领模型]转生（general_model->turn）
+        $turn = (int)$general['turn'];
+        if ($turn >= 70) {
+            // 转生上限
+            $return['status'] = 2;
+            return $return;
         }
-
-        $newTurn = (int)($general['turn'] ?? 0) + 1;
-        DB::table('general')->where('id', $gid)->update([
-            'level' => 1,
-            'exp' => 0,
-            'turn' => $newTurn,
-        ]);
-
-        Redis::del('player:' . $uid);
-
-        return [
-            'status' => 1,
-            'info' => [
-                'id' => $gid,
-                'level' => 1,
-                'exp' => 0,
-                'turn' => $newTurn,
-            ],
-            'message' => '转生成功',
-        ];
+        if ((int)$general['level'] !== General::turnRule($turn)) {
+            // 等级不足 3
+            $return['status'] = 3;
+            return $return;
+        }
+        $data = ['exp' => 0, 'level' => 1, 'levelupexp' => General::levelupExp(1), 'turn' => $turn + 1];
+        $affected = DB::table('general')->where('uid', $uid)->where('id', $gid)->where('level', $general['level'])->where('turn', $turn)
+            ->whereNull('deleted_at')->update($data);
+        if ($affected <= 0) {
+            // 更新失败（并发转生只成功一次）
+            $return['status'] = -3;
+            return $return;
+        }
+        $return['status'] = 1;
+        $return['info'] = $data;
+        return $return;
     }
 
     /**
-     * 保证训练位记录数量满足 practiceAll
+     * 获得解锁价格: c=practice&m=get_unlock_price（squence 3 ~ 8）
      */
-    private static function ensurePracticeSlots(int $uid, int $practiceAll): void
+    public static function get_unlock_price(Context $ctx): array
     {
-        for ($i = 1; $i <= $practiceAll; $i++) {
-            $slot = DB::table('practice')
-                ->where('uid', $uid)
-                ->where('squence', $i)
-                ->first();
+        /**
+         * -1 位置值不合法
+         *  0 失败
+         *  1 成功
+         */
+        $return = ['status' => 0, 'gold' => 0];
+        $uid = MemberHandler::resolveUid($ctx);
+        $squence = (int)$ctx->input('squence', 0);
+        if ($squence < 3 || $squence > 8) {
+            // 位置值不合法 -1
+            $return['status'] = -1;
+            return $return;
+        }
+        $field = self::field($uid);
+        if ($squence <= (int)($field['practiceall'] ?? 0)) {
+            // 安卓版本bug后端屏蔽之
+            return $return;
+        }
+        $price = Practice::SQUENCE_PRICE[$squence];
+        $return['gold'] = $price['gold'];
+        if (isset($price['vip'])) {
+            $return['vip'] = $price['vip'];
+        }
+        $return['status'] = 1;
+        return $return;
+    }
 
-            if ($slot === null) {
-                DB::table('practice')->insert([
-                    'uid' => $uid,
-                    'squence' => $i,
-                    'generalid' => 0,
-                    'level' => 1,
-                    'type' => 1,
-                    'starttime' => 0,
-                    'endtime' => 0,
-                ]);
-            } elseif ($slot['deleted_at'] !== null) {
-                DB::table('practice')->where('id', (int)$slot['id'])->update([
-                    'deleted_at' => null,
-                ]);
+    /**
+     * 解锁训练位: c=practice&m=unlock
+     */
+    public static function unlock(Context $ctx): array
+    {
+        /**
+         * -5 获取训练位信息失败
+         * -4 添加训练位失败
+         * -3 扣除金币失败
+         * -1 获得扩展信息失败
+         *  0 失败
+         *  1 成功
+         *  2 金币不足
+         *  3 vip等级不足
+         */
+        $uid = MemberHandler::resolveUid($ctx);
+        if (self::member($uid) === null) {
+            return ['status' => 0, 'info' => []];
+        }
+        return Member::locked($uid, static function () use ($uid): array {
+            $return = ['status' => 0, 'info' => []];
+            // vip_model->practicenum（VIP 0 为 3 个）
+            $num = self::vipRule($uid, 'practicenum', 3);
+            $field = self::field($uid);
+            if ($field === null) {
+                // 获得扩展信息失败 -1
+                $return['status'] = -1;
+                return $return;
             }
-        }
+            // 要解锁的训练位
+            $squence = (int)$field['practiceall'] + 1;
+            if ($squence > $num) {
+                // vip等级不足返回3
+                $return['status'] = 3;
+                return $return;
+            }
+            $price = Practice::SQUENCE_PRICE[$squence] ?? null;
+            if ($price === null) {
+                // 旧版 VIP 训练位最多 8 个，取不到价格时扣 0 元宝并插出第 9 个训练位；这里按添加训练位失败处理
+                $return['status'] = -4;
+                return $return;
+            }
+            $gold = $price['gold'];
+            if (!Member::deductCurrency($uid, gold: $gold)) {
+                // 元宝不足
+                $return['status'] = 2;
+                return $return;
+            }
+            // [训练模型]添加训练位
+            $info = Practice::addPractice($uid, $squence);
+            if ($info['status'] !== 1) {
+                // 添加训练位失败 -4
+                $return['status'] = -4;
+                return $return;
+            }
+            // [训练模型]获取训练位信息
+            $practice = Practice::own($uid, $info['id']);
+            if ($practice === null) {
+                // 获取训练位信息失败 -5
+                $return['status'] = -5;
+                return $return;
+            }
+            $return['status'] = 1;
+            $return['info'] = $practice;
+            $return['info']['gold'] = (int)self::member($uid)['gold'];
+            // 消费统计记录
+            StatPay::record($uid, 'buy_xunlianwei', $gold);
+            return $return;
+        });
     }
 
     /**
-     * 结算挂机训练位的经验积累
+     * 开始训练: c=practice&m=practice_start（pid、gid、type）
      */
-    private static function updatePracticesProgress(int $uid, int $memberLevel): void
+    public static function practice_start(Context $ctx): array
     {
-        $slots = DB::table('practice')
-            ->where('uid', $uid)
-            ->where('generalid', '>', 0)
-            ->whereNull('deleted_at')
-            ->get();
-
-        if (empty($slots)) {
-            return;
+        /**
+         * -7 获取扩展信息失败
+         * -6 时间记录失败
+         * -5 金币扣除失败
+         * -4 银币扣除失败
+         * -3 获得训练费用失败
+         * -2 获取拥有训练信息失败
+         * -1 获得将领信息失败
+         *  0 失败
+         *  1 成功
+         *  2 将领未出征
+         *  3 训练位已被占用
+         *  4 银币不足
+         *  5 金币不足
+         *  6 将领正在训练中
+         *  7 将领已满级
+         */
+        $uid = MemberHandler::resolveUid($ctx);
+        $pid = (int)$ctx->input('pid', 0);
+        $gid = (int)$ctx->input('gid', 0);
+        $type = (int)$ctx->input('type', 0);
+        if (self::member($uid) === null) {
+            return ['status' => 0, 'info' => []];
         }
-
         $now = time();
-        $endedCount = 0;
-        $minEndTime = 0;
-
-        foreach ($slots as $slot) {
-            $gid = (int)$slot['generalid'];
-            $startTime = (int)$slot['starttime'];
-            $endTime = (int)$slot['endtime'];
-
-            if ($startTime <= 0) {
-                continue;
+        Practice::updatePractice($uid, $now);
+        return Member::locked($uid, static function () use ($uid, $pid, $gid, $type, $now): array {
+            $return = ['status' => 0, 'info' => []];
+            $member = self::member($uid);
+            // [用户模型]获取扩展信息(uid)
+            $field = self::field($uid);
+            if ($field === null) {
+                // 获取扩展信息失败 -7
+                $return['status'] = -7;
+                return $return;
             }
-
-            self::settleSlotExp($uid, $slot, $memberLevel);
-
-            if ($now >= $endTime) {
-                // 训练已到期，恢复空闲状态
-                DB::table('practice')->where('id', (int)$slot['id'])->update([
-                    'generalid' => 0,
-                    'starttime' => 0,
-                    'endtime' => 0,
-                    'type' => 0,
-                ]);
-                $endedCount++;
+            // [将领模型]获得将领信息
+            $general = General::own($uid, $gid);
+            if ($general === null) {
+                // 获得将领信息失败 -1
+                $return['status'] = -1;
+                return $return;
+            }
+            if ((int)$general['goout'] !== 1) {
+                // 将领未出证 2
+                $return['status'] = 2;
+                return $return;
+            }
+            // 将领已满级
+            if ((int)$general['level'] === (int)$member['level'] && (int)$general['exp'] === (int)$general['levelupexp']) {
+                $return['status'] = 7;
+                return $return;
+            }
+            if ((int)$general['level'] > (int)$member['level']) {
+                $return['status'] = 7;
+                return $return;
+            }
+            // [训练模型]检查将领唯一性
+            if (Practice::checkPractice($uid, $gid) !== 0) {
+                // 将领正在训练中 6
+                $return['status'] = 6;
+                return $return;
+            }
+            // [训练模型]获得拥有训练位信息(pid)
+            $own = Practice::own($uid, $pid);
+            if ($own === null) {
+                // 获得拥有训练信息失败 -2
+                $return['status'] = -2;
+                return $return;
+            }
+            if ($own['gid'] !== 0) {
+                // 训练位被占用 3
+                $return['status'] = 3;
+                return $return;
+            }
+            // [训练模型]获得训练规则
+            $info = Practice::typeList((int)$member['level'])[$type] ?? null;
+            if ($info === null) {
+                // 获得训练费用失败 -3
+                $return['status'] = -3;
+                return $return;
+            }
+            if ($info['paytype'] === 1 && !Member::deductCurrency($uid, silver: $info['cost'])) {
+                // 银币不足 4
+                $return['status'] = 4;
+                return $return;
+            }
+            if ($info['paytype'] === 2 && !Member::deductCurrency($uid, gold: $info['cost'])) {
+                // 金币不足 5
+                $return['status'] = 5;
+                return $return;
+            }
+            // [训练模型]设置训练时间
+            $result = Practice::updateTime($uid, [
+                'pid' => $pid,
+                'gid' => $gid,
+                'type' => $type,
+                'hour' => $info['hour'],
+                'practicenow' => (int)$field['practicenow'],
+                'practicetime' => (int)$field['practicetime'],
+            ], $now);
+            if ($result['status'] !== 1) {
+                // 记录开始时间失败 -6
+                $return['status'] = -6;
+                return $return;
+            }
+            if ((int)$field['practiceall'] - (int)$field['practicenow'] > 1) {
+                $time = 0;
             } else {
-                // 训练进行中，推进结算起点
-                DB::table('practice')->where('id', (int)$slot['id'])->update([
-                    'starttime' => $now,
-                ]);
-                $minEndTime = ($minEndTime === 0) ? $endTime : min($minEndTime, $endTime);
+                $time = max(0, (int)$field['practicetime'] - $now);
             }
-        }
-
-        if ($endedCount > 0) {
-            $activeCount = DB::table('practice')
-                ->where('uid', $uid)
-                ->where('generalid', '>', 0)
-                ->whereNull('deleted_at')
-                ->count();
-
-            DB::table('member_field')->where('uid', $uid)->update([
-                'practicenow' => $activeCount,
-                'practicetime' => $minEndTime,
-            ]);
-        }
+            $after = self::member($uid);
+            $return['status'] = 1;
+            $return['info'] = [
+                'gid' => $result['info']['gid'],
+                'cd' => $result['info']['starttime'] !== 0 ? $result['info']['endtime'] - $result['info']['starttime'] : 0,
+                'type' => $result['info']['type'],
+                'cost' => $info['cost'],
+                'paytype' => $info['paytype'],
+                'id' => $own['id'],
+                'squence' => $own['squence'],
+                'level' => $own['level'],
+                'practicetime' => $time,
+                'gold' => (int)$after['gold'],
+                'silver' => (int)$after['silver'],
+            ];
+            if ($info['paytype'] === 2) {
+                // 消费统计记录
+                StatPay::record($uid, 'xunlian', $info['cost']);
+            }
+            return $return;
+        });
     }
 
     /**
-     * 结算单个训练位到当前时间的经验
-     *
-     * @param array<string, mixed> $slot
+     * 训练位升级: c=practice&m=levelup（pid）
      */
-    private static function settleSlotExp(int $uid, array $slot, int $memberLevel): int
+    public static function levelup(Context $ctx): array
     {
-        $gid = (int)$slot['generalid'];
-        $startTime = (int)$slot['starttime'];
-        $endTime = (int)$slot['endtime'];
-        $now = time();
-
-        if ($gid <= 0 || $startTime <= 0) {
-            return 0;
+        /**
+         * -4 升级训练位失败
+         * -2 获取规则失败
+         * -1 参数错误
+         *  0 失败
+         *  1 成功
+         *  2 训练位已满级
+         *  3 vip等级不足
+         *  4 金币不足
+         */
+        $uid = MemberHandler::resolveUid($ctx);
+        $pid = (int)$ctx->input('pid', 0);
+        if ($pid === 0) {
+            // 参数错误 -1
+            return ['status' => -1, 'info' => []];
         }
-
-        $general = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->first();
-        if ($general === null) {
-            return 0;
+        if (self::member($uid) === null) {
+            return ['status' => 0, 'info' => []];
         }
-
-        $seconds = max(0, min($now, $endTime) - $startTime);
-        if ($seconds <= 0) {
-            return 0;
-        }
-
-        $slotLevel = max(1, min(6, (int)$slot['level']));
-        $ratio = match ($slotLevel) {
-            1 => 1.0,
-            2 => 1.5,
-            3 => 2.0,
-            4 => 2.5,
-            5 => 3.0,
-            6 => 4.0,
-            default => 1.0,
-        };
-
-        // 经验公式: 主公等级 * (秒数/3600) * 112.5 * 强化倍率
-        $earnedExp = (int)ceil($memberLevel * ($seconds / 3600.0) * 112.5 * $ratio);
-        if ($earnedExp <= 0) {
-            return 0;
-        }
-
-        $curExp = (int)$general['exp'] + $earnedExp;
-        $curLevel = (int)$general['level'];
-
-        while ($curLevel < $memberLevel && $curExp >= GeneralHandler::getLevelUpExp($curLevel)) {
-            $curExp -= GeneralHandler::getLevelUpExp($curLevel);
-            $curLevel++;
-        }
-
-        if ($curLevel >= $memberLevel) {
-            $curLevel = $memberLevel;
-            $curExp = min($curExp, GeneralHandler::getLevelUpExp($curLevel));
-        }
-
-        DB::table('general')->where('id', $gid)->update([
-            'level' => $curLevel,
-            'exp' => $curExp,
-        ]);
-
-        return $earnedExp;
+        return Member::locked($uid, static function () use ($uid, $pid): array {
+            $return = ['status' => 0, 'info' => []];
+            $maxLevel = self::vipRule($uid, 'practicelevel', 1);
+            // [训练模型]训练位升级规则(训练位id)
+            $rule = Practice::levelupRule($uid, $pid, $maxLevel);
+            if ($rule['status'] !== 1) {
+                $return['status'] = match ($rule['status']) {
+                    // 训练位等级已满
+                    2 => 2,
+                    // vip等级不足 返回3
+                    3 => 3,
+                    // 获取规则失败 -2
+                    default => -2,
+                };
+                return $return;
+            }
+            // 升级价格
+            $gold = $rule['info']['price'];
+            if (!Member::deductCurrency($uid, gold: $gold)) {
+                // 金币不足 4
+                $return['status'] = 4;
+                return $return;
+            }
+            // 升级训练位
+            if (Practice::levelup($uid, $pid, $rule['info']['level']) !== 1) {
+                $return['status'] = -4;
+                return $return;
+            }
+            $return['info'] = [
+                'id' => $pid,
+                'name' => $rule['info']['name'],
+                'level' => $rule['info']['level'],
+                'price' => $rule['info']['price'],
+                'gold' => (int)self::member($uid)['gold'],
+            ];
+            $return['status'] = 1;
+            // 主线任务 5任意阵法升到X级（旧版此处传训练位等级）
+            MainQuestTask::action($uid, 5, $rule['info']['level']);
+            // 消费统计记录
+            StatPay::record($uid, 'up_xunlianwei', $gold);
+            return $return;
+        });
     }
 
     /**
-     * 根据训练类型获取时长与扣费配置
-     *
-     * @return array{paytype: int, hour: int, cost: int}
+     * 获得升级价格: c=practice&m=get_levelup_price（pid）
      */
-    private static function getPracticeRule(int $type, int $memberLevel): array
+    public static function get_levelup_price(Context $ctx): array
     {
-        return match ($type) {
-            2 => ['paytype' => 1, 'hour' => 24, 'cost' => 255 * $memberLevel],
-            3 => ['paytype' => 2, 'hour' => 24, 'cost' => 2],
-            4 => ['paytype' => 2, 'hour' => 72, 'cost' => 20],
-            default => ['paytype' => 1, 'hour' => 8, 'cost' => 100 * $memberLevel],
-        };
+        /**
+         * -2 获得等级信息失败
+         * -1 获得训练位信息失败
+         *  0 失败
+         *  1 成功
+         *  2 vip等级不足
+         */
+        $return = [];
+        $uid = MemberHandler::resolveUid($ctx);
+        $pid = (int)$ctx->input('pid', 0);
+        $own = Practice::own($uid, $pid);
+        $maxLevel = self::vipRule($uid, 'practicelevel', 1);
+        if ($own === null) {
+            // 获得拥有训练位信息失败 -1
+            $return['status'] = -1;
+            return $return;
+        }
+        $level = $own['level'] + 1;
+        if ($level > $maxLevel) {
+            // vip等级不足 2
+            $return['status'] = 2;
+            return $return;
+        }
+        $price = Practice::LEVEL_INFO[$level] ?? null;
+        if ($price === null) {
+            // 获得等级信息失败 -2
+            $return['status'] = -2;
+            return $return;
+        }
+        $return['status'] = 1;
+        $return['info'] = [
+            'level' => $level,
+            'gold' => $price['price'],
+            'result' => $price['result'],
+        ];
+        return $return;
     }
 
     /**
-     * 获取或初始化玩家扩展字段记录
-     *
-     * @return array<string, mixed>
+     * 终止训练: c=practice&m=practice_stop（pid；旧版不结算这次训练的经验）
      */
-    private static function getOrCreateMemberField(int $uid): array
+    public static function practice_stop(Context $ctx): array
     {
-        $field = DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->first();
-        if ($field === null) {
-            DB::table('member_field')->insert([
-                'uid' => $uid,
-                'practiceall' => 2,
-                'practicenow' => 0,
-                'practicetime' => 0,
-                'freeleap' => 10,
-                'leaptimes' => 0,
-            ]);
-            $field = DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->first() ?? [];
+        /**
+         * -2 获取扩展信息失败
+         * -1 终止训练失败
+         *  0 失败
+         *  1 成功
+         */
+        $uid = MemberHandler::resolveUid($ctx);
+        $pid = (int)$ctx->input('pid', 0);
+        if (self::member($uid) === null) {
+            return ['status' => 0];
         }
-        return $field;
+        $status = Member::locked($uid, static function () use ($uid, $pid): int {
+            $field = self::field($uid);
+            if ($field === null) {
+                // 获取扩展信息失败 -2
+                return -2;
+            }
+            if (Practice::practiceStop($uid, $pid, (int)$field['practicetime'], (int)$field['practicenow']) !== 1) {
+                // 终止训练失败 -1
+                return -1;
+            }
+            return 1;
+        });
+        return ['status' => $status];
+    }
+
+    /**
+     * VIP 规则值（vip_model->practicenum / practicelevel：VIP 0 或没有 vip_log 时取 $default，否则取 Vip 表）
+     */
+    private static function vipRule(int $uid, string $field, int $default): int
+    {
+        $log = Vip::log($uid);
+        if ($log === null || $log['level'] === 0) {
+            return $default;
+        }
+        return (int)(Vip::info()[$log['level']][$field] ?? $default);
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function member(int $uid): ?array
+    {
+        return $uid > 0 ? DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first() : null;
+    }
+
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function field(int $uid): ?array
+    {
+        return DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->first();
     }
 }

@@ -25,8 +25,9 @@ use OmniPHP\Http\Context;
  * 客户端调用（viprewardpop.js）：index、get_vip_wage，全部移植。
  * 并发：领取以 vipwage_dateline 条件更新（今天还没领过才写入）占领取资格，同一天并发领取只发一次。
  *
- * 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 25)（act_newyear 活动未移植）；
- * 军令 / 银币 / 声望 / 宝石流水（add_act / add_silver / add_reputation 的 act_log / silver_log / reputation_log）。
+ * 军令 / 银币 / 声望由 Member::addCurrency 记流水，宝石由 TraderLog 记流水。
+ *
+ * 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 25)（act_newyear 活动未移植）。
  */
 final class VipwageHandler
 {

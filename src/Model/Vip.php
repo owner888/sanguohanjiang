@@ -136,7 +136,10 @@ final class Vip
             if (DB::table('vip_log')->insert($data) !== false) {
                 $status = 1;
             }
-            // 依赖未移植：rank >= 10 时更新赠送继承 cd（member_field.inherit_dateline，武将继承 general_inherit 未按旧版移植）
+            // 更新赠送继承cd（旧版直接记当前时间，VIP 10 赠送的至尊继承随即不可用，照旧版）
+            if ($rank >= 10) {
+                DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update(['inherit_dateline' => $now]);
+            }
             // 清空功能 cd
             if ($rank >= 3) {
                 self::clearCd($uid);
@@ -158,8 +161,14 @@ final class Vip
             if (DB::table('vip_log')->where('uid', $uid)->whereNull('deleted_at')->update($data) > 0) {
                 $status = 1;
             }
-            // 依赖未移植：跨过 VIP 4 / 6 / 8 时重置免费继承（member_field.free_inherit）、跨过 VIP 10 时更新赠送继承 cd
-            // （member_field.inherit_dateline），武将继承 general_inherit 未按旧版移植
+            // 判断是否要更新继承cd：跨过 VIP 4 / 6 / 8 时重置免费继承
+            if ($lastVip !== $rank && (($lastVip < 4 && $rank >= 4) || ($lastVip < 6 && $rank >= 6) || ($lastVip < 8 && $rank >= 8))) {
+                DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update(['free_inherit' => 0]);
+            }
+            // 判断是否更新赠送继承cd（同上，跨过 VIP 10 时记当前时间）
+            if ($lastVip !== $rank && $lastVip <= 9 && $rank >= 10) {
+                DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update(['inherit_dateline' => $now]);
+            }
             // 判断是否清空 cd
             if ($lastVip !== $rank && $lastVip < 3 && $rank >= 3) {
                 self::clearCd($uid);

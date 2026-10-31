@@ -5,275 +5,438 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-use OmniPHP\Cache\Redis;
+use Hanjiang\MasterData\Equip;
+use Hanjiang\Model\DailyTask;
+use Hanjiang\Model\Equipment;
+use Hanjiang\Model\MainQuestTask;
+use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\StatPay;
+use Hanjiang\Model\TraderLog;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
 /**
- * 每日悬赏与军务历练处理器 (DDD Activity Domain)
+ * 日常任务（移植旧版 controllers/task.php + models/task_model.php，见 Model\DailyTask）
+ *
+ * 客户端 dailytaskpop.js 调用 index、accept_task（s 任务位置 1~3）、give_up、refresh、get_reward（s）。
+ * 同一玩家的领取 / 放弃 / 刷新 / 领奖在玩家行锁里串行执行（多 Worker 下免费刷新、领奖不会重复）。
  */
 final class TaskHandler
 {
-    /**
-     * 基础悬赏任务池
-     */
-    public const array TASK_POOL = [
-        1 => ['id' => 1, 'type' => 1, 'star' => 2, 'title' => '赋税征缴', 'description' => '于主城官府征收赋税 2 次', 'value' => 2, 'silver' => 8000, 'rep' => 50],
-        2 => ['id' => 2, 'type' => 2, 'star' => 3, 'title' => '战役荡寇', 'description' => '出征战役讨伐山贼乱党 3 次', 'value' => 3, 'silver' => 15000, 'rep' => 100],
-        3 => ['id' => 3, 'type' => 3, 'star' => 4, 'title' => '校场扬威', 'description' => '前往军校比武挑战各路豪杰 3 次', 'value' => 3, 'silver' => 30000, 'rep' => 200],
-        4 => ['id' => 4, 'type' => 4, 'star' => 5, 'title' => '百炼玄兵', 'description' => '在铁匠铺强化打造装备 3 次', 'value' => 3, 'silver' => 60000, 'rep' => 500],
-        5 => ['id' => 5, 'type' => 5, 'star' => 3, 'title' => '招贤纳士', 'description' => '前往酒馆对饮寻访天下名将', 'value' => 2, 'silver' => 20000, 'rep' => 150],
-        6 => ['id' => 6, 'type' => 6, 'star' => 4, 'title' => '将星觉醒', 'description' => '聚灵凝魂，淬炼将魂星级 1 次', 'value' => 1, 'silver' => 40000, 'rep' => 300],
-    ];
+    /** 旧版语言包 base_lang.php base_chip */
+    private const string LANG_BASE_CHIP = '碎片';
 
     /**
-     * 获取玩家当前的每日任务看板缓存
-     *
-     * @return array<string, mixed>
-     */
-    public static function getUserTaskData(int $uid): array
-    {
-        $todayStr = date('Ymd');
-        $cacheKey = "user_daily_tasks:{$uid}:{$todayStr}";
-        $data = Redis::getJson($cacheKey);
-
-        if (is_array($data) && isset($data['taskid1'])) {
-            return $data;
-        }
-
-        // 初始化今日任务看板
-        $keys = array_keys(self::TASK_POOL);
-        shuffle($keys);
-
-        $data = [
-            'number' => 10,       // 每日剩余可完成次数
-            'free_times' => 3,    // 免费刷新次数
-            'taskstatus1' => 0,   // 0 未接, 1 进行中, 2 已完成未领奖
-            'taskstatus2' => 0,
-            'taskstatus3' => 0,
-            'taskid1' => self::formatTask(self::TASK_POOL[$keys[0] ?? 1]),
-            'taskid2' => self::formatTask(self::TASK_POOL[$keys[1] ?? 2]),
-            'taskid3' => self::formatTask(self::TASK_POOL[$keys[2] ?? 3]),
-        ];
-
-        Redis::setJson($cacheKey, $data, 86400 * 2);
-        return $data;
-    }
-
-    /**
-     * 格式化单个任务字段
-     */
-    public static function formatTask(array $tpl): array
-    {
-        return [
-            'id' => (int)$tpl['id'],
-            'type' => (int)$tpl['type'],
-            'star' => (int)$tpl['star'],
-            'title' => (string)$tpl['title'],
-            'description' => (string)$tpl['description'],
-            'value' => (int)$tpl['value'],
-            'plan' => 0,
-            'silver' => (int)$tpl['silver'],
-            'rep' => (int)($tpl['rep'] ?? 50),
-            'itemname' => '',
-            'quality' => 1,
-            'get_type' => 0,
-            'get_num' => 0,
-            'get_value' => 0,
-            'equip_num' => 0,
-        ];
-    }
-
-    /**
-     * 每日军务主界面: c=task&m=index
+     * 初始化接口: c=task&m=index
      */
     public static function index(Context $ctx): array
     {
-        $uid = MemberHandler::resolveUid($ctx);
-        $taskData = self::getUserTaskData($uid);
+        $return = ['status' => 0];
+        $member = self::member(MemberHandler::resolveUid($ctx));
+        if ($member === null) {
+            return $return;
+        }
+        if ((int)$member['level'] < DailyTask::OPEN_LEVEL) {
+            // 角色等级不够
+            $return['status'] = -1;
+            return $return;
+        }
+        $uid = (int)$member['uid'];
+        $level = (int)$member['level'];
+        $now = time();
 
-        // 整理向下兼容的 list 数组
-        $list = [
-            1 => $taskData['taskid1'],
-            2 => $taskData['taskid2'],
-            3 => $taskData['taskid3'],
-        ];
+        // 查询用户记录
+        $log = DailyTask::taskLog($uid, $level, $now);
+        // 得到正在进行中的任务
+        $site = 0;
+        $itemarr = [];
+        for ($i = 1; $i <= 3; $i++) {
+            if ($log['taskstatus' . $i] === 1) {
+                $site = $i;
+            }
+            $task = $log['taskid' . $i];
+            if (($task['equip_type'] ?? 0) <= 2 && ($task['equip_id'] ?? 0)) {
+                // 查询道具名字
+                $itemarr[$i] = $task['equip_id'];
+            }
+            $log['taskid' . $i] = self::withReward($task, $level);
+        }
+        if ($itemarr !== []) {
+            $item = DailyTask::tempInfo(array_values($itemarr));
+            if ($item === []) {
+                // 装备获取失败
+                $return['status'] = -2;
+                return $return;
+            }
+            foreach ($itemarr as $key => $val) {
+                $log['taskid' . $key]['itemname'] = $item[$val]['name'] ?? null;
+                $log['taskid' . $key]['quality'] = $item[$val]['quality'] ?? null;
+                if ($log['taskid' . $key]['equip_type'] === 2) {
+                    $log['taskid' . $key]['itemname'] .= self::LANG_BASE_CHIP;
+                }
+                unset($log['taskid' . $key]['equip_type']);
+            }
+        }
 
-        return array_merge($taskData, [
-            'status' => 1,
-            'list' => $list,
-            'message' => 'ok',
-        ]);
+        // 根据任务id查询任务进度
+        if ($site) {
+            $info = DailyTask::plan($uid, $now);
+            $log['taskid' . $site]['plan'] = 0;
+            if ($info !== [] && $info['id'] === $log['taskid' . $site]['id']) {
+                if ($info['plan'] >= $log['taskid' . $site]['value']) {
+                    // 任务已完成，修改任务状态（旧版只改返回值，库里的状态由 task_action 完成时修改）
+                    $log['taskstatus' . $site] = 2;
+                    // 主线任务 12完成任意日常任务
+                    MainQuestTask::action($uid, 12, 1);
+                } else {
+                    $log['taskid' . $site]['plan'] = $info['plan'];
+                }
+            }
+        }
+        unset($log['dateline']);
+        $return = $log;
+        $return['status'] = 1;
+        return $return;
     }
 
     /**
-     * 接取日常任务: c=task&m=accept_task
+     * 接受任务: c=task&m=accept_task（s 任务位置）
      */
     public static function accept_task(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $site = (int)($ctx->input('s', $ctx->input('site', $ctx->input('id', 1))));
-        if ($site < 1 || $site > 3) {
-            $site = 1;
+        $site = self::site($ctx);
+        if ($uid <= 0) {
+            return ['status' => 0];
         }
-
-        $todayStr = date('Ymd');
-        $cacheKey = "user_daily_tasks:{$uid}:{$todayStr}";
-        $data = self::getUserTaskData($uid);
-
-        // 将该槽位设为进行中
-        $data["taskstatus{$site}"] = 1;
-        // 自动完成以方便体验，将 plan 提升
-        if (isset($data["taskid{$site}"])) {
-            $data["taskid{$site}"]['plan'] = $data["taskid{$site}"]['value'];
-            $data["taskstatus{$site}"] = 2; // 可领奖
-        }
-
-        Redis::setJson($cacheKey, $data, 86400 * 2);
-
-        return [
-            'status' => 1,
-            'site' => $site,
-            'message' => '接取军务成功',
-        ];
+        $now = time();
+        return Member::locked($uid, static function () use ($uid, $site, $now): array {
+            $return = ['status' => 0];
+            // 取用户信息
+            $log = DailyTask::log($uid);
+            if ($log === []) {
+                // 用户信息不存在
+                $return['status'] = -1;
+                return $return;
+            }
+            if (!$log['number']) {
+                $return['status'] = -2;
+                return $return;
+            }
+            for ($i = 1; $i <= 3; $i++) {
+                if ($log['taskstatus' . $i] >= 1) {
+                    // 还有正在进行中的任务，不能同时领取2个任务
+                    $return['status'] = -3;
+                    return $return;
+                }
+            }
+            // 领取任务，修改任务状态
+            if (DailyTask::updateStatus($uid, $site, 1) === 1) {
+                // 取任务信息，把任务信息存到redis里面
+                $info = DailyTask::task($log['taskid' . $site]);
+                DailyTask::startPlan($uid, $info, $site, $now);
+                $return['status'] = 1;
+            }
+            return $return;
+        });
     }
 
     /**
-     * 放弃日常任务: c=task&m=give_up
+     * 放弃任务: c=task&m=give_up
      */
     public static function give_up(Context $ctx): array
     {
         $uid = MemberHandler::resolveUid($ctx);
-        $site = (int)($ctx->input('s', $ctx->input('site', 1)));
-        if ($site < 1 || $site > 3) {
-            $site = 1;
+        if ($uid <= 0) {
+            return ['status' => 0];
         }
-
-        $todayStr = date('Ymd');
-        $cacheKey = "user_daily_tasks:{$uid}:{$todayStr}";
-        $data = self::getUserTaskData($uid);
-
-        $data["taskstatus{$site}"] = 0;
-        if (isset($data["taskid{$site}"])) {
-            $data["taskid{$site}"]['plan'] = 0;
-        }
-
-        Redis::setJson($cacheKey, $data, 86400 * 2);
-
-        return [
-            'status' => 1,
-            'site' => $site,
-            'message' => '已放弃该军务',
-        ];
+        $now = time();
+        return Member::locked($uid, static function () use ($uid, $now): array {
+            $return = ['status' => 0];
+            // 取用户数据
+            $log = DailyTask::log($uid);
+            if ($log === []) {
+                $return['status'] = -1;
+                return $return;
+            }
+            $site = 0;
+            for ($i = 1; $i <= 3; $i++) {
+                if ($log['taskstatus' . $i] === 1) {
+                    $site = $i;
+                    break;
+                }
+            }
+            if (!$site) {
+                // 操作无效(没有可放弃的任务)
+                $return['status'] = -2;
+                return $return;
+            }
+            // 执行放弃（修改任务状态，删除redis）
+            DailyTask::updateStatus($uid, $site, 0);
+            DailyTask::clearPlan($uid, $now);
+            $return['status'] = 1;
+            return $return;
+        });
     }
 
     /**
-     * 领赏交付军务: c=task&m=get_reward
-     */
-    public static function get_reward(Context $ctx): array
-    {
-        $uid = MemberHandler::resolveUid($ctx);
-        $site = (int)($ctx->input('s', $ctx->input('site', $ctx->input('id', 1))));
-        if ($site < 1 || $site > 3) {
-            $site = 1;
-        }
-
-        $todayStr = date('Ymd');
-        $cacheKey = "user_daily_tasks:{$uid}:{$todayStr}";
-        $data = self::getUserTaskData($uid);
-
-        $task = $data["taskid{$site}"] ?? null;
-        $rewardSilver = $task ? (int)$task['silver'] : 10000;
-        $rewardRep = $task ? (int)($task['rep'] ?? 50) : 50;
-
-        MemberHandler::addCurrency($uid, silver: $rewardSilver, reputation: $rewardRep);
-
-        // 减少 1 次剩余次数并刷新该槽位
-        $data['number'] = max(0, (int)$data['number'] - 1);
-        $data["taskstatus{$site}"] = 0;
-
-        // 随机刷新一个新任务
-        $allIds = array_keys(self::TASK_POOL);
-        $newId = $allIds[array_rand($allIds)];
-        $data["taskid{$site}"] = self::formatTask(self::TASK_POOL[$newId]);
-
-        Redis::setJson($cacheKey, $data, 86400 * 2);
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $allSilver = (int)($member['silver'] ?? 0);
-
-        $newList = [
-            1 => $data['taskid1'],
-            2 => $data['taskid2'],
-            3 => $data['taskid3'],
-        ];
-
-        return [
-            'status' => 1,
-            'all_silver' => $allSilver,
-            'silver' => $rewardSilver,
-            'number' => (int)$data['number'],
-            'list' => $newList,
-            'get_type' => 0,
-            'get_num' => 0,
-            'get_value' => 0,
-            'itemname' => '',
-            'itemnum' => 0,
-            'quality' => 1,
-            'message' => '领赏成功',
-        ];
-    }
-
-    /**
-     * 刷新日常任务: c=task&m=refresh
+     * 刷新任务: c=task&m=refresh（未领取的任务位换新任务；每天第一次免费，之后每次 5 元宝）
      */
     public static function refresh(Context $ctx): array
     {
-        $uid = MemberHandler::resolveUid($ctx);
-        $todayStr = date('Ymd');
-        $cacheKey = "user_daily_tasks:{$uid}:{$todayStr}";
-        $data = self::getUserTaskData($uid);
-
-        $freeTimes = (int)($data['free_times'] ?? 0);
-        $costGold = 0;
-
-        if ($freeTimes > 0) {
-            $data['free_times'] = $freeTimes - 1;
-        } else {
-            $costGold = 5;
-            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-            if ((int)($member['gold'] ?? 0) < $costGold) {
-                return ['status' => -1, 'message' => '元宝不足，无法刷新任务'];
-            }
-            MemberHandler::deductCurrency($uid, gold: $costGold);
+        $member = self::member(MemberHandler::resolveUid($ctx));
+        if ($member === null) {
+            return ['status' => 0];
         }
+        $uid = (int)$member['uid'];
+        $level = (int)$member['level'];
+        return Member::locked($uid, static function () use ($uid, $level): array {
+            $return = ['status' => 0];
+            // 查询用户记录
+            $log = DailyTask::log($uid);
+            if ($log === []) {
+                // 用户记录为空
+                $return['status'] = -2;
+                return $return;
+            }
+            $gold = (int)DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('gold');
+            // 检查金币银币是否足够
+            if ($log['free_times'] === 0 && $gold < DailyTask::PRICE) {
+                $return['status'] = -1;
+                return $return;
+            }
 
-        // 刷新任务
-        $allIds = array_keys(self::TASK_POOL);
-        shuffle($allIds);
-        for ($i = 1; $i <= 3; $i++) {
-            if ((int)($data["taskstatus{$i}"] ?? 0) === 0) {
-                $data["taskid{$i}"] = self::formatTask(self::TASK_POOL[$allIds[$i - 1] ?? 1]);
+            $arr = [];
+            for ($i = 1; $i <= 3; $i++) {
+                if ($log['taskstatus' . $i] === 0) {
+                    $arr[] = $i;
+                }
+            }
+            // 按个数查询
+            $task = DailyTask::rand($level, count($arr));
+
+            $list = $uplist = $itemarr = [];
+            foreach ($arr as $key => $val) {
+                if (!isset($task[$key + 1])) {
+                    continue;
+                }
+                $one = $task[$key + 1];
+                $uplist[$val] = $one['id'];
+                if ($one['equip_type'] <= 2 && $one['equip_id']) {
+                    $itemarr[$val] = $one['equip_id'];
+                }
+                $list[$val] = self::withReward($one, $level);
+            }
+            if ($itemarr !== []) {
+                $item = DailyTask::tempInfo(array_values($itemarr));
+                if ($item === []) {
+                    // 装备获取失败
+                    $return['status'] = -3;
+                    return $return;
+                }
+                foreach ($itemarr as $key => $val) {
+                    if (isset($item[$val])) {
+                        $list[$key]['itemname'] = $item[$val]['name'];
+                        $list[$key]['quality'] = $item[$val]['quality'];
+                        if ($list[$key]['equip_type'] === 2) {
+                            $list[$key]['itemname'] .= self::LANG_BASE_CHIP;
+                        }
+                    }
+                    unset($list[$key]['equip_type']);
+                }
+            }
+
+            // 扣除金币
+            if ($log['free_times'] === 0) {
+                // 不是免费才扣钱
+                Member::deductCurrency($uid, gold: DailyTask::PRICE);
+                // 消费统计记录
+                StatPay::record($uid, 'task_refresh', DailyTask::PRICE);
+            }
+
+            // 修改数据
+            if ($uplist !== []) {
+                $return = ['status' => DailyTask::updateTasks($uid, $uplist)];
+            }
+            $return['price'] = DailyTask::PRICE;
+            $return['all_gold'] = (int)DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('gold');
+            $return['list'] = $list;
+            return $return;
+        });
+    }
+
+    /**
+     * 领取奖励: c=task&m=get_reward（s 任务位置）
+     */
+    public static function get_reward(Context $ctx): array
+    {
+        $member = self::member(MemberHandler::resolveUid($ctx));
+        $site = self::site($ctx);
+        if ($member === null) {
+            return ['status' => 0];
+        }
+        $uid = (int)$member['uid'];
+        $level = (int)$member['level'];
+        $now = time();
+        $return = Member::locked($uid, static function () use ($uid, $level, $site, $now): array {
+            $return = ['status' => 0];
+            // 取用户信息
+            $log = DailyTask::log($uid);
+            if ($log === []) {
+                $return['status'] = -1;
+                return $return;
+            }
+            if ($log['taskstatus' . $site] !== 2) {
+                // 任务未完成，无法领取
+                $return['status'] = -2;
+                return $return;
+            }
+
+            // 查询该任务奖励
+            $info = DailyTask::task($log['taskid' . $site]);
+            $silver = (int)$info['silver'] * $level;
+            // 添加银币
+            Member::addCurrency($uid, silver: $silver);
+            if ($info['equip_type'] <= 2 && $info['equip_id']) {
+                $item = Equip::ROWS[$info['equip_id']] ?? null;
+                if ($item !== null) {
+                    // 道具存在
+                    $return['itemid'] = $item['id'];
+                    $return['quality'] = $item['quality'];
+                    $return['itemname'] = $item['name'];
+                    $return['itemnum'] = $info['equip_num'];
+                    if ($info['equip_type'] === 2) {
+                        // 添加碎片
+                        Equipment::addChip($uid, $item['id'], $info['equip_num'], 'task', 'get_reward', $now);
+                        $return['itemname'] .= self::LANG_BASE_CHIP;
+                    } else {
+                        // 添加道具
+                        Equipment::addFromTemplate($uid, $item['id']);
+                    }
+                }
+            } elseif ($info['equip_type'] === 3) {
+                // 紫宝石
+                TraderLog::addJade($uid, 3, $info['equip_id'], class: 'task', method: 'get_reward', now: $now);
+            } elseif ($info['equip_type'] === 4) {
+                // 玉石
+                MemberJade::add($uid, $info['equip_id'], 'task', 'get_reward', $now);
+            } elseif ($info['equip_type'] === 5) {
+                // 声望
+                Member::addReputation($uid, $info['equip_id']);
+            }
+
+            // 修改状态
+            DailyTask::updateStatus($uid, $site, 0);
+            // 刷新数据,得到一个新的任务
+            $task = DailyTask::rand($level, 1);
+            $list = $uplist = [];
+            $list[$site] = $task[1];
+            $uplist[$site] = $task[1]['id'];
+            // 奖励中的银币
+            $list[$site]['silver'] = $list[$site]['silver'] * $level;
+            // 奖励中的道具
+            if ($task[1]['equip_type'] <= 2 && $task[1]['equip_id']) {
+                $item = Equip::ROWS[$task[1]['equip_id']] ?? null;
+                if ($item === null) {
+                    // 装备获取失败
+                    $return['status'] = -3;
+                    return $return;
+                }
+                $list[$site]['itemname'] = $item['name'];
+                $list[$site]['quality'] = $item['quality'];
+                if ($list[$site]['equip_type'] === 2) {
+                    $list[$site]['itemname'] .= self::LANG_BASE_CHIP;
+                }
+            }
+            $list[$site]['get_type'] = $list[$site]['equip_type'];
+            $list[$site]['get_value'] = $list[$site]['equip_id'];
+            $list[$site]['get_num'] = $list[$site]['equip_num'];
+            unset($list[$site]['equip_id'], $list[$site]['equip_type']);
+            // 修改数据
+            DailyTask::updateTasks($uid, $uplist, 0);
+            // 修改任务次数
+            $return['number'] = DailyTask::updateNumber($uid, $log['number'], $now);
+            $return['status'] = 1;
+            $return['get_type'] = $info['equip_type'];
+            $return['get_value'] = $info['equip_id'];
+            $return['get_num'] = $info['equip_num'];
+            $return['silver'] = $silver;
+            $return['list'] = $list;
+            $return['star'] = $info['star'];
+            return $return;
+        });
+        if ($return['status'] !== 1) {
+            return $return;
+        }
+        $star = $return['star'];
+        unset($return['star']);
+
+        // 主线任务 12完成任意日常任务
+        MainQuestTask::action($uid, 12, 1);
+        // 主线任务 13完成任意X星级任务
+        MainQuestTask::action($uid, 13, $star);
+
+        // 数据返回
+        $return['all_silver'] = (int)DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('silver');
+        return self::orderReward($return);
+    }
+
+    /**
+     * 任务的奖励展示字段：silver 按主公等级倍数，get_type / get_value / get_num，去掉 equip_id（旧版 index / refresh）
+     *
+     * @param array<string, mixed> $task
+     * @return array<string, mixed>
+     */
+    private static function withReward(array $task, int $level): array
+    {
+        if ($task === []) {
+            return $task;
+        }
+        $task['silver'] = $task['silver'] * $level;
+        $task['get_type'] = $task['equip_type'];
+        $task['get_value'] = $task['equip_id'];
+        $task['get_num'] = $task['equip_num'];
+        unset($task['equip_id']);
+        return $task;
+    }
+
+    /**
+     * get_reward 的字段顺序同旧版（itemid… 在前，number、status、get_* 在后）
+     *
+     * @param array<string, mixed> $return
+     * @return array<string, mixed>
+     */
+    private static function orderReward(array $return): array
+    {
+        $order = ['status', 'itemid', 'quality', 'itemname', 'itemnum', 'number', 'get_type', 'get_value', 'get_num', 'silver', 'all_silver', 'list'];
+        $sorted = [];
+        foreach ($order as $key) {
+            if (array_key_exists($key, $return)) {
+                $sorted[$key] = $return[$key];
             }
         }
+        return $sorted;
+    }
 
-        Redis::setJson($cacheKey, $data, 86400 * 2);
+    /**
+     * 任务位置（s，旧版 0 及以下按 1、超过 3 按 3）
+     */
+    private static function site(Context $ctx): int
+    {
+        $site = (int)$ctx->input('s', 0);
+        $site = $site > 0 ? $site : 1;
+        return $site > 3 ? 3 : $site;
+    }
 
-        $freshMember = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-
-        $newList = [
-            1 => $data['taskid1'],
-            2 => $data['taskid2'],
-            3 => $data['taskid3'],
-        ];
-
-        return [
-            'status' => 1,
-            'price' => $costGold,
-            'all_gold' => (int)($freshMember['gold'] ?? 0),
-            'free_times' => (int)$data['free_times'],
-            'list' => $newList,
-            'message' => '军务刷新成功',
-        ];
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function member(int $uid): ?array
+    {
+        if ($uid <= 0) {
+            return null;
+        }
+        return DB::table('member')->select('uid', 'level', 'gold', 'silver', 'vip')->where('uid', $uid)->whereNull('deleted_at')->first();
     }
 }

@@ -3,6 +3,9 @@
 declare(strict_types=1);
 
 return [
+    // OmniPHP DatabaseBootstrap / DatabaseManager 按此键选连接配置
+    'default' => 'mysql',
+
     'mysql' => [
         'host' => getenv('DB_HOST') ?: '127.0.0.1',
         'port' => (int)(getenv('DB_PORT') ?: 3306),
@@ -17,13 +20,5 @@ return [
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ],
-    ],
-    'redis' => [
-        'host' => getenv('REDIS_HOST') ?: '127.0.0.1',
-        'port' => (int)(getenv('REDIS_PORT') ?: 6379),
-        'password' => getenv('REDIS_PASSWORD') ?: null,
-        'database' => (int)(getenv('REDIS_DB') ?: 0),
-        'prefix' => 'hj:',
-        'timeout' => 2.5,
     ],
 ];

@@ -7,6 +7,7 @@ namespace Hanjiang\Middleware;
 use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Http\Context;
+use OmniPHP\Http\Middleware;
 
 /**
  * 核心关键操作原子防连击与防并发重入中间件
@@ -14,7 +15,7 @@ use OmniPHP\Http\Context;
  * 针对抽卡、强化、商城购买、摇骰等核心资产操作，通过 Redis 原子互斥锁，
  * 彻底防止多 Worker 并行时外挂脚本或连点导致的重入竞争与恶意刷单。
  */
-final class ThrottleMiddleware implements MiddlewareInterface
+final class ThrottleMiddleware implements Middleware
 {
     /** @var list<string> 需要防重复连击的核心高频关键操作 (controller.method) */
     private const array PROTECTED_ACTIONS = [

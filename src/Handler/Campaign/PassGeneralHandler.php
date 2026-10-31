@@ -26,6 +26,7 @@ use Hanjiang\Model\MemberStone;
 use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnMaterials;
 use Hanjiang\Model\PassGeneral;
+use Hanjiang\Model\PubLog;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -53,9 +54,8 @@ use OmniPHP\Http\Context;
  * 紫装以上装备发小喇叭，7 星以上武将 / 神将发小喇叭与聊天室系统消息（get_message_str 45 / 46）。
  *
  * 依赖未移植：
- * - 酒馆获得日志 tavern_model->add_pub_log(gid, 1, 11)；
- * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数；
- *   add_reputation / add_soul / add_act 的流水。
+ * - sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
+ * （元宝 / 声望 / 原魂 / 军令的增减由 Member / OwnSoul 记流水，元宝消耗另计日常任务 5）
  */
 final class PassGeneralHandler
 {
@@ -939,7 +939,7 @@ final class PassGeneralHandler
                     }
                 } else {
                     // 添加武将
-                    $general = self::addGeneral($uid, $gid);
+                    $general = General::addGeneral($uid, $gid);
                     if ($general !== null) {
                         $return['info'] = $general;
                         // 7 星以上：小喇叭 + 聊天框（武将 pass_general_general_get / 45，神将 pass_general_general_pr_get / 46）
@@ -952,7 +952,8 @@ final class PassGeneralHandler
                             $chat = Chat::getMessageStr($type === 26 ? 46 : 45, ['star_general' => $num, 'general' => $general['name']], $sender);
                             Chat::sendToAll($chat, Chat::TYPE_SYSTEM, 0, 0, $sender);
                         }
-                        // 依赖未移植：tavern_model->add_pub_log(gid, 1, 11) 酒馆获得日志
+                        // 酒馆获得日志（tavern_model->add_pub_log(gid, 1, 11)）
+                        PubLog::add($uid, $gid, 1, 11);
                     }
                 }
                 break;
@@ -991,32 +992,6 @@ final class PassGeneralHandler
                 break;
         }
         return $return;
-    }
-
-    /**
-     * 添加武将（general_model->add_general 的返回值：status / type / generalid / name / image / star / 三围 / skill / talent）
-     *
-     * @return array<string, mixed>|null 模板不存在或已拥有时为 null
-     */
-    private static function addGeneral(int $uid, int $gid): ?array
-    {
-        $tpl = GeneralTemplate::ROWS[$gid] ?? null;
-        if ($tpl === null || General::createFromTemplate($uid, $gid) === null) {
-            return null;
-        }
-        return [
-            'status' => 1,
-            'type' => $tpl['type'],
-            'generalid' => $tpl['id'],
-            'name' => $tpl['name'],
-            'image' => $tpl['image'],
-            'star' => $tpl['star'],
-            'wuli' => $tpl['wuli'],
-            'zhili' => $tpl['zhili'],
-            'tili' => $tpl['tili'],
-            'skill' => Skill::ROWS[$tpl['skillid']] ?? [],
-            'talent' => Talent::ROWS[$tpl['talentid']] ?? [],
-        ];
     }
 
     /**

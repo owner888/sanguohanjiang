@@ -620,6 +620,36 @@ final class OwnSoul
     }
 
     /**
+     * 卸下将领的全部将魂（移植 soul_model->unequip_all，武将折旧时调用）
+     *
+     * @return int 1 成功；-1 将领没有将魂槽；0 没有装备将魂或卸下失败
+     */
+    public static function unequipAll(int $uid, int $gid): int
+    {
+        $soul = self::generalSoul($gid);
+        if ($soul === []) {
+            return -1;
+        }
+        $soulArr = [];
+        $updateSoul = [];
+        for ($i = 1; $i <= 8; $i++) {
+            if ($soul['site' . $i] > 0) {
+                $soulArr[] = $soul['site' . $i];
+                $updateSoul['site' . $i] = 0;
+            }
+        }
+        if ($soulArr === []) {
+            return 0;
+        }
+        $affected = DB::table('own_soul')->where('gid', $gid)->whereIn('id', $soulArr)->whereNull('deleted_at')->update(['gid' => 0]);
+        if ($affected <= 0) {
+            return 0;
+        }
+        DB::table('own_general_soul')->where('gid', $gid)->where('uid', $uid)->whereNull('deleted_at')->update($updateSoul);
+        return 1;
+    }
+
+    /**
      * 更新将魂（移植 update_soul：本人、未删除）
      *
      * @param array<string, int|string|null> $data
@@ -688,23 +718,21 @@ final class OwnSoul
     }
 
     /**
-     * usesoul_log 一条（移植 member_model->_soul_log；argument 旧版取未定义的 $this->action，恒为空串）
+     * usesoul_log 一条（移植 member_model->_soul_log，写入见 FlowLog；class / method 为空时取当前请求）
      */
     private static function soulLog(int $uid, int $type, int $soul, int $balance, string $class, string $method, ?int $now): void
     {
-        $info = Member::logInfo($uid) ?? ['level' => 0, 'vip' => 0];
-        DB::table('usesoul_log')->insert([
-            'uid' => $uid,
-            'level' => $info['level'],
-            'type' => $type,
-            'reputation' => $soul,
-            'balance' => max(0, $balance),
-            'class' => Member::logText($class, 20),
-            'method' => Member::logText($method, 20),
-            'argument' => '',
-            'dateline' => $now ?? time(),
-            'vip' => $info['vip'],
-        ]);
+        FlowLog::write(
+            'usesoul_log',
+            $uid,
+            $type,
+            $soul,
+            $balance,
+            Member::logInfo($uid) ?? ['level' => 0, 'vip' => 0],
+            $now,
+            $class !== '' ? $class : null,
+            $method !== '' ? $method : null,
+        );
     }
 
     /**

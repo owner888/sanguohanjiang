@@ -14,16 +14,13 @@ declare(strict_types=1);
 
 use Hanjiang\MasterData\AlipayProduct;
 use Hanjiang\Model\Pay;
-use OmniPHP\Cache\Redis;
-use OmniPHP\Database\DB;
+use Hanjiang\Support\Connections;
 
 if (PHP_SAPI !== 'cli') {
     exit(1);
 }
 
-require dirname(__DIR__) . '/vendor/autoload.php';
-
-date_default_timezone_set('Asia/Shanghai');
+require dirname(__DIR__) . '/bootstrap.php';
 
 $uid = (int)($argv[1] ?? 0);
 $productId = (int)($argv[2] ?? 0);
@@ -36,9 +33,7 @@ if ($uid <= 0 || $product === null) {
     exit(1);
 }
 
-$dbConfig = require dirname(__DIR__) . '/config/database.php';
-DB::init($dbConfig['mysql']);
-Redis::init($dbConfig['redis']);
+Connections::init();
 
 $result = Pay::grantManual($uid, $productId);
 $orderId = $result['orderid'];

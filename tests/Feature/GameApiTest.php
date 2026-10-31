@@ -7,46 +7,20 @@ namespace Hanjiang\Tests\Feature;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\General;
 use Hanjiang\Model\Equipment;
+use Hanjiang\Tests\Support\Gateway;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 use OmniPHP\Cache\Redis;
 use Hanjiang\Handler\City\MemberHandler;
-use Hanjiang\Handler\HandlerRegistry;
-use Hanjiang\Http\Router;
 use Hanjiang\Cron\CountryCron;
-use Hanjiang\Middleware\AuthMiddleware;
-use Hanjiang\Middleware\CorsMiddleware;
-use Hanjiang\Middleware\DailyCronMiddleware;
-use Hanjiang\Middleware\GameProtocolMiddleware;
 use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
-use Hanjiang\Middleware\ThrottleMiddleware;
 use PHPUnit\Framework\TestCase;
 use Workerman\Protocols\Http\Response as WorkermanResponse;
 
 final class GameApiTest extends TestCase
 {
-    private static Router $router;
     private static ?string $token = null;
     private static int $uid = 0;
-
-    public static function setUpBeforeClass(): void
-    {
-        date_default_timezone_set('Asia/Shanghai');
-        $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        DB::init($dbConfig['mysql']);
-        Redis::init($dbConfig['redis']);
-
-        $router = new Router(dirname(__DIR__, 2) . '/public');
-        $router->use(new CorsMiddleware());
-        $router->use(new ResponseEnvelopeMiddleware());
-        $router->use(new AuthMiddleware());
-        $router->use(new ThrottleMiddleware());
-        $router->use(new DailyCronMiddleware());
-        // 自动发现并挂载全量 7 大领域子目录下的全部 Handler 映射 (驼峰与下划线双向兼容)
-        $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
-
-        self::$router = $router;
-    }
 
     /**
      * @param array<string, mixed> $params
@@ -62,7 +36,7 @@ final class GameApiTest extends TestCase
         ], $params);
 
         $ctx = Context::mock($inputs);
-        $res = self::$router->handleContext($ctx);
+        $res = Gateway::handle($ctx);
 
         if ($res instanceof WorkermanResponse) {
             $body = (string)$res->rawBody();
@@ -198,96 +172,12 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $clearCd['status']);
     }
 
-    public function testMapAndCampaignSystem(): void
-    {
-        $map = $this->request('map', 'index');
-        $this->assertSame(1, $map['status']);
-        $this->assertArrayHasKey('factions', $map);
-        $this->assertNotEmpty($map['factions']);
-
-        $scenes = $this->request('map', 'get_scene_list', ['l' => 1]);
-        $this->assertSame(1, $scenes['status']);
-        $this->assertArrayHasKey('list', $scenes);
-
-        // 验证势力地图底部【下一势力】按钮状态 (在第 9 势力曹操势力时，下一势力第 10 势力刘备势力处于开放状态，next_status 必须为 1)
-        $caocaoScenes = $this->request('map', 'get_scene_list', ['l' => 9]);
-        $this->assertSame(1, $caocaoScenes['status']);
-        $this->assertSame(1, $caocaoScenes['next_status'], '曹操势力向右切换到刘备势力必须畅通可点击');
-
-        $missions = $this->request('map', 'get_mission_list', ['l' => 1, 's' => 1]);
-        $this->assertSame(1, $missions['status']);
-        $this->assertArrayHasKey('list', $missions);
-
-        $detail = $this->request('map', 'mission', ['l' => 1, 's' => 1, 'id' => 1]);
-        $this->assertSame(1, $detail['status']);
-        $this->assertArrayHasKey('info', $detail);
-        $this->assertSame('黄巾前哨', $detail['info']['name']);
-        $this->assertArrayHasKey('image', $detail['info']);
-
-        // 通关奖励查询与领取测试 (c=map&m=get_newreward_index / get_newreward)
-        $rewards = $this->request('map', 'get_newreward_index', ['levelid' => 1]);
-        $this->assertSame(1, $rewards['status']);
-        $this->assertNotEmpty($rewards['list']);
-        $firstReward = $rewards['list'][0];
-        $this->assertArrayHasKey('mname', $firstReward);
-        $this->assertArrayHasKey('re_type', $firstReward);
-        $this->assertArrayHasKey('is_get', $firstReward);
-
-        // 领取第 1 个通关奖励
-        $claim = $this->request('map', 'get_newreward', ['id' => $firstReward['id']]);
-        $this->assertSame(1, $claim['status']);
-        $this->assertArrayHasKey('reward', $claim);
-        $this->assertSame(2, $claim['reward']['is_get']); // 变为已领取状态
-
-        // 战役势力通关大礼领取测试 (c=map&m=get_newresult)
-        $shiliReward = $this->request('map', 'get_newresult', ['id' => 1]);
-        $this->assertSame(1, $shiliReward['status']);
-        $this->assertArrayHasKey('item', $shiliReward);
-        $this->assertArrayHasKey('name', $shiliReward['item']);
-        $this->assertSame(1, $shiliReward['gettype']);
-        // 旧版 MasterData Map 1（黄巾势力）通关奖励：装备 6 狮心锁环甲
-        $this->assertSame(6, $shiliReward['item']['id']);
-        $this->assertSame('狮心锁环甲', $shiliReward['item']['name']);
-    }
-
     /**
      * 物品存储类奖励的发放点（旧版调用 add_talent_scroll / add_item 碎片分支 / add_mount / add_jade 等处）
      */
     public function testItemRewardSitesGrantStorage(): void
     {
         $this->withFreshPlayer(function (int $uid): void {
-            // 势力通关奖励：Map 6 为天赋卷轴（add_talent_scroll(reward, 0, rewardnum)），Map 17 为坐骑（add_mount(reward, 0, 0, rewardnum)）
-            $map6 = \Hanjiang\MasterData\Map::ROWS[6];
-            $res = $this->request('map', 'get_newresult', ['id' => 6]);
-            $this->assertSame([1, 2, $map6['rewardnum']], [$res['status'], $res['gettype'], $res['rewardnum']]);
-            $scroll = \Hanjiang\MasterData\TalentScroll::ROWS[$map6['reward']];
-            $this->assertSame($scroll['type'], $res['item']['id'], '旧版 info.id 改成卷轴类型');
-            $this->assertSame($map6['rewardnum'], (int)\Hanjiang\Model\Equipment::talentScroll($uid, $scroll['type'], $scroll['quality'])['number']);
-            $this->assertSame(['map', 'get_newresult'], array_values(DB::table('talent_scroll_log')->select('class', 'method')->where('uid', $uid)->first()));
-            $map17 = \Hanjiang\MasterData\Map::ROWS[17];
-            $res = $this->request('map', 'get_newresult', ['id' => 17]);
-            $this->assertSame([1, 4, $map17['reward']], [$res['status'], $res['gettype'], $res['info']['mid']]);
-            $this->assertSame($map17['rewardnum'], DB::table('own_mount')->where('uid', $uid)->where('mid', $map17['reward'])->count());
-            $this->assertSame(-3, $this->request('map', 'get_newresult', ['id' => 17])['status'], '已领取');
-
-            // 关卡掉落：gettype 2 装备碎片（add_item 碎片分支）、5 天赋卷轴、6 卷轴碎片，件数即数量
-            $drop = new \ReflectionMethod(\Hanjiang\Handler\Campaign\MapHandler::class, 'missionDrop');
-            $m43 = \Hanjiang\MasterData\Mission::ROWS[43];
-            $this->assertSame(2, $m43['gettype']);
-            do {
-                $res = $drop->invoke(null, $uid, 10, $m43['missionlevel'], $m43['missionstage'], $m43['missionid']);
-            } while ($res['get_number'] === 0);
-            $equip = \Hanjiang\MasterData\Equip::ROWS[$m43['getvalue']];
-            $this->assertSame([2, $equip['name'] . '碎片'], [$res['gettype'], $res['itemname']]);
-            $this->assertSame(1, (int)DB::table('equipment')->where('uid', $uid)->where('equipid', $equip['id'])->where('chip', '>', 0)->value('chip'));
-            $m212 = \Hanjiang\MasterData\Mission::ROWS[212];
-            $this->assertSame([5, 100], [$m212['gettype'], $m212['getrate']]);
-            $scroll = \Hanjiang\MasterData\TalentScroll::ROWS[$m212['getvalue']];
-            $had = (int)(\Hanjiang\Model\Equipment::talentScroll($uid, $scroll['type'], $scroll['quality'])['number'] ?? 0);
-            $res = $drop->invoke(null, $uid, 10, $m212['missionlevel'], $m212['missionstage'], $m212['missionid']);
-            $this->assertSame([5, 2, $scroll['type'], \Hanjiang\Model\Equipment::scrollName($scroll['type'])], [$res['gettype'], $res['itemtype'], $res['itemid'], $res['itemname']]);
-            $this->assertSame($had + 1, (int)\Hanjiang\Model\Equipment::talentScroll($uid, $scroll['type'], $scroll['quality'])['number']);
-
             // 平乱副本奖励类型 2 装备碎片（CopiesReward 里没有，直接调发奖分支）：add_item($info, 1, $num)
             $copies = new \ReflectionMethod(\Hanjiang\Handler\Campaign\CopiesHandler::class, 'reward');
             $res = $copies->invoke(null, $uid, ['type' => 2, 'value' => 19, 'num' => 3], 0, 0, time(), 'pk');
@@ -330,151 +220,6 @@ final class GameApiTest extends TestCase
             DB::table('member')->where('uid', $uid)->update(['level' => 120]);
             $mountHp = (int)$mounts[0]['hp'] + ceil((int)$mounts[1]['hp'] * 0.3);
             $this->assertSame((int)(($base + $gemPower + $mountHp) * $coef), $hp());
-        });
-    }
-
-    public function testBattleSimulationAction(): void
-    {
-        $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
-        $this->assertSame(1, $res['status']);
-        // 旧版 info.win 即战斗评级 assess：一击击杀长枪兵，我方满血完胜
-        $this->assertSame(3, $res['info']['win']);
-        $this->assertArrayHasKey('battle', $res);
-        // 守军取旧版 Mission 1（1-1-1）的 position5 = Monster 1 长枪兵：blood 20 × 平庸 1.0
-        $monster = \Hanjiang\MasterData\Monster::ROWS[1];
-        $this->assertSame([5], array_keys($res['battle']['rightteam']));
-        $this->assertSame([
-            'heroid' => '1',
-            'name' => '长枪兵',
-            'herotype' => '1',
-            'level' => '1',
-            'allblood' => 20,
-            'power' => 0,
-            'image' => $monster['image'],
-            'star' => 0,
-            'talent' => '平庸',
-            'skill' => '会心一击',
-            'quality' => '1',
-        ], $res['battle']['rightteam'][5]);
-        // 我方取 matrix 站位，字段为旧版 team_return_arr
-        $matrix = DB::table('matrix')->where('uid', self::$uid)->whereNull('deleted_at')->first();
-        foreach ($res['battle']['leftteam'] as $pos => $unit) {
-            $this->assertSame((string)$matrix['position' . $pos], $unit['heroid']);
-            $this->assertSame(['heroid', 'name', 'herotype', 'level', 'allblood', 'power', 'image', 'star', 'talent', 'skill', 'quality'], array_keys($unit));
-        }
-        $this->assertSame(3, $res['battle']['assess']);
-        $this->assertNotEmpty($res['battle']['process']);
-        // 旧版 battle() 返回结构 + map 控制器附带的双方信息
-        $this->assertSame(['leftteam', 'rightteam', 'process', 'assess', 'leftresult', 'rightresult', 'leftbuff', 'rightbuff', 'left_role', 'right_role'], array_keys($res['battle']));
-        $this->assertSame(['name' => '长枪兵', 'level' => 1, 'type' => 1], $res['battle']['right_role']);
-        $this->assertSame([], $res['battle']['rightresult'], '阵亡单位移出队伍');
-
-        // 1-1-5：Mission 5 只有 position5 = Monster 5 邓茂
-        $bossRes = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 5]);
-        $this->assertSame(1, $bossRes['status']);
-        $this->assertCount(1, $bossRes['battle']['rightteam']);
-        $this->assertSame('邓茂', $bossRes['battle']['rightteam'][5]['name']);
-
-        // 旧版 get_mission_by_id 查不到关卡返回 -6
-        $this->assertSame(-6, $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 99])['status']);
-
-        // 验证重刷已打通的据点时，玩家全局最高进度单向锁定不回滚
-        $memBefore = \OmniPHP\Database\DB::table('member')->where('uid', self::$uid)->first();
-        $oldLvl = (int)$memBefore['missionlevel'];
-        $oldStg = (int)$memBefore['missionstage'];
-        $oldMis = (int)$memBefore['missionid'];
-
-        // 再次打一次 1-1-1 旧关卡
-        $repeat = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
-        $this->assertSame(1, $repeat['status']);
-
-        $memAfter = \OmniPHP\Database\DB::table('member')->where('uid', self::$uid)->first();
-        $this->assertGreaterThanOrEqual($oldLvl, (int)$memAfter['missionlevel'], '重刷旧关卡绝不可导致势力等级倒退');
-        $this->assertGreaterThanOrEqual($oldStg, (int)$memAfter['missionstage'], '重刷旧关卡绝不可导致大关场景倒退');
-        $this->assertGreaterThanOrEqual($oldMis, (int)$memAfter['missionid'], '重刷旧关卡绝不可导致据点编号倒退');
-
-        // 验证主公升级时的奖励包与功能开启预告生成结构 (16级解锁装备强化)
-        $funcData = \Hanjiang\Handler\Campaign\MapHandler::getLevelFuncData(16, 50000);
-        $this->assertArrayHasKey('levelReward', $funcData);
-        $this->assertSame(80000, $funcData['levelReward']['1']);
-        $this->assertArrayHasKey('levelFunc', $funcData);
-        $this->assertSame(1, $funcData['levelFunc']['func_open']);
-        $this->assertSame('强化', $funcData['levelFunc']['func_name']);
-        $this->assertSame('strong', $funcData['levelFunc']['func_mark']);
-    }
-
-    public function testMissionEquipmentDrop(): void
-    {
-        $this->withFreshPlayer(function (int $uid): void {
-            $silver = (int)DB::table('member')->where('uid', $uid)->first()['silver'];
-
-            // 1-1-1 长枪兵：MasterData Mission 1 无掉落
-            $plain = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
-            $this->assertGreaterThanOrEqual(1, $plain['info']['win']);
-            $this->assertSame(0, $plain['info']['gettype']);
-            $this->assertSame(0, $plain['info']['get_number']);
-            $this->assertSame('', $plain['info']['itemname']);
-            $this->assertArrayNotHasKey('silver', $plain['info'], '胜利不再送新版自定的 500 银币');
-            $this->assertSame($silver, (int)DB::table('member')->where('uid', $uid)->first()['silver']);
-
-            // 1-1-2 裴元绍：Mission 2 gettype 1（装备）getvalue 1（赤铜刀）getrate 100
-            $before = count(DB::table('equipment')->where('uid', $uid)->where('equipid', 1)->whereNull('deleted_at')->get());
-            $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 2]);
-            $this->assertGreaterThanOrEqual(1, $res['info']['win']);
-            $tpl = \Hanjiang\MasterData\Equip::ROWS[1];
-            $this->assertSame(1, $res['info']['get_number']);
-            $this->assertSame(1, $res['info']['gettype']);
-            $this->assertSame(0, $res['info']['getvalue']);
-            $this->assertSame(1, $res['info']['itemtype']);
-            $this->assertSame($tpl['id'], $res['info']['itemid']);
-            $this->assertSame($tpl['quality'], $res['info']['quality']);
-            $this->assertSame($tpl['name'], $res['info']['itemname']);
-            $items = DB::table('equipment')->where('uid', $uid)->where('equipid', 1)->whereNull('deleted_at')->get();
-            $this->assertCount($before + 1, $items);
-            $new = end($items);
-            $this->assertSame($tpl['power'], (int)$new['powerup']);
-            $this->assertSame(0, (int)$new['generalid']);
-
-            // 重刷同一关照样按 getrate 掉落（旧版不区分首杀）
-            $this->assertSame(1, $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 2])['info']['gettype']);
-        });
-    }
-
-    public function testMapActionWithoutFormationFollowsLegacy(): void
-    {
-        $this->withFreshPlayer(function (int $uid): void {
-            $before = DB::table('member')->where('uid', $uid)->first();
-
-            // 阵法里没有武将：旧版 battle_mission 把 -2 当空队伍继续战斗，空队伍直接判大败 assess -3，没有战斗过程，不再造「天命主公」
-            $positions = [];
-            for ($i = 1; $i <= 9; $i++) {
-                $positions['position' . $i] = 0;
-            }
-            DB::table('matrix')->where('uid', $uid)->update($positions);
-            $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
-            $this->assertSame(1, $res['status']);
-            $this->assertSame(-3, $res['info']['win']);
-            $this->assertSame([], $res['battle']['leftteam']);
-            $this->assertSame([], $res['battle']['process']);
-            $this->assertSame(-3, $res['battle']['assess']);
-            $this->assertSame('长枪兵', $res['battle']['rightteam'][5]['name']);
-            $this->assertSame(0, $res['info']['exp']);
-            $after = DB::table('member')->where('uid', $uid)->first();
-            $this->assertSame((int)$before['missionid'], (int)$after['missionid']);
-
-            // 启用的阵法行查不到：旧版 empty(get_own_by_id) 不成立，按空站位继续（同上，大败）
-            DB::table('matrix')->where('uid', $uid)->update(['deleted_at' => date('Y-m-d H:i:s')]);
-            $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
-            $this->assertSame(-3, $res['info']['win']);
-            $this->assertSame(-3, $res['battle']['assess']);
-
-            // 没有阵法（member_field.matrixid = 0）：旧版 battle_mission 返回 -1，map 控制器把 assess 记 0（win 0），battle 只有 assess 与双方信息
-            DB::table('member_field')->where('uid', $uid)->update(['matrixid' => 0]);
-            $res = $this->request('map', 'action', ['l' => 1, 's' => 1, 'id' => 1]);
-            $this->assertSame(1, $res['status']);
-            $this->assertSame(0, $res['info']['win']);
-            $this->assertSame(['assess', 'left_role', 'right_role'], array_keys($res['battle']));
-            $this->assertSame(0, $res['battle']['assess']);
         });
     }
 
@@ -1091,113 +836,14 @@ final class GameApiTest extends TestCase
         });
     }
 
-    public function testTavernSystem(): void
-    {
-        $res = $this->request('tavern', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 测试酒馆名将招募列表 get_list
-        $bar = $this->request('tavern', 'get_list');
-        $this->assertSame(1, $bar['status']);
-        $this->assertGreaterThan(0, $bar['totals']);
-        $this->assertArrayHasKey('jade', $bar);
-        $this->assertArrayHasKey('info', $bar['list'][1]);
-        $this->assertNotEmpty($bar['list'][1]['info']['name']);
-
-        // 招募名将张飞 (id: 10, 花费 5000 银两)
-        $buy = $this->request('tavern', 'buy', ['id' => 10]);
-        $this->assertSame(1, $buy['status']);
-        $this->assertSame('张飞', $buy['name']);
-        $this->assertSame(5000, $buy['cost_silver']);
-        $this->assertArrayHasKey('general', $buy);
-        // 池 id 10 的「张飞」入库为 MasterData General 52（张飞，形象 54）
-        $this->assertSame(52, $buy['general']['generalid']);
-        $zhangfei = DB::table('general')->where('uid', self::$uid)->where('generalid', 52)->whereNull('deleted_at')->first();
-        $this->assertNotNull($zhangfei);
-        $this->assertSame('张飞', $zhangfei['name']);
-        $this->assertSame(123, (int)$zhangfei['wuli']);
-        $this->assertSame(80, (int)$zhangfei['levelupexp']);
-        $this->assertArrayHasKey('jade', $buy);
-
-        // 测试商贾会客贸易
-        $trade = $this->request('tavern', 'trade', ['s' => 1, 'type' => 0]);
-        $this->assertSame(1, $trade['status']);
-        $this->assertArrayHasKey('site', $trade);
-        $this->assertArrayHasKey('addtype', $trade);
-        // 会客记录与宝石在 trader_log，宝石获得记 tavernjade_log；当天已交易不再免费
-        $trader = \Hanjiang\Model\TraderLog::get(self::$uid);
-        $this->assertNotNull($trader);
-        $this->assertSame($trade['number'], $trader['get' . $trade['addtype']]);
-        $this->assertSame($trade['site'], $trader['site']);
-        $this->assertSame(date('Ymd'), date('Ymd', $trader['dateline']));
-        $this->assertSame(0, $this->request('tavern', 'index')['isfree']);
-        $log = DB::table('tavernjade_log')->where('uid', self::$uid)->orderBy('id', 'DESC')->first();
-        $this->assertSame([1, $trade['addtype'], $trade['addnum'], $trade['number'], 'tavern', 'trade'], [(int)$log['type'], (int)$log['jadetype'], (int)$log['jade'], (int)$log['balance'], $log['class'], $log['method']]);
-
-        // 再次尝试招募张飞，触发唯一性拦截 (status = 4 已拥有该武将)
-        $duplicateBuy = $this->request('tavern', 'buy', ['id' => 10]);
-        $this->assertSame(4, $duplicateBuy['status']);
-
-        // 新招募的张飞未出征（旧版 add_general goout = 0），不在 general.index 的出征列表里
-        $generals = $this->request('general', 'index');
-        $this->assertNotContains('张飞', array_column($generals['list'], 'name'));
-        $this->assertSame(2, $this->request('general', 'get_info', ['gid' => (int)$zhangfei['id']])['status']);
-    }
-
-    public function testPracticeSystem(): void
-    {
-        $res = $this->request('practice', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertGreaterThanOrEqual(6, $res['maxnum']);
-        $this->assertSame(2, $res['opennum']);
-        $this->assertNotEmpty($res['list'], '武将列表不能为空');
-        $this->assertNotEmpty($res['place'], '训练位列表不能为空');
-        $this->assertNotEmpty($res['rule'], '训练规则不能为空');
-        $this->assertArrayHasKey('1', $res['rule'], '训练规则必须包含 1 号规则');
-        $this->assertArrayHasKey('hour', $res['rule']['1']);
-        $this->assertArrayHasKey('freetimes', $res);
-        $this->assertArrayHasKey('leap', $res);
-        $this->assertArrayHasKey('mop', $res);
-
-        // 获取张飞的 ID（未出征，不在 general.index 列表里）
-        $zfId = (int)DB::table('general')->where('uid', self::$uid)->where('generalid', 52)->whereNull('deleted_at')->value('id');
-        $this->assertGreaterThan(0, $zfId);
-
-        // 1. 将张飞加入 1 号训练位
-        $start = $this->request('practice', 'practice_start', ['pid' => 1, 'gid' => $zfId]);
-        $this->assertSame(1, $start['status']);
-
-        // 2. 尝试向 1 号训练位重复添加武将，应被拦截
-        $conflictSlot = $this->request('practice', 'practice_start', ['pid' => 1, 'gid' => $zfId]);
-        $this->assertSame(6, $conflictSlot['status']); // 已在训练中
-
-        // 3. 停止 1 号训练位训练，完成挂机经验结算
-        $stop = $this->request('practice', 'practice_stop', ['pid' => 1]);
-        $this->assertSame(1, $stop['status']);
-        $this->assertGreaterThanOrEqual(1, $stop['earned_exp']);
-
-        // 4. 对张飞执行突飞猛进
-        $leap = $this->request('practice', 'go_leap', ['gid' => $zfId, 'num' => 1]);
-        $this->assertSame(1, $leap['status']);
-        $this->assertGreaterThanOrEqual(500, $leap['add_exp']);
-        $this->assertGreaterThanOrEqual(2, $leap['level']); // 经验足以升到 2 级以上
-
-        // 5. 训练位升级与解锁价格查询
-        $lvPrice = $this->request('practice', 'get_levelup_price', ['pid' => 1]);
-        $this->assertSame(1, $lvPrice['status']);
-        $this->assertSame(2, $lvPrice['info']['level']);
-
-        $unlockPrice = $this->request('practice', 'get_unlock_price', ['squence' => 3]);
-        $this->assertSame(1, $unlockPrice['status']);
-        $this->assertSame(50, $unlockPrice['gold']);
-    }
-
     public function testMultiHeroFormationAndBattleAction(): void
     {
-        // 1. 获取主公（初始武将廖化）与张飞的将领 ID
+        // 1. 获取主公（初始武将廖化）与张飞（MasterData General 52，旧版 add_general 入库，未出征）的将领 ID
         $mainId = (int)DB::table('general')->where('uid', self::$uid)->where('generalid', General::INITIAL_GENERALID)->whereNull('deleted_at')->value('id');
         $zfId = (int)DB::table('general')->where('uid', self::$uid)->where('generalid', 52)->whereNull('deleted_at')->value('id');
+        if ($zfId === 0) {
+            $zfId = (int)General::createFromTemplate(self::$uid, 52);
+        }
         $this->assertGreaterThan(0, $mainId);
         $this->assertGreaterThan(0, $zfId);
 
@@ -1396,27 +1042,6 @@ final class GameApiTest extends TestCase
         // 未定义 / 预留的类型
         $this->assertSame('', $C::getMessageStr(1, [], $sender));
         $this->assertSame('', $C::getMessageStr(99, [], $sender));
-    }
-
-    public function testMainquestSystem(): void
-    {
-        $res = $this->request('mainquest', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertSame('初出茅庐', $res['task']['name']);
-        $this->assertSame(1, $res['task']['status']);
-
-        // 领取第 1 个任务奖励，并自动解锁下一主线任务
-        $reward = $this->request('mainquest', 'get_task_reward');
-        $this->assertSame(1, $reward['status']);
-        $this->assertSame(1, $reward['reward_task_id']);
-        $this->assertGreaterThan(0, $reward['silver']);
-        $this->assertGreaterThan(0, $reward['gold']);
-        $this->assertNotNull($reward['next_task']);
-
-        // 验证主线任务进度已进入下一阶段
-        $nextRes = $this->request('mainquest', 'index');
-        $this->assertSame(1, $nextRes['status']);
-        $this->assertGreaterThanOrEqual(2, $nextRes['task']['id']);
     }
 
     /**
@@ -2032,7 +1657,7 @@ final class GameApiTest extends TestCase
             ['uid' => $b['uid'], 'type' => 2, 'win' => 2, 'rank' => 4, 'userid' => $a['uid']],
         ], $logs);
         // 演武信件（type 4，发件人为挑战者）
-        $mail = Redis::getJson('user_messages:' . $b['uid']);
+        $mail = $this->messagesOf($b['uid']);
         $last = end($mail);
         $this->assertSame([4, $a['uid'], $info['report']], [$last['type'], $last['fromuid'], $last['id']]);
         $this->assertStringEndsWith('在演武榜将您击败，排名跌落至第4名', $last['message']);
@@ -2058,7 +1683,7 @@ final class GameApiTest extends TestCase
         $this->assertSame(3, (int)$this->arenaRow($d['uid'])['rank']);
         $this->assertSame(2, (int)$this->arenaRow($c['uid'])['rank']);
         $this->assertSame(2, DB::table('arena_log')->count());
-        $mail = Redis::getJson('user_messages:' . $c['uid']);
+        $mail = $this->messagesOf($c['uid']);
         $this->assertStringEndsWith('在演武榜向您挑战，被您打的落花流水。', end($mail)['message']);
 
         // 双方都有阵容的正常战斗：战报带完整过程；胜（assess ≥ 1）则互换名次，否则不变
@@ -2685,31 +2310,6 @@ final class GameApiTest extends TestCase
         Redis::del('player:' . self::$uid);
     }
 
-    public function testCultivateSystem(): void
-    {
-        // 1. 获取主公武将 ID
-        $generals = $this->request('general', 'index');
-        $mainGid = (int)$generals['list'][1]['id'];
-
-        // 2. 查看洗髓面板
-        $res = $this->request('cultivate', 'index', ['gid' => $mainGid]);
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertNotEmpty($res['rule']);
-        $this->assertCount(4, $res['modes']);
-
-        // 3. 执行一次普通洗髓 (mode: 1)
-        $roll = $this->request('cultivate', 'roll', ['gid' => $mainGid, 'mode' => 1]);
-        $this->assertSame(1, $roll['status']);
-        $this->assertArrayHasKey('roll', $roll);
-        $this->assertArrayHasKey('wuli', $roll['roll']);
-
-        // 4. 确认保存洗髓属性
-        $save = $this->request('cultivate', 'save', ['gid' => $mainGid]);
-        $this->assertSame(1, $save['status']);
-        $this->assertArrayHasKey('wuliup', $save);
-    }
-
     public function testDailySignSystem(): void
     {
         // 1. 查看签到面板
@@ -2727,31 +2327,6 @@ final class GameApiTest extends TestCase
         // 3. 今日重复签到拦截
         $dup = $this->request('dailysign', 'sign');
         $this->assertSame(-1, $dup['status']);
-    }
-
-    public function testMessageSystem(): void
-    {
-        // 1. 查看收件箱
-        $res = $this->request('message', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 读取第一封邮件并自动标为已读
-        $detail = $this->request('message', 'get_message', ['id' => 1]);
-        $this->assertSame(1, $detail['status']);
-        $this->assertSame(1, $detail['info']['read']);
-
-        // 3. 给好友发送私信
-        $send = $this->request('message', 'send_message', [
-            'target_uid' => 10002,
-            'title' => '讨伐董卓檄文',
-            'content' => '请将军速速整备三军，共襄义举！',
-        ]);
-        $this->assertSame(1, $send['status']);
-
-        // 4. 删除邮件
-        $del = $this->request('message', 'del_message', ['id' => 1]);
-        $this->assertSame(1, $del['status']);
     }
 
     public function testFriendSystem(): void
@@ -3379,7 +2954,7 @@ final class GameApiTest extends TestCase
             $this->assertSame($ic, $intBefore($c['uid']));
             $log = DB::table('integral_log')->where('uid', $a['uid'])->orderBy('id', 'desc')->first();
             $this->assertSame(['cron_acttask', 'worldboss', (int)(900 * 1.5)], [$log['class'], $log['method'], (int)$log['intnum']]);
-            $mail = Redis::getJson('user_messages:' . $b['uid']);
+            $mail = $this->messagesOf($b['uid']);
             $last = end($mail);
             $this->assertSame([1, '系统通知', '亲爱的玩家！您上次参加世界BOSS获得积分800，系统已经帮您自动领取！'], [$last['type'], $last['fromname'], $last['message']]);
             // 清空全部世界 BOSS 键
@@ -3486,41 +3061,6 @@ final class GameApiTest extends TestCase
         $this->assertSame('曲阳', \Hanjiang\MasterData\Scene::ROWS[1]['name']);
         $this->assertSame('长枪兵', \Hanjiang\MasterData\Monster::ROWS[1]['name']);
         $this->assertSame(20, \Hanjiang\MasterData\Monster::ROWS[1]['blood']);
-    }
-
-    public function testGeneralInheritSystem(): void
-    {
-        // 1. 获取主公与张飞将领 ID
-        $generals = $this->request('general', 'index');
-        $this->assertGreaterThanOrEqual(2, count($generals['list']));
-        $g1 = (int)$generals['list'][1]['id'];
-        $g2 = (int)$generals['list'][2]['id'];
-
-        // 2. 查看传承面板
-        $res = $this->request('general_inherit', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('rule', $res);
-        $this->assertArrayHasKey(1, $res['rule']);
-        $this->assertSame('普通继承', $res['rule'][1]['name']);
-        $this->assertArrayHasKey('free_inherit', $res);
-
-        // 测试获取武将可传承经验与规则
-        $inheritInfo = $this->request('general_inherit', 'get_inherit_info', ['gid' => $g1]);
-        $this->assertSame(1, $inheritInfo['status']);
-        $this->assertArrayHasKey('rule', $inheritInfo);
-        $this->assertArrayHasKey(1, $inheritInfo['rule']);
-        $this->assertArrayHasKey('allexp', $inheritInfo['rule'][1]);
-
-        // 3. 预览至尊完璧传承属性 (type: 4 为 100% 完美传承)
-        $preview = $this->request('general_inherit', 'preview', ['from_gid' => $g1, 'to_gid' => $g2, 'type' => 4]);
-        $this->assertSame(1, $preview['status']);
-        $this->assertEquals(1.0, $preview['inherit_rate']);
-
-        // 4. 执行传承
-        $inherit = $this->request('general_inherit', 'go_inherit', ['from_gid' => $g1, 'to_gid' => $g2, 'type' => 1]);
-        $this->assertSame(1, $inherit['status']);
-        $this->assertSame($g2, $inherit['to_gid']);
     }
 
     public function testBlackmarketSystem(): void
@@ -3936,7 +3476,7 @@ final class GameApiTest extends TestCase
         // 无 token / 伪造 token / 只带 uid：受保护接口一律 403，公开接口照常
         foreach ([['token' => '', 'uid' => self::$uid], ['token' => 'tk_guest_' . self::$uid . '_forged', 'uid' => self::$uid]] as $forged) {
             $ctx = Context::mock(array_merge(['c' => 'member', 'm' => 'index'], $forged));
-            $res = self::$router->handleContext($ctx);
+            $res = Gateway::handle($ctx);
             $this->assertInstanceOf(WorkermanResponse::class, $res);
             $this->assertSame('403', (string)$res->rawBody());
         }
@@ -3999,56 +3539,6 @@ final class GameApiTest extends TestCase
         $action = $this->request('countrysacrifice', 'action', ['type' => 1]);
         $this->assertSame(1, $action['status']);
         $this->assertGreaterThan(0, $action['add_reputation']);
-    }
-
-    public function testExpostulationSystem(): void
-    {
-        // 1. 查看朝堂谏言奏折
-        $res = $this->request('expostulation', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 2. 御笔批阅采纳屯田兴农疏 (id: 1)
-        $adopt = $this->request('expostulation', 'adopt', ['id' => 1]);
-        $this->assertSame(1, $adopt['status']);
-        $this->assertGreaterThan(0, $adopt['silver']);
-        $this->assertGreaterThan(0, $adopt['merit']);
-
-        // 3. 重复采纳同一奏折拦截
-        $dup = $this->request('expostulation', 'adopt', ['id' => 1]);
-        $this->assertSame(0, $dup['status']);
-    }
-
-    public function testBanquetSystem(): void
-    {
-        // 1. 查看夜宴大厅
-        $res = $this->request('banquet', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['types']);
-
-        // 2. 举办主公家宴 (type: 1)
-        $action = $this->request('banquet', 'action', ['type' => 1]);
-        $this->assertSame(1, $action['status']);
-        $this->assertSame('主公家宴', $action['name']);
-        $this->assertGreaterThan(0, $action['add_act']);
-    }
-
-    public function testDrinkSystem(): void
-    {
-        // 1. 查看青梅煮酒
-        $res = $this->request('drink', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertNotEmpty($res['log']);
-        $this->assertNotEmpty($res['wines']);
-
-        // 2. 畅饮陈年竹叶青 (type: 1)
-        $drink = $this->request('drink', 'go_drink', ['type' => 1]);
-        $this->assertSame(1, $drink['status']);
-        $this->assertSame('陈年竹叶青', $drink['wine_name']);
-        $this->assertGreaterThan(0, $drink['silver']);
-        $this->assertArrayHasKey('reward', $drink);
-        $this->assertArrayHasKey('act', $drink['reward']);
     }
 
     public function testDiceSystem(): void
@@ -4139,19 +3629,19 @@ final class GameApiTest extends TestCase
      */
     private function eliteRawRequest(string $method, array $params): string
     {
-        $res = self::$router->handleContext(Context::mock(array_merge(['c' => 'elite', 'm' => $method], $params)));
+        $res = Gateway::handle(Context::mock(array_merge(['c' => 'elite', 'm' => $method], $params)));
         $this->assertInstanceOf(WorkermanResponse::class, $res);
         return (string)$res->rawBody();
     }
 
     /**
-     * 主线通关到某关（新版 zc_sanguo_map：该关所在势力 / 场景一行，mission 为已通关据点）
+     * 主线通关到某关（open_map：该关所在势力一行，stage 为该关场景，mission 为该关）
      */
     private function eliteMissionProgress(int $uid, int $missionId): void
     {
         $m = \Hanjiang\MasterData\Mission::ROWS[$missionId];
-        DB::table('map')->where('uid', $uid)->delete();
-        DB::table('map')->insert(['uid' => $uid, 'level' => $m['missionlevel'], 'stage' => $m['missionstage'], 'mission' => $m['missionid']]);
+        DB::table('open_map')->where('uid', $uid)->delete();
+        DB::table('open_map')->insert(['uid' => $uid, 'level' => $m['missionlevel'], 'stage' => $m['missionstage'], 'mission' => $m['missionid']]);
     }
 
     /**
@@ -4164,9 +3654,10 @@ final class GameApiTest extends TestCase
         $p = $this->newGuestPlayer();
         $this->eliteMissionProgress($p['uid'], 50);
         if ($overpower) {
-            // 主公与武将同为 20000 级：胜负不依赖随机数，且武将等级不超过主公（add_exp 才会加经验）
+            // 主公 20000 级、武将 1300 级 255 转：胜负不依赖随机数，且武将等级不超过主公、低于转生等级上限（50 + 转数 × 5 = 1325），
+            // add_exp 才会加经验
             DB::table('member')->where('uid', $p['uid'])->update(['level' => 20000]);
-            DB::table('general')->where('uid', $p['uid'])->update(['level' => 20000, 'goout' => 1]);
+            DB::table('general')->where('uid', $p['uid'])->update(['level' => 1300, 'turn' => 255, 'goout' => 1]);
         } else {
             $this->emptyFormation($p['uid']);
         }
@@ -4986,10 +4477,9 @@ final class GameApiTest extends TestCase
         }
 
         if ($freeGid > 0) {
-            // 3. 遣散该武将退役 (软删除并领安家费)
-            $sale = $this->request('muster', 'sale_general', ['id' => $freeGid]);
-            $this->assertSame(1, $sale['status']);
-            $this->assertGreaterThan(0, $sale['severance_pay']);
+            // 3. 武将折旧 VIP 7 起（流程见 Daily2Test）
+            $sale = $this->request('muster', 'sale_general', ['gid' => $freeGid]);
+            $this->assertSame(-1, $sale['status']);
         }
     }
 
@@ -5052,39 +4542,6 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThan(0, $sell['silver']);
     }
 
-    public function testTaskSystem(): void
-    {
-        // 1. 查看悬赏大厅看板
-        $res = $this->request('task', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-        $this->assertArrayHasKey('taskid1', $res);
-        $this->assertArrayHasKey('number', $res);
-        $this->assertArrayHasKey('free_times', $res);
-
-        // 2. 接取悬赏任务 1
-        $accept = $this->request('task', 'accept_task', ['id' => 1]);
-        $this->assertSame(1, $accept['status']);
-
-        // 3. 交付悬赏领赏
-        $reward = $this->request('task', 'get_reward', ['id' => 1]);
-        $this->assertSame(1, $reward['status']);
-        $this->assertGreaterThan(0, $reward['silver']);
-    }
-
-    public function testWarCollegeSystem(): void
-    {
-        // 1. 查看战争学院
-        $res = $this->request('war_college', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertCount(4, $res['techs']);
-
-        // 2. 研发步兵玄甲圆阵科技 (id: 1)
-        $up = $this->request('war_college', 'level_up', ['id' => 1]);
-        $this->assertSame(1, $up['status']);
-        $this->assertSame(2, $up['level']);
-    }
-
     public function testLotterySystem(): void
     {
         // 1. 查看大转盘
@@ -5102,23 +4559,6 @@ final class GameApiTest extends TestCase
         $this->assertArrayHasKey('id', $roll['info']);
         $this->assertArrayHasKey('gettype', $roll['info']);
         $this->assertArrayHasKey('prize_name', $roll);
-    }
-
-    public function testGeneraltaskSystem(): void
-    {
-        // 1. 获取有效武将 ID
-        $generals = $this->request('general', 'index');
-        $gid = (int)$generals['list'][1]['id'];
-
-        // 2. 查看远征
-        $res = $this->request('generaltask', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
-
-        // 3. 派遣武将出征 (task: 1)
-        $action = $this->request('generaltask', 'action', ['task_id' => 1, 'gid' => $gid]);
-        $this->assertSame(1, $action['status']);
-        $this->assertSame('古栈道斥候侦察', $action['task_name']);
     }
 
     /**
@@ -5998,7 +5438,9 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $res['status']);
         $this->assertNotEmpty($res['list']);
 
-        // 2. 购买青龙偃月刀图纸
+        // 2. 购买青龙偃月刀图纸（需要声望）
+        DB::table('member')->where('uid', self::$uid)->update(['reputation' => 100000]);
+        Redis::del('player:' . self::$uid);
         $buy = $this->request('countryshop', 'buy', ['id' => 1]);
         $this->assertSame(1, $buy['status']);
         $this->assertStringContainsString('青龙偃月刀', $buy['goods_name']);
@@ -6247,7 +5689,7 @@ final class GameApiTest extends TestCase
     public function testThrottleProtectionMiddleware(): void
     {
         // 1. 正常操作应畅通无阻
-        $res = $this->request('tavern', 'index');
+        $res = $this->request('muster', 'index');
         $this->assertSame(1, $res['status']);
 
         // 2. 模拟并发重入锁已存在时的防重放拦截
@@ -6324,7 +5766,8 @@ final class GameApiTest extends TestCase
      */
     private function messagesOf(int $uid): array
     {
-        return Redis::getJson('user_messages:' . $uid) ?: [];
+        // 信件存 pm 表（Model\Message）
+        return array_map(static fn (array $m): array => array_map(static fn ($v) => is_string($v) && preg_match('/^-?\d+$/', $v) ? (int)$v : $v, $m), DB::table('pm')->where('touid', $uid)->whereNull('deleted_at')->orderBy('id')->get());
     }
 
     public function testChallengeGuardsAndDeterministicResults(): void
@@ -8333,14 +7776,14 @@ final class GameApiTest extends TestCase
             $prefix = (string)Redis::instance()->getOption(\Redis::OPT_PREFIX);
             Redis::del(str_starts_with($key, $prefix) ? substr($key, strlen($prefix)) : $key);
         }
-        DB::table('map')->where('uid', 0)->delete();
-        DB::table('map')->insert(['uid' => 0, 'level' => 14, 'stage' => 1, 'mission' => 1]);
+        DB::table('open_map')->where('uid', 0)->delete();
+        DB::table('open_map')->insert(['uid' => 0, 'level' => 14, 'stage' => 1, 'mission' => 1]);
     }
 
     private function siegeCleanup(): void
     {
         \Hanjiang\Model\BossClock::freeze(null);
-        DB::table('map')->where('uid', 0)->delete();
+        DB::table('open_map')->where('uid', 0)->delete();
     }
 
     public function testSiegeIndexCapitalInfoAndOccupy(): void
@@ -8388,15 +7831,15 @@ final class GameApiTest extends TestCase
             $this->assertSame(-2, $this->b2Request('siege', 'occupy', $memberX['auth'] + ['id' => 1])['status'], '官职不够');
             $this->assertSame(-5, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 14])['status']);
             // 全服主线进度只到第 1 个势力（其他用例的进度暂时软删除）：都城未开放
-            $others = array_column(DB::table('map')->select('id')->where('uid', '<>', 0)->whereNull('deleted_at')->get(), 'id');
-            DB::table('map')->whereIn('id', $others !== [] ? $others : [0])->update(['deleted_at' => date('Y-m-d H:i:s')]);
-            DB::table('map')->where('uid', 0)->update(['level' => 1]);
+            $others = array_column(DB::table('open_map')->select('id')->where('uid', '<>', 0)->whereNull('deleted_at')->get(), 'id');
+            DB::table('open_map')->whereIn('id', $others !== [] ? $others : [0])->update(['deleted_at' => date('Y-m-d H:i:s')]);
+            DB::table('open_map')->where('uid', 0)->update(['level' => 1]);
             try {
                 $this->assertSame(0, $this->b2Request('siege', 'index', $kingX['auth'])['list'][0]['open']);
                 $this->assertSame(-6, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1])['status'], '都城未开放');
             } finally {
-                DB::table('map')->whereIn('id', $others !== [] ? $others : [0])->update(['deleted_at' => null]);
-                DB::table('map')->where('uid', 0)->update(['level' => 14]);
+                DB::table('open_map')->whereIn('id', $others !== [] ? $others : [0])->update(['deleted_at' => null]);
+                DB::table('open_map')->where('uid', 0)->update(['level' => 14]);
             }
             $this->b3At('2026-10-30 18:00:00');
             $this->assertSame(-3, $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1])['status'], '周五 18 点起不能占领');

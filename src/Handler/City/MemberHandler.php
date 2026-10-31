@@ -6,7 +6,10 @@ namespace Hanjiang\Handler\City;
 
 use Hanjiang\Handler\Pvp\SiegeHandler;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\DailyTask;
 use Hanjiang\Model\General;
+use Hanjiang\Model\MainQuestTask;
+use Hanjiang\Model\OpenMap;
 use Hanjiang\Model\OwnMatrix;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\WorldBoss;
@@ -84,6 +87,8 @@ final class MemberHandler
                 'missionstage' => 1,
                 'missionid' => 1,
             ]);
+            // 初始化地图（同注册：开启第一个势力）
+            OpenMap::init($uid);
             $member = DB::table('member')->where('uid', $uid)->first();
         }
 
@@ -122,7 +127,6 @@ final class MemberHandler
             'missionlevel' => (int)$member['missionlevel'],
             'missionstage' => (int)$member['missionstage'],
             'missionid' => (int)$member['missionid'],
-            'mainquest' => [],
             'attackcd' => [
                 'status' => (int)($field['attackstatus'] ?? 0),
                 'cd' => 0,
@@ -157,13 +161,6 @@ final class MemberHandler
             // 世界 BOSS 开启状态（旧版 member.php:worldboss_init）
             'openboss' => 0,
             'openbossreward' => 0,
-            'daily_task' => [
-                'status' => 0,
-                'number' => 0,
-                'plan' => 0,
-                'value' => 0,
-                'type' => 0,
-            ],
             'appreview' => 0,
             'serverhold' => '',
             'onmine' => 0,
@@ -191,19 +188,35 @@ final class MemberHandler
 
     /**
      * 随时间变化的主城标识（不进玩家缓存）：世界 BOSS（worldboss_init）、国战提示（get_country_war）、
-     * 国家矿可收获 oncountrymine（member_field.oncountrymine 到期）
+     * 国家矿可收获 oncountrymine（member_field.oncountrymine 到期）、点将台新武将气泡 ongeneral、新信件提示 newpm / newmail、日常任务 daily_task、
+     * 主线任务 mainquest
      *
      * @return array<string, mixed>
      */
     private static function liveInfo(int $uid, int $level, int $country): array
     {
         $now = BossClock::now();
-        $onCountryMine = (int)DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->value('oncountrymine');
+        $fieldFlags = DB::table('member_field')->select('oncountrymine', 'ongeneral')->where('uid', $uid)->whereNull('deleted_at')->first() ?? [];
+        $onCountryMine = (int)($fieldFlags['oncountrymine'] ?? 0);
+        $notice = DB::table('member')->select('newpm', 'newmail')->where('uid', $uid)->whereNull('deleted_at')->first() ?? [];
+        $time = time();
+        // 主线任务（member.php get_task_list；初始化锁被占等情形为空列表）
+        $mainquest = MainQuestTask::taskList($uid, $time);
         return array_merge(
             WorldBoss::memberInit($uid, $level, $now),
             SiegeHandler::countryWar(['uid' => $uid, 'country' => $country], $now),
             // 判断国家矿是否可收获
             ['oncountrymine' => $onCountryMine > 0 && $now >= $onCountryMine ? 1 : 0],
+            // 判断点将台是否有新武将（获得武将时置 1，进入点将台时清 0）
+            ['ongeneral' => (int)($fieldFlags['ongeneral'] ?? 0) ? 1 : 0],
+            [
+                // 新信件提示（旧版 member.newpm / newmail）
+                'newpm' => (int)($notice['newpm'] ?? 0),
+                'newmail' => (int)($notice['newmail'] ?? 0),
+                // 日常任务（41 级以上：task_model->get_action_task_info）
+                'daily_task' => $level >= DailyTask::OPEN_LEVEL ? DailyTask::actionTaskInfo($uid, $time) : ['status' => 0],
+                'mainquest' => $mainquest['status'] === 1 ? $mainquest['list'] : [],
+            ],
         );
     }
 
@@ -272,6 +285,21 @@ final class MemberHandler
     }
 
     /**
+     * 更新推图位置: c=member&m=updatemissionsite（site：1 世界、2 势力、3 关卡；新手引导调用）
+     *
+     * 移植旧版 controllers/member.php:updatemissionsite（update_member(['missionsite' => site])），恒返回 status 1。
+     */
+    public static function updatemissionsite(Context $ctx): array
+    {
+        $uid = self::resolveUid($ctx);
+        $site = $ctx->input('site');
+        DB::table('member')->where('uid', $uid)->whereNull('deleted_at')
+            ->update(['missionsite' => is_scalar($site) ? (int)$site : 0]);
+        Redis::del('player:' . $uid);
+        return ['status' => 1];
+    }
+
+    /**
      * 重置当前账号进度至 1 级初始新手状态: c=member&m=reset_account
      */
     public static function reset_account(Context $ctx): array
@@ -299,7 +327,8 @@ final class MemberHandler
             ]);
 
             // 2. 清空并重建关联动态数据
-            DB::table('map')->where('uid', $uid)->delete();
+            DB::table('open_map')->where('uid', $uid)->delete();
+            DB::table('mission_log')->where('uid', $uid)->delete();
             DB::table('equipment')->where('uid', $uid)->delete();
             DB::table('general')->where('uid', $uid)->delete();
             DB::table('matrix')->where('uid', $uid)->delete();
@@ -309,11 +338,12 @@ final class MemberHandler
 
             // 旧版 init_matrix(1, uid, 2, gid)：初始武将放在 1 号阵法 2 号位，并启用 1 号阵法
             OwnMatrix::init($uid, OwnMatrix::INITIAL_MID, OwnMatrix::INITIAL_POSITION, $genId);
+            // 重新开启第一个势力（同注册 add_map_log）
+            OpenMap::init($uid);
             DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update(['matrixid' => OwnMatrix::INITIAL_MID]);
 
             // 4. 清空 Redis 缓存
             Redis::del('player:' . $uid);
-            Redis::del('mainquest:task_id:' . $uid);
             Redis::del("chat_last_read:{$uid}");
         }
 
@@ -327,9 +357,9 @@ final class MemberHandler
     /**
      * 原子安全扣除玩家货币/资源 (委托至 Member 领域模型)
      */
-    public static function deductCurrency(int $uid, int $silver = 0, int $gold = 0, int $act = 0): bool
+    public static function deductCurrency(int $uid, int $silver = 0, int $gold = 0, int $act = 0, int $goldType = 1): bool
     {
-        return Member::deductCurrency($uid, $silver, $gold, $act);
+        return Member::deductCurrency($uid, $silver, $gold, $act, $goldType);
     }
 
     /**

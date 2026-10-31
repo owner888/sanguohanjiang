@@ -7,6 +7,7 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Epic;
 use Hanjiang\MasterData\EpicChip;
+use Hanjiang\Model\DailyTask;
 use Hanjiang\Model\Member;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -23,8 +24,9 @@ use OmniPHP\Http\Context;
  *
  * 客户端调用：index、select_epic、refresh、force、buy_lock_times、buy_refresh_times（epicpop.js）。
  *
- * 依赖未移植：日常任务 task_model->task_action(14)（刷新，主公 41 级以上）；member_model->sub_gold 的 gold_log 元宝流水、
- * 日常任务 task_model->task_action(5)、翻牌活动计数；add_reputation 的声望流水 _reputation_log。
+ * 刷新计日常任务 14（主公 41 级以上）；元宝 / 声望增减由 Member 记流水，元宝消耗另计日常任务 5。
+ *
+ * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class EpicHandler
 {
@@ -329,7 +331,10 @@ final class EpicHandler
                 $log = array_merge($log, $site);
             }
 
-            // 依赖未移植：日常任务 task_model->task_action(14)（天下史诗刷新，主公 41 级以上）
+            // 日常任务(14是天下史诗刷新对应的类型)
+            if ((int)$member['level'] >= DailyTask::OPEN_LEVEL) {
+                DailyTask::action($uid, DailyTask::TYPE_EPIC);
+            }
 
             $return['status'] = 1;
             $return['member'] = self::output($log);

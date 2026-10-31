@@ -6,20 +6,13 @@ namespace Hanjiang\Tests\Feature;
 
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
-use Hanjiang\Handler\HandlerRegistry;
-use Hanjiang\Http\Router;
 use Hanjiang\MasterData\BeautyDialogue;
 use Hanjiang\MasterData\BeautySkill;
-use Hanjiang\Middleware\AuthMiddleware;
-use Hanjiang\Middleware\CorsMiddleware;
-use Hanjiang\Middleware\DailyCronMiddleware;
-use Hanjiang\Middleware\GameProtocolMiddleware;
-use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
-use Hanjiang\Middleware\ThrottleMiddleware;
 use Hanjiang\Model\Beauty;
 use Hanjiang\Model\MemberIntegral;
 use Hanjiang\Model\TraderLog;
 use Hanjiang\Tests\Support\ScriptedRandomEngine;
+use Hanjiang\Tests\Support\Gateway;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -33,25 +26,6 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  */
 final class BeautyTest extends TestCase
 {
-    private static Router $router;
-
-    public static function setUpBeforeClass(): void
-    {
-        date_default_timezone_set('Asia/Shanghai');
-        $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        DB::init($dbConfig['mysql']);
-        Redis::init($dbConfig['redis']);
-
-        $router = new Router(dirname(__DIR__, 2) . '/public');
-        $router->use(new CorsMiddleware());
-        $router->use(new ResponseEnvelopeMiddleware());
-        $router->use(new AuthMiddleware());
-        $router->use(new ThrottleMiddleware());
-        $router->use(new DailyCronMiddleware());
-        $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
-        self::$router = $router;
-    }
-
     /**
      * @param array<string, mixed> $auth
      * @param array<string, mixed> $params
@@ -60,7 +34,7 @@ final class BeautyTest extends TestCase
     private function request(array $auth, string $controller, string $method, array $params = []): array
     {
         $ctx = Context::mock(array_merge(['c' => $controller, 'm' => $method], $auth, $params));
-        $res = self::$router->handleContext($ctx);
+        $res = Gateway::handle($ctx);
         if ($res instanceof WorkermanResponse) {
             $json = json_decode((string)$res->rawBody(), true);
             $this->assertIsArray($json, "{$controller}.{$method}: " . $res->rawBody());
@@ -273,6 +247,8 @@ final class BeautyTest extends TestCase
         $this->assertSame(5, $this->request($p['auth'], 'beauty', 'active_index')['greeting']);
 
         // 赠礼：500 元宝 +50 好感度；钻石不足 -6
+        // 把好感度时间钉在未来：衰减按「同一秒」算（ceil(0 / 3600) = 0），不受测试跨秒影响
+        DB::table('beauty_own_log')->where('uid', $uid)->where('beauty_id', 1)->update(['ratio_time' => time() + 60]);
         $gift = $this->request($p['auth'], 'beauty', 'gift', ['beauty_id' => 1, 'type' => 1]);
         $this->assertSame([1, 1500 - $this->goldGain($act['reward'])], [$gift['status'], $gift['gold'] - $this->goldGain($act['reward'])]);
         // 同一秒内衰减算出 +1（旧版公式 ratio - ceil(0 / 3600) + 1）：8 + 1 + 50
@@ -281,10 +257,12 @@ final class BeautyTest extends TestCase
         $this->assertContains($gift['say'], self::says(1, 8));
         $this->assertSame(['status' => -6, 'msg' => '钻石不足'], $this->request($p['auth'], 'beauty', 'gift', ['beauty_id' => 1, 'type' => 3]));
         MemberIntegral::change($uid, 30, 'beauty_diamond', 1, 'test', 'test');
+        DB::table('beauty_own_log')->where('uid', $uid)->where('beauty_id', 1)->update(['ratio_time' => time() + 60]);
         $gift3 = $this->request($p['auth'], 'beauty', 'gift', ['beauty_id' => 1, 'type' => 3]);
         $this->assertSame([1, 12 + $this->diamondGain($act['reward'])], [$gift3['status'], $gift3['diamond_num']]);
         $this->assertSame(100, self::own($uid, 1)['ratio']);
         // 好感度已满（没有衰减时 >= 100）
+        DB::table('beauty_own_log')->where('uid', $uid)->where('beauty_id', 1)->update(['ratio_time' => time() + 60]);
         $this->assertSame(['status' => -5, 'msg' => '美人好感度已满'], $this->request($p['auth'], 'beauty', 'gift', ['beauty_id' => 1, 'type' => 1]));
         // 没拥有的美人赠礼会建休息中的记录
         $this->assertSame(1, $this->request($p['auth'], 'beauty', 'gift', ['beauty_id' => 4, 'type' => 1])['status']);
@@ -381,7 +359,7 @@ final class BeautyTest extends TestCase
         $this->assertSame($silver + $expect, $this->memberValue($uid, 'silver'));
         $this->assertSame([0, 0], [self::own($uid, 4)['effect_time'], self::own($uid, 4)['effect_end_time']]);
         $this->assertSame(2, DB::table('beauty_speical_reward_log')->where('uid', $uid)->count());
-        $messages = Redis::getJson('user_messages:' . $uid) ?: [];
+        $messages = array_map(static fn (array $m): array => array_map(static fn ($v) => is_string($v) && preg_match('/^-?\d+$/', $v) ? (int)$v : $v, $m), DB::table('pm')->where('touid', $uid)->whereNull('deleted_at')->orderBy('id')->get());
         $this->assertSame('美人大乔的的技能已经失效，期间您一共获得银币' . $expect . ', 请您笑纳', end($messages)['message']);
         // 再进一次不重复发放
         $this->request($p['auth'], 'beauty', 'index');
@@ -578,7 +556,7 @@ final class BeautyTest extends TestCase
         $this->assertSame(1, $res['chip'][0]['own']);
         // 被抢方的升级失败并收到系统信件；另有一封掠夺信件（类型 13）
         $this->assertSame([0, 0], [self::own($ub, 1)['up_status'], self::own($ub, 1)['up_dateline']]);
-        $mails = Redis::getJson('user_messages:' . $ub) ?: [];
+        $mails = array_map(static fn (array $m): array => array_map(static fn ($v) => is_string($v) && preg_match('/^-?\d+$/', $v) ? (int)$v : $v, $m), DB::table('pm')->where('touid', $ub)->whereNull('deleted_at')->orderBy('id')->get());
         $types = array_column($mails, 'type');
         $this->assertContains(13, $types);
         $this->assertContains('您的【祝融碎片一】已经被【' . DB::table('member')->where('uid', $ua)->value('nickname') . '】抢夺,升级失败。', array_column($mails, 'message'));
@@ -612,8 +590,15 @@ final class BeautyTest extends TestCase
         self::clearLocks($ua);
         $this->assertSame(['status' => -10, 'msg' => '免费抢夺次数不足'], $this->request($a['auth'], 'beauty', 'loot_action', ['beauty_id' => 1, 'chip_id' => 3, 't' => $ub]));
 
-        // 战报回放依赖信件战报存储，未移植：没有指定的战报
-        $this->assertSame(['status' => -1, 'battle' => [], 'info' => []], $this->request($a['auth'], 'beauty', 'report_detail', ['id' => $res['info']['report']]));
+        // 战报回放：信件战报 pm_report（id 为掠夺信件 id）
+        $detail = $this->request($a['auth'], 'beauty', 'report_detail', ['id' => $res['info']['report']]);
+        $this->assertSame(1, $detail['status']);
+        $this->assertSame($res['battle']['leftteam'], $detail['battle']['leftteam']);
+        $this->assertSame(['name' => $res['battle']['left_role']['name'], 'level' => $res['battle']['left_role']['level']], $detail['battle']['left_role']);
+        $this->assertSame(['name' => $res['battle']['right_role']['name'], 'level' => $res['battle']['right_role']['level']], $detail['battle']['right_role']);
+        $this->assertSame(['win' => $res['battle']['assess']], $detail['info']);
+        // 没有的战报
+        $this->assertSame(['status' => -1, 'battle' => [], 'info' => []], $this->request($a['auth'], 'beauty', 'report_detail', ['id' => 99999999]));
     }
 
     public function testLootRealBattleAndLevelUpCompletedForTarget(): void

@@ -23,7 +23,7 @@ final class LegacyStats
      * 转生系数表
      * 来源：models/general_model.php:turn_coefficient
      */
-    private const array TURN_COEFFICIENT = [
+    public const array TURN_COEFFICIENT = [
         0 => 1,      1 => 1.15,
         2 => 1.3,    3 => 1.45,
         4 => 1.65,   5 => 1.85,

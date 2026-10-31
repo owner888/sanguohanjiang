@@ -7,6 +7,7 @@ namespace Hanjiang\Handler\City;
 use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\MasterData\NewyearVipreward;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\FreeLeap;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\Pay;
 use OmniPHP\Cache\Redis;
@@ -167,7 +168,7 @@ final class ViprewardHandler
             // 添加奖励
             if ($reward['type'] === 1) {
                 // 突飞卡
-                DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->increment('freeleap', $reward['value']);
+                FreeLeap::add($uid, $reward['value']);
             } elseif ($reward['type'] === 2) {
                 // 金宝石
                 TavernHandler::addJade($uid, 2, $reward['value'], 'vipreward', 'get_reward');

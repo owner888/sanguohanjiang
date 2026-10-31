@@ -4,22 +4,15 @@ declare(strict_types=1);
 
 namespace Hanjiang\Tests\Feature;
 
-use Hanjiang\Handler\HandlerRegistry;
-use Hanjiang\Http\Router;
 use Hanjiang\MasterData\NewyearVipreward;
 use Hanjiang\MasterData\VipWage;
-use Hanjiang\Middleware\AuthMiddleware;
-use Hanjiang\Middleware\CorsMiddleware;
-use Hanjiang\Middleware\DailyCronMiddleware;
-use Hanjiang\Middleware\GameProtocolMiddleware;
-use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
-use Hanjiang\Middleware\ThrottleMiddleware;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\General;
 use Hanjiang\Model\Pay;
 use Hanjiang\Model\Rebate;
 use Hanjiang\Model\TraderLog;
 use Hanjiang\Model\Vip;
+use Hanjiang\Tests\Support\Gateway;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -32,25 +25,6 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  */
 final class PayTest extends TestCase
 {
-    private static Router $router;
-
-    public static function setUpBeforeClass(): void
-    {
-        date_default_timezone_set('Asia/Shanghai');
-        $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        DB::init($dbConfig['mysql']);
-        Redis::init($dbConfig['redis']);
-
-        $router = new Router(dirname(__DIR__, 2) . '/public');
-        $router->use(new CorsMiddleware());
-        $router->use(new ResponseEnvelopeMiddleware());
-        $router->use(new AuthMiddleware());
-        $router->use(new ThrottleMiddleware());
-        $router->use(new DailyCronMiddleware());
-        $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
-        self::$router = $router;
-    }
-
     protected function tearDown(): void
     {
         BossClock::freeze(null);
@@ -65,7 +39,7 @@ final class PayTest extends TestCase
     private function request(array $auth, string $controller, string $method, array $params = []): array
     {
         $ctx = Context::mock(array_merge(['c' => $controller, 'm' => $method], $auth, $params));
-        $res = self::$router->handleContext($ctx);
+        $res = Gateway::handle($ctx);
         if ($res instanceof WorkermanResponse) {
             $json = json_decode((string)$res->rawBody(), true);
             $this->assertIsArray($json, "{$controller}.{$method}: " . $res->rawBody());
@@ -116,7 +90,8 @@ final class PayTest extends TestCase
      */
     private static function mails(int $uid): array
     {
-        return Redis::getJson('user_messages:' . $uid) ?: [];
+        // 信件存 pm 表（Model\Message）
+        return array_map(static fn (array $m): array => array_map(static fn ($v) => is_string($v) && preg_match('/^-?\d+$/', $v) ? (int)$v : $v, $m), DB::table('pm')->where('touid', $uid)->whereNull('deleted_at')->orderBy('id')->get());
     }
 
     public function testCompleteCreditsOnceAndRaisesVip(): void

@@ -12,6 +12,8 @@ declare(strict_types=1);
  * 复合主键或无主键时为 list。整型列转 int，float/double 转 float，decimal 保留为 string。
  */
 
+require dirname(__DIR__) . '/bootstrap.php';
+
 const SOURCE_DB = 'zc_sanguo';
 const TABLE_PREFIX = 'zc_sanguo_';
 const NAMESPACE_NAME = 'Hanjiang\\MasterData';

@@ -9,6 +9,7 @@ use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\Advanced;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\FreeLeap;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\TraderLog;
@@ -28,11 +29,11 @@ use OmniPHP\Http\Context;
  * 客户端调用（advancedpop.js）：index、get_general_info、get_skill_info、level_up、start_advanced、advanced_inherit、
  * get_advanced_inherit_info，全部移植。
  * 将领界面的三围与血量（get_general_info）同 GeneralHandler::enrich（装备精炼 / 强化成就、精炼成就、兵符宝石、主公天赋、名将进阶、
- * 名将成就、美人、主公星魄、坐骑、将魂）。
+ * 名将成就、美人、主公星魄、国家学院、坐骑、将魂）。技能升级消耗突飞卡走 FreeLeap::sub（记 leap_log）。
  * 并发：level_up / start_advanced / advanced_inherit 在 Member::locked 玩家行锁内执行。
  *
- * 依赖未移植：国家学院加成 _get_war_college_info（国家 30 级，三围）、突飞卡流水 leap_log 与翻牌活动计数（tavern_model->sub_freeleap）、
- * 声望流水 reputation_log。
+ * 依赖未移植：突飞卡的翻牌活动计数（tavern_model->sub_freeleap 的四方来朝 flop，旧版数据中已结束）。
+ * 声望消耗由 Member::subReputation 记声望流水。
  */
 final class AdvancedHandler
 {
@@ -571,8 +572,8 @@ final class AdvancedHandler
                 OwnSoul::subSoul($uid, $useValue, 'advanced', 'start_advanced');
                 $soul -= $useValue;
             } elseif ($useType === 4 && $useValue > 0) {
-                // 声望（依赖未移植：声望流水 reputation_log）
-                Member::decrementColumn($uid, 'reputation', $useValue);
+                // 声望
+                Member::subReputation($uid, $useValue);
             }
         }
 
@@ -914,12 +915,8 @@ final class AdvancedHandler
      */
     private static function subFreeleap(int $uid, int $num): ?int
     {
-        $affected = DB::execute(
-            'UPDATE `zc_sanguo_member_field` SET `freeleap` = `freeleap` - :num
-             WHERE `uid` = :uid AND `deleted_at` IS NULL AND `freeleap` >= :need',
-            ['num' => $num, 'uid' => $uid, 'need' => $num]
-        );
-        if ($affected === 0) {
+        // tavern_model->sub_freeleap（记突飞卡流水 leap_log）
+        if (FreeLeap::sub($uid, $num) !== 1) {
             return null;
         }
         // 主城信息缓存里有 member_field

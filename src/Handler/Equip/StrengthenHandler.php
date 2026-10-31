@@ -7,6 +7,10 @@ namespace Hanjiang\Handler\Equip;
 use Hanjiang\Battle\LegacyStats;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Equip as EquipTemplate;
+use Hanjiang\Model\DailyTask;
+use Hanjiang\Model\Expostulation;
+use Hanjiang\Model\MainQuestTask;
+use Hanjiang\Model\StatPay;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -153,7 +157,8 @@ final class StrengthenHandler
                 $return['status'] = -5;
                 return $return;
             }
-            // 依赖未移植：stat_model->qianghua_rate 消费统计
+            // 消费统计记录
+            StatPay::record($uid, 'qianghua_rate', $rule['gold']);
         } elseif (mt_rand(1, 100) > $rule['rate']) {
             // 强化失败：照扣银币
             MemberHandler::deductCurrency($uid, silver: $rule['silver']);
@@ -162,7 +167,12 @@ final class StrengthenHandler
             $return['all_silver'] = (int)($after['silver'] ?? 0);
             $return['all_gold'] = (int)($after['gold'] ?? 0);
             $return['cd'] = 0;
-            // 依赖未移植：日常任务 task_model->task_action(8)（主公 41 级以上）、谏言 expostulation_model->action(1)（有国家时）
+            // 日常任务(8是强化对应的类型)
+            if ($memberLevel >= DailyTask::OPEN_LEVEL) {
+                DailyTask::action($uid, DailyTask::TYPE_STRENGTHEN);
+            }
+            // 帮派任务(谏言：1是强化对应的类型)
+            self::expostulation($uid);
             return $return;
         }
 
@@ -182,7 +192,8 @@ final class StrengthenHandler
             }
         }
 
-        // 依赖未移植：主线任务 mainquest_model->task_action(2, 强化等级)
+        // 主线任务 2任意装备强化到X级
+        MainQuestTask::action($uid, 2, $newLevel);
 
         // 强化后售价（旧版 strengthen.php:saleprice）：模板售价 + 累计强化花费 * 0.6，
         // 浮点值直接写入 INT 列由 MySQL 四舍五入（与 equipment_model::get_saleprice 的 ceil 不同）
@@ -208,8 +219,24 @@ final class StrengthenHandler
         $return['baoji'] = $baoji;
         $return['status'] = 1;
         $return['cd'] = 0;
-        // 依赖未移植：日常任务 task_model->task_action(8)（主公 41 级以上）、谏言 expostulation_model->action(1)（有国家时）
+        // 日常任务(8是强化对应的类型)
+        if ($memberLevel >= DailyTask::OPEN_LEVEL) {
+            DailyTask::action($uid, DailyTask::TYPE_STRENGTHEN);
+        }
+        // 帮派任务(谏言：1是强化对应的类型)
+        self::expostulation($uid);
         return $return;
+    }
+
+    /**
+     * 帮派谏言任务 1（强化装备，有国家时 expostulation_model->action(1)）
+     */
+    private static function expostulation(int $uid): void
+    {
+        $country = (int)DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('country');
+        if ($country > 0) {
+            Expostulation::action($country, 1);
+        }
     }
 
     /**

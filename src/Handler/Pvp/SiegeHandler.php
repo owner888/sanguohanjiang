@@ -9,11 +9,11 @@ use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\CountryCityEffect;
 use Hanjiang\MasterData\CountryJob;
 use Hanjiang\MasterData\CountryMission;
-use Hanjiang\MasterData\Mission;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\OpenMap;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -40,8 +40,7 @@ use OmniPHP\Http\Context;
  * 聊天室：至尊攻城小喇叭、国战胜负全服系统公告、双方国家聊天室战报（get_message_str 18 ~ 21，type 6 系统）。
  *
  * 依赖未移植：
- * - 通商免费次数 member_activity.freebusiness（都城效果 type 2）；
- * - 元宝流水。
+ * - 通商免费次数 member_activity.freebusiness（都城效果 type 2）。
  */
 final class SiegeHandler
 {
@@ -187,7 +186,7 @@ final class SiegeHandler
             return $return;
         }
         // 判断该都城的开启状态
-        $info['open'] = $info['id'] <= self::maxMap() ? 1 : 0;
+        $info['open'] = $info['id'] <= OpenMap::maxMap() ? 1 : 0;
 
         $info['str'] = self::effectStr($info['type'], $info['value']);
         unset($info['type'], $info['value']);
@@ -1041,7 +1040,7 @@ final class SiegeHandler
             return $return;
         }
         // 判断该都城的开启状态
-        if ($info['id'] > self::maxMap()) {
+        if ($info['id'] > OpenMap::maxMap()) {
             $return['status'] = -6;
             return $return;
         }
@@ -1212,7 +1211,7 @@ final class SiegeHandler
         $kingUid = (int)($oldKing['uid'] ?? 0);
         // 获取敌方用户信息
         $oldKingInfo = $kingUid > 0 ? self::member($kingUid) : null;
-        // 扣除元宝（依赖未移植：gold_log 元宝流水）
+        // 扣除元宝
         if (!Member::deductCurrency($uid, gold: self::PRICE)) {
             $return['status'] = -13;
             return null;
@@ -1642,7 +1641,7 @@ final class SiegeHandler
      */
     private static function capitalList(): array
     {
-        $openLevel = self::maxMap();
+        $openLevel = OpenMap::maxMap();
         $list = [];
         foreach (CountryCityEffect::ROWS as $row) {
             $row['open'] = $row['id'] <= $openLevel ? 1 : 0;
@@ -1659,38 +1658,6 @@ final class SiegeHandler
     private static function capital(int $id): ?array
     {
         return CountryCityEffect::ROWS[$id] ?? null;
-    }
-
-    /**
-     * 服务器主线最远开放的势力（map_model->get_max_map），都城 id 不大于它时开放
-     *
-     * 旧版取全服 open_map（每人每势力一行）里 level、stage、mission 最大的一行，该势力最后一关已通过时为该势力，否则减 1；
-     * 「已通过」的判断旧版拿势力 id 与最后一关的场景号比较（原样保留）。依赖未移植：open_map，
-     * 新版征战进度在 zc_sanguo_map（每人每势力每场景一行，mission 为该场景已通关据点），这里按全服 map 取代。
-     */
-    private static function maxMap(): int
-    {
-        $maxMap = DB::table('map')->select('level', 'stage', 'mission')->whereNull('deleted_at')
-            ->orderBy('level', 'DESC')->orderBy('stage', 'DESC')->orderBy('mission', 'DESC')->first();
-        if ($maxMap === null) {
-            return 0;
-        }
-        $level = (int)$maxMap['level'];
-        // 取最大的一个势力的最后一关
-        $maxMission = null;
-        foreach (Mission::ROWS as $row) {
-            if ($row['missionlevel'] === $level
-                && ($maxMission === null || [$row['missionstage'], $row['missionid']] > [$maxMission['missionstage'], $maxMission['missionid']])) {
-                $maxMission = $row;
-            }
-        }
-        if ($maxMission === null) {
-            return $level - 1;
-        }
-        if ($level === $maxMission['missionlevel'] && $level === $maxMission['missionstage'] && (int)$maxMap['mission'] === $maxMission['missionid']) {
-            return $level;
-        }
-        return $level - 1;
     }
 
     /**
@@ -1932,7 +1899,7 @@ final class SiegeHandler
     }
 
     /**
-     * 加 Redis 锁，已被占用时最多等 $wait 秒
+     * 加 Redis 锁，已被占用时最多等 $wait 秒（usleep 阻塞整个 Worker 进程，不让出 Fiber；与改用 Fiber 事件循环前相同）
      */
     private static function waitLock(string $key, int $ttl, int $wait): bool
     {

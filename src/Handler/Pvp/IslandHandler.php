@@ -9,6 +9,7 @@ use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Island;
 use Hanjiang\Model\Chat;
+use Hanjiang\Model\DailyTask;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
 use OmniPHP\Database\DB;
@@ -26,9 +27,9 @@ use OmniPHP\Http\Context;
  * 客户端调用（treasureworld.js / miscpop.js）：index、get_mission、pk、get_report_list、get_report_info、send_to_chat。
  * 旧版公开方法即这 6 个。
  *
- * 依赖未移植：
- * - 日常任务 task_model->task_action(9)（主公 41 级以上挑战金银洞）；
- * - member_model 的流水与附带计数：sub_act 的 act_log、翻牌活动 flopact；add_gold / add_silver 的流水。
+ * 主公 41 级以上挑战计日常任务 9（DailyTask）；军令 / 元宝 / 银币增减由 Member 记流水。
+ *
+ * 依赖未移植：sub_act 的翻牌活动计数 flopact（flop，旧版数据中已结束）。
  * 战斗 CD 照旧版读 member_field.attackstatus / attackdateline（cd_model->get_attack）；旧版 vip_model->cd_status() 恒为 1，
  * 战后不写 CD、info.cd 恒为 0。
  */
@@ -354,7 +355,10 @@ final class IslandHandler
                 'name' => $mission['name'],
                 'level' => $mission['level'],
             ];
-            // 依赖未移植：日常任务 task_model->task_action(9)（主公 41 级以上，9 是金银洞对应的类型）
+            // 日常任务(9是金银洞对应的类型)
+            if ((int)$member['level'] >= DailyTask::OPEN_LEVEL) {
+                DailyTask::action($uid, DailyTask::TYPE_ISLAND);
+            }
             return $return;
         });
     }

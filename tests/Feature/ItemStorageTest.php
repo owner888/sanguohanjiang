@@ -33,14 +33,6 @@ final class ItemStorageTest extends TestCase
 {
     private const int NOW = 1793000000;
 
-    public static function setUpBeforeClass(): void
-    {
-        date_default_timezone_set('Asia/Shanghai');
-        $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        DB::init($dbConfig['mysql']);
-        Redis::init($dbConfig['redis']);
-    }
-
     private function player(): int
     {
         $uid = (int)DB::query('SELECT GREATEST(COALESCE(MAX(`uid`), 0) + 1, 800000) AS `n` FROM `zc_sanguo_member`')[0]['n'];

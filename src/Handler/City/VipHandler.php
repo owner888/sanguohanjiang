@@ -14,10 +14,12 @@ use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
+use Hanjiang\Model\FreeLeap;
 use Hanjiang\Model\General;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\OwnSoul;
+use Hanjiang\Model\PubLog;
 use Hanjiang\Model\Vip;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -34,7 +36,6 @@ use OmniPHP\Http\Context;
  * 文案取旧版 chinese_s 语言包（越南版分支不移植）。
  * 并发：get_gift 以 vip_log.gift_num 条件更新先占领取资格，同一级礼包并发领取只发一次。
  *
- * 依赖未移植：酒馆获得日志 tavern_model->add_pub_log(generalid, 1, 4)。
  */
 final class VipHandler
 {
@@ -277,7 +278,8 @@ final class VipHandler
                         'skill' => Skill::ROWS[(int)$tpl['skillid']] ?? [],
                         'talent' => Talent::ROWS[(int)$tpl['talentid']] ?? [],
                     ];
-                    // 依赖未移植：酒馆获得日志 tavern_model->add_pub_log(generalid, 1, 4)
+                    // 酒馆获得日志（tavern_model->add_pub_log(generalid, 1, 4)）
+                    PubLog::add($uid, $getValue, 1, 4);
                     // 发送广播：7 星以上武将小喇叭
                     $star = Chat::starWord((int)$tpl['star']);
                     if ($star !== null) {
@@ -313,7 +315,7 @@ final class VipHandler
                 $return['soul_quality'] = $soulInfo['quality'] ?? null;
             } elseif ($getType === 9) {
                 // 突飞卡
-                DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->increment('freeleap', $getValue);
+                FreeLeap::add($uid, $getValue);
                 $return['freeleap'] = $getValue;
             } elseif ($getType === 10) {
                 // 声望

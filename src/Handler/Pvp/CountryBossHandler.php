@@ -12,6 +12,7 @@ use Hanjiang\Model\Chat;
 use Hanjiang\Model\CountryBoss;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\StatPay;
 use Hanjiang\Model\WorldBoss;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -190,7 +191,8 @@ final class CountryBossHandler
                     $return['status'] = 3;
                     return $return;
                 }
-                // 依赖未移植：元宝流水 gold_log（member_model->sub_gold）、消费统计 stat_model->countryboss_relive
+                // 消费统计 stat_model->countryboss_relive：旧版不在付费点列表里，是空操作（StatPay 同样不记）
+                StatPay::record($uid, 'countryboss_relive', self::RELIVE_COST);
             }
             $return['info']['all_gold'] = self::gold($uid);
         } else {
@@ -294,7 +296,8 @@ final class CountryBossHandler
                 $return['status'] = 2;
                 $goldCost = 0;
             }
-            // 依赖未移植：元宝流水 gold_log、消费统计 stat_model->countryboss_powerup（旧版扣费失败也记）
+            // 消费统计 stat_model->countryboss_powerup：旧版不在付费点列表里，是空操作（StatPay 同样不记）
+            StatPay::record($uid, 'countryboss_powerup', $goldCost);
             $return['all_gold'] = self::gold($uid);
         } else {
             $silver = self::powerUpPay($member);

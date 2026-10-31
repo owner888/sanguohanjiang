@@ -7,18 +7,10 @@ namespace Hanjiang\Tests\Feature;
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\LegacyStats;
 use Hanjiang\Battle\TeamBuilder;
-use Hanjiang\Handler\HandlerRegistry;
-use Hanjiang\Http\Router;
 use Hanjiang\MasterData\HeroTalentStar;
 use Hanjiang\MasterData\Mission;
 use Hanjiang\MasterData\SoulType;
 use Hanjiang\MasterData\Talent;
-use Hanjiang\Middleware\AuthMiddleware;
-use Hanjiang\Middleware\CorsMiddleware;
-use Hanjiang\Middleware\DailyCronMiddleware;
-use Hanjiang\Middleware\GameProtocolMiddleware;
-use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
-use Hanjiang\Middleware\ThrottleMiddleware;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\General;
 use Hanjiang\Model\HeroTalent;
@@ -27,6 +19,7 @@ use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\OwnStar;
 use Hanjiang\Model\TraderLog;
 use Hanjiang\Tests\Support\ScriptedRandomEngine;
+use Hanjiang\Tests\Support\Gateway;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -41,25 +34,6 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  */
 final class GrowthTest extends TestCase
 {
-    private static Router $router;
-
-    public static function setUpBeforeClass(): void
-    {
-        date_default_timezone_set('Asia/Shanghai');
-        $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        DB::init($dbConfig['mysql']);
-        Redis::init($dbConfig['redis']);
-
-        $router = new Router(dirname(__DIR__, 2) . '/public');
-        $router->use(new CorsMiddleware());
-        $router->use(new ResponseEnvelopeMiddleware());
-        $router->use(new AuthMiddleware());
-        $router->use(new ThrottleMiddleware());
-        $router->use(new DailyCronMiddleware());
-        $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
-        self::$router = $router;
-    }
-
     /**
      * @param array<string, mixed> $auth
      * @param array<string, mixed> $params
@@ -68,7 +42,7 @@ final class GrowthTest extends TestCase
     private function request(array $auth, string $controller, string $method, array $params = []): array
     {
         $ctx = Context::mock(array_merge(['c' => $controller, 'm' => $method], $auth, $params));
-        $res = self::$router->handleContext($ctx);
+        $res = Gateway::handle($ctx);
         if ($res instanceof WorkermanResponse) {
             $json = json_decode((string)$res->rawBody(), true);
             $this->assertIsArray($json, "{$controller}.{$method}: " . $res->rawBody());

@@ -22,15 +22,20 @@ use Hanjiang\MasterData\Soul;
 use Hanjiang\MasterData\SoulType;
 use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\Chat;
+use Hanjiang\Model\DailyTask;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\General;
+use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberIntegral;
 use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\MemberStone;
+use Hanjiang\Model\Message;
 use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\OwnSoul;
+use Hanjiang\Model\PubLog;
+use Hanjiang\Model\StatPay;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -241,7 +246,7 @@ final class ArenaHandler
                 $return['status'] = -1;
                 return $return;
             }
-            // 扣除金币（依赖未移植：gold_log 元宝流水）
+            // 扣除金币
             if (!Member::deductCurrency($uid, gold: $price)) {
                 $return['status'] = -1;
                 return $return;
@@ -254,7 +259,8 @@ final class ArenaHandler
 
             // 取下一次购买花费
             $return['price'] = self::actPrice($number['times'] + 2);
-            // 依赖未移植：stat_model->yanwubang_times 消费统计
+            // 消费统计记录（旧版此时 $price 已换成下一次的价格，记的是下一次的价格，照搬）
+            StatPay::record($uid, 'yanwubang_times', $return['price']);
             // 返回剩余金币和次数
             $return['gold'] = (int)$member['gold'] - $price;
             $return['times'] = $times;
@@ -293,7 +299,8 @@ final class ArenaHandler
                 return $return;
             }
             Redis::del(self::CD_KEY . $uid);
-            // 依赖未移植：stat_model->yanwubang_cd 消费统计
+            // 消费统计记录
+            StatPay::record($uid, 'yanwubang_cd', $price);
             $return['gold'] = (int)$member['gold'] - $price;
         }
         return $return;
@@ -557,7 +564,9 @@ final class ArenaHandler
                 if ($toRank <= self::TOP_NUMBER || $myRank <= self::TOP_NUMBER) {
                     self::refreshTopUser();
                 }
-                // 依赖未移植：mainquest_model->task_action(9, get_arena_rank_up(提升名次)) 主线任务「演武榜提升 X 名」
+                // 主线任务 9演武榜提升X名
+                $rankUp = MainQuestTask::arenaRankUp($uid, $myRank - $toRank);
+                MainQuestTask::action($uid, 9, $rankUp);
             }
             // 记录 log
             self::addLog($uid, 1, 1, $touid, $toRank, $now);
@@ -575,8 +584,12 @@ final class ArenaHandler
             $info['win_times'] = 0;
         }
 
-        // 依赖未移植：日常任务 task_model->task_action(10)（主公 41 级以上）
-        // 依赖未移植：主线任务 mainquest_model->task_action(8, 1)（征战一次演武榜）
+        // 日常任务(10是演武榜对应的类型)
+        if ((int)$member['level'] >= DailyTask::OPEN_LEVEL) {
+            DailyTask::action($uid, DailyTask::TYPE_ARENA);
+        }
+        // 主线任务 8征战一次演武榜（无论胜败）
+        MainQuestTask::action($uid, 8, 1);
 
         // 消耗次数
         $times = (int)$log['times'] - 1;
@@ -606,7 +619,14 @@ final class ArenaHandler
             'gender' => $toMember !== null ? (int)$toMember['gender'] : null,
         ];
 
-        // 依赖未移植：message_model->record_pk_report 信件战报（from / fromlevel / to / tolevel / report 落库供信件回放）
+        // 信件战报
+        Message::recordPkReport((int)$pmid, [
+            'from' => (string)$member['nickname'],
+            'fromlevel' => (int)$member['level'],
+            'to' => $toMember !== null ? (string)$toMember['nickname'] : '',
+            'tolevel' => $toMember !== null ? (int)$toMember['level'] : 0,
+            'report' => $battle['info'] ?? null,
+        ]);
 
         // pk 完成，删除战斗的 key
         self::unLock($uid, $touid);
@@ -1209,7 +1229,8 @@ final class ArenaHandler
                         'skill' => Skill::ROWS[$tpl['skillid']] ?? [],
                         'talent' => Talent::ROWS[$tpl['talentid']] ?? [],
                     ];
-                    // 依赖未移植：tavern_model->add_pub_log(gid, 1, 11) 酒馆获得日志
+                    // 酒馆获得日志（tavern_model->add_pub_log(gid, 1, 11)）
+                    PubLog::add($uid, $id, 1, 11);
                 }
                 break;
             case 13: // 军令

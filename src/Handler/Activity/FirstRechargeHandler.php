@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Hanjiang\Handler\Activity;
 
+use Hanjiang\Model\PubLog;
+use Hanjiang\Model\FreeLeap;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
 use Hanjiang\Handler\General\TavernHandler;
@@ -27,7 +29,6 @@ use OmniPHP\Http\Context;
  * 玩家状态存 first_recharge_log（首充元宝、已领档位、是否已抽转盘）与 member_field.first_recharge（首充图标）；
  * 首充日志由充值核心写入（Model\Pay::complete → Model\Vip::pay → FirstRechargeLog::recordRecharge）。
  * 首充紫装以上装备、天命转盘装备与 7 星以上武将发聊天室系统消息（get_message_str 33 / 34 / 35）与小喇叭。
- * 依赖未移植：酒馆获得日志 tavern_model->add_pub_log。
  */
 final class FirstRechargeHandler
 {
@@ -158,7 +159,7 @@ final class FirstRechargeHandler
                     $return['info']['all_gold'] = $allGold;
                     break;
                 case 6: // 突飞卡
-                    DB::table('member_field')->where('uid', $uid)->increment('freeleap', $value);
+                    FreeLeap::add($uid, $value);
                     break;
             }
         }
@@ -290,7 +291,8 @@ final class FirstRechargeHandler
                             $chat = Chat::getMessageStr(35, ['star_general' => $num, 'general' => $tpl['name']], $sender);
                             Chat::sendToAll($chat, Chat::TYPE_SYSTEM, 0, 0, $sender);
                         }
-                        // 依赖未移植：酒馆日志 add_pub_log(generalid, 1, 11)
+                        // 酒馆日志（add_pub_log(generalid, 1, 11)）
+                        PubLog::add($uid, (int)$tpl['id'], 1, 11);
                     }
                 }
                 break;

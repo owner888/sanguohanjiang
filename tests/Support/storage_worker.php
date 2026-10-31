@@ -11,19 +11,15 @@ declare(strict_types=1);
  * 输出成功次数。
  */
 
-require dirname(__DIR__, 2) . '/vendor/autoload.php';
+require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\TraderLog;
-use OmniPHP\Cache\Redis;
-use OmniPHP\Database\DB;
+use Hanjiang\Support\Connections;
 
-date_default_timezone_set('Asia/Shanghai');
-$dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-DB::init($dbConfig['mysql']);
-Redis::init($dbConfig['redis']);
+Connections::init();
 
 $op = $argv[1] ?? '';
 $uid = (int)($argv[2] ?? 0);

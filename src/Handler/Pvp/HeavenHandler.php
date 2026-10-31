@@ -33,8 +33,9 @@ use OmniPHP\Http\Context;
  * 精炼石 / 五彩石 / 上古血玉存 member 三列（MemberStone），装备精华存 equipment type 100（Equipment::addTowerItem），
  * 首杀、掉落、扫荡、每日奖励照旧版发放并记流水；resource 为当前三种石头数量。
  *
- * 依赖未移植：
- * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数。
+ * 元宝消耗由 Member::deductCurrency 记元宝流水与日常任务 5（元宝消费）。
+ *
+ * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class HeavenHandler
 {

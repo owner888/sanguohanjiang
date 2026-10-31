@@ -16,6 +16,7 @@ use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberIntegral;
 use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\MemberStone;
+use Hanjiang\Model\Message;
 use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\PassGeneral;
@@ -40,9 +41,9 @@ use OmniPHP\Http\Context;
  * 旧版 level_up 碎片不足、loot_reflush 取不到对手时不解锁（等 30 秒过期），照旧。
  * 跨请求的状态迁移（升级完成、技能到期自动领取）用带旧值条件的 UPDATE，只有抢到的请求发放 / 扣除。
  *
- * 依赖未移植：首次打开操作记录 edifice_model->add_edifice_log(11)；春节送福活动 actnewyear_model->add_task_num（掠夺 16、亲近 17）；
- * 信件战报 message_model->record_pk_report / get_pk_report_by_id（report_detail 恒返回 -1 没有指定的战报）；
- * 元宝 / 银币 / 声望流水 gold_log / silver_log / reputation_log。
+ * 掠夺信件与信件战报（pm / pm_report，report_detail 回放）见 Model\Message；元宝 / 银币 / 声望流水由 Member 的增减记。
+ *
+ * 依赖未移植：首次打开操作记录 edifice_model->add_edifice_log(11)；春节送福活动 actnewyear_model->add_task_num（掠夺 16、亲近 17）。
  */
 final class BeautyHandler
 {
@@ -709,7 +710,14 @@ final class BeautyHandler
             'id' => $pmid,
             'type' => 'beauty',
         ];
-        // 依赖未移植：message_model->record_pk_report 信件战报（from / fromlevel / to / tolevel / report 落库供 report_detail 回放）
+        // 信件战报
+        Message::recordPkReport($pmid, [
+            'from' => (string)$member['nickname'],
+            'fromlevel' => (int)$member['level'],
+            'to' => (string)$target['nickname'],
+            'tolevel' => (int)$target['level'],
+            'report' => $battle['info'] ?? null,
+        ]);
 
         $beautyChip = self::chipList($uid, $beautyId);
         $lootArray = self::lootLogArray($uid);
@@ -843,13 +851,13 @@ final class BeautyHandler
     }
 
     /**
-     * 查看掠夺战报: c=beauty&m=report_detail&id=（聊天室 / 信件里的铜雀台战报）
+     * 查看掠夺战报: c=beauty&m=report_detail&id=（聊天室 / 信件里的铜雀台战报，同 c=message&m=report_detail）
      *
-     * 依赖未移植：信件战报存储 message_model->record_pk_report / get_pk_report_by_id，所以总是旧版的 -1 没有指定的战报。
+     * status：-1 没有指定的战报；1 成功
      */
     public static function report_detail(Context $ctx): array
     {
-        return ['status' => -1, 'battle' => [], 'info' => []];
+        return MessageHandler::reportDetail((int)$ctx->input('id', 0));
     }
 
     // ---------------------------------------------------------------------------------------------
@@ -993,7 +1001,7 @@ final class BeautyHandler
             if ($want[3] > 0 && OwnSoul::subSoul($uid, $want[3], self::LOG_CLASS, 'advance_action', $now)['status'] !== 1) {
                 return 3;
             }
-            if ($want[4] > 0 && Member::decrementColumn($uid, 'reputation', $want[4]) === null) {
+            if ($want[4] > 0 && Member::subReputation($uid, $want[4]) === null) {
                 return 4;
             }
             if ($want[5] > 0 && MemberIntegral::change($uid, $want[5], 'beauty_rose', 2, self::LOG_CLASS, 'advance_action', $now) === []) {

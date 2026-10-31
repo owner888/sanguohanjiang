@@ -5,18 +5,28 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\MasterData\BookAchievement;
+use Hanjiang\MasterData\Pub;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
+use Hanjiang\Model\GeneralBook;
+use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnMatrix;
 use Hanjiang\Model\OwnMount;
+use Hanjiang\Model\OwnSoul;
+use Hanjiang\Model\Practice;
+use Hanjiang\Model\PubLog;
+use Hanjiang\Model\TraderLog;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
 /**
- * 点将台（移植旧版 controllers/muster.php：index / get_general_info / go_battle / go_rest）
+ * 点将台（移植旧版 controllers/muster.php：index / get_general_info / go_battle / go_rest / sale_general）
  *
- * 出征名单为 general.goout；阵法站位只在 matrix 表（Model\OwnMatrix）。sale_general 仍是新版自定的遣散玩法。
+ * 出征名单为 general.goout；阵法站位只在 matrix 表（Model\OwnMatrix）。
+ * 武将折旧（sale_general）：VIP 7 起、7 天 CD（member_field.general_sale），按名将榜（Pub tab 2）售价 × VIP 系数返还宝石；
+ * 折旧的将领禁用（旧版 own_general.disable，新版软删除），酒馆招募记录改为未招募，名将谱加成重算。
  */
 final class MusterHandler
 {
@@ -24,6 +34,32 @@ final class MusterHandler
      * 出征名单上限（general_model::go_battle：battle_count() >= 8 时出征队列已满）
      */
     public const int MAX_BATTLE = 8;
+
+    /** 武将折旧 CD（7 天） */
+    private const int SALE_CD = 86400 * 7;
+
+    /** 武将折旧系数（VIP 7 ~ 10，10 以上按 10） */
+    private const array SALE_RULE = [7 => 0.3, 8 => 0.4, 9 => 0.5, 10 => 0.6];
+
+    /** 旧版语言包 olderror_lang.php muster_error* */
+    private const array LANG = [
+        1 => 'VIP等级不够！',
+        2 => 'CD时间未到，无法折旧',
+        3 => '还未拥有该武将',
+        4 => '已达成名将成就的武将无法折旧',
+        5 => '仅名将榜武将可以折旧',
+        6 => '获取售价失败',
+        7 => '无法终止训练',
+        8 => '武将下阵失败',
+        9 => '禁用武将失败',
+        10 => '更新cd时间失败',
+        11 => '增加宝石失败',
+        12 => '获取页码失败',
+        13 => '战神殿获得武将不能折旧',
+        14 => '绝版神将获得武将不能折旧',
+        15 => '累计登陆获得武将不能折旧',
+        16 => '充值送豪礼获得武将不能折旧',
+    ];
 
     /**
      * index 的 first 字段（旧版 first_field）
@@ -103,12 +139,18 @@ final class MusterHandler
             ];
         }
 
-        // 依赖未移植：获得武将气泡 member_field.ongeneral（进入点将台时清除）
-
+        // 如果进来的时候有气泡通知，就把他隐藏
+        $field = DB::table('member_field')->select('ongeneral', 'general_sale')->where('uid', $uid)->whereNull('deleted_at')->first() ?? [];
+        if ((int)($field['ongeneral'] ?? 0) === 1) {
+            DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update(['ongeneral' => 0]);
+        }
+        $cd = 0;
+        if ((int)($field['general_sale'] ?? 0) > 0) {
+            $cd = max(0, self::SALE_CD - (time() - (int)$field['general_sale']));
+        }
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first() ?? [];
         if ((int)($member['vip'] ?? 0) >= 7) {
-            // 依赖未移植：武将折旧 CD member_field.general_sale（未存储，按 0 即 CD 已过）
-            $return['sale_cd'] = 0;
+            $return['sale_cd'] = $cd;
         }
 
         $return['list'] = $list;
@@ -199,11 +241,11 @@ final class MusterHandler
         }
 
         // 检查将领是否训练中
-        $unique = PracticeHandler::checkPractice($uid, $gid);
+        $unique = Practice::checkPractice($uid, $gid);
         $field = DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->first() ?? [];
         if ($unique !== 0) {
             if ($confrim) {
-                $stop = PracticeHandler::legacyStop($uid, $unique, (int)($field['practicetime'] ?? 0), (int)($field['practicenow'] ?? 0));
+                $stop = Practice::practiceStop($uid, $unique, (int)($field['practicetime'] ?? 0), (int)($field['practicenow'] ?? 0));
                 if ($stop !== 1) {
                     // 训练终止失败 -4
                     $return['status'] = -4;
@@ -295,49 +337,248 @@ final class MusterHandler
     }
 
     /**
-     * 遣散闲置武将退役: c=muster&m=sale_general
+     * 武将折旧: c=muster&m=sale_general（gid、confirm；confirm 为 0 时只返回折旧系数与可得宝石）
      */
     public static function sale_general(Context $ctx): array
     {
+        /**
+         * -13 战神殿 / 绝版 / 累计登录 / 充值送豪礼获得的武将不能折旧
+         * -12 获取页码失败
+         * -11 增加宝石失败
+         * -10 更新cd时间失败
+         * -9 禁用武将失败
+         * -8 下阵失败
+         * -7 无法终止训练
+         * -6 获取售价失败
+         * -5 只有名将榜武将才能折旧
+         * -4 已达成名将成就的武将无法折旧
+         * -3 未拥有该武将
+         * -2 cd时间未过
+         * -1 vip等级不足
+         *  0 失败
+         *  1 成功
+         */
         $uid = MemberHandler::resolveUid($ctx);
-        $gid = (int)($ctx->input('id', $ctx->input('gid', 0)));
-
-        $general = DB::table('general')
-            ->where('uid', $uid)
-            ->where('id', $gid)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if ($general === null) {
-            return ['status' => -1, 'message' => '武将不存在'];
+        $gid = (int)$ctx->input('gid', 0);
+        $confirm = (int)$ctx->input('confirm', 0);
+        if (DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('uid') === null) {
+            return ['status' => 0, 'tip' => 0];
         }
+        return Member::locked($uid, static function () use ($uid, $gid, $confirm): array {
+            $return = ['status' => 0, 'tip' => 0];
+            $fail = static function (int $status, int $msg) use (&$return): array {
+                $return['status'] = $status;
+                $return['msg'] = self::LANG[$msg];
+                return $return;
+            };
+            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+            $field = DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->first() ?? [];
+            $vip = (int)$member['vip'];
+            $now = time();
+            if ($vip < 7) {
+                // vip等级不足
+                return $fail(-1, 1);
+            }
+            if ($now - (int)($field['general_sale'] ?? 0) <= self::SALE_CD) {
+                // cd中
+                return $fail(-2, 2);
+            }
+            $ratio = $vip > 10 ? self::SALE_RULE[10] : self::SALE_RULE[$vip];
+            $general = self::ownGeneral($uid, $gid);
+            if ($general === null) {
+                // 将领不存在
+                return $fail(-3, 3);
+            }
+            // 获取拥有成就列表：已达成成就的将领无法出售
+            foreach (array_keys(GeneralBook::ownAchievementList($uid)) as $bid) {
+                $ach = BookAchievement::ROWS[$bid] ?? null;
+                for ($i = 1; $ach !== null && $i <= 5; $i++) {
+                    if ($ach['gid' . $i] === (int)$general['generalid']) {
+                        return $fail(-4, 4);
+                    }
+                }
+            }
+            // 不在名将榜中无法出售（tavern_model->get_sale_price：Pub tab 2）
+            $sale = Pub::ROWS[(int)$general['generalid']] ?? null;
+            if ($sale === null || $sale['tab'] !== 2) {
+                return $fail(-5, 5);
+            }
+            // 在战神殿 / 绝版神将 / 累计登录 / 充值送豪礼获得的武将不能折旧（pub_log.type 100 ~ 103）
+            $god = PubLog::byGeneral($uid, (int)$general['generalid']);
+            if ($god !== []) {
+                $msg = match ($god['type']) {
+                    100 => 13,
+                    101 => 14,
+                    102 => 15,
+                    103 => 16,
+                    default => 0,
+                };
+                if ($msg > 0) {
+                    return $fail(-13, $msg);
+                }
+            }
+            $paytype = $sale['paytype'];
+            $price = (int)($sale['price'] * $ratio);
+            if (!in_array($paytype, [1, 2, 3], true) || $price <= 0) {
+                // 获取价格失败
+                return $fail(-6, 6);
+            }
+            if ($confirm === 0) {
+                $return['status'] = 1;
+                $return['rule']['vip'] = $vip;
+                $return['rule']['ratio'] = ($ratio * 100) . '%';
+                $return['reward']['type'] = $paytype;
+                $return['reward']['num'] = $price;
+                return $return;
+            }
 
-        if ((int)$general['generalid'] === 1) {
-            return ['status' => 0, 'message' => '主公将领不可遣散退役'];
+            // [训练模型]检查将领是否训练中，终止训练
+            $practice = Practice::checkPractice($uid, $gid);
+            if ($practice !== 0
+                && Practice::practiceStop($uid, $practice, (int)($field['practicetime'] ?? 0), (int)($field['practicenow'] ?? 0)) !== 1) {
+                // 训练终止失败
+                return $fail(-7, 7);
+            }
+            if ((int)$general['goout'] === 1) {
+                // 下阵
+                $down = self::downMatrix($uid, $gid);
+                if ($down < 0) {
+                    return $fail(-8, 8);
+                }
+                $return['tip'] = $down;
+                DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->update(['goout' => 0]);
+            }
+            // 卸下所有装备
+            DB::table('equipment')->where('uid', $uid)->where('generalid', $gid)->whereNull('deleted_at')->update(['generalid' => 0]);
+            // 卸下所有将魂，按未装备的将魂个数校正包裹占用
+            if (OwnSoul::unequipAll($uid, $gid) === 1) {
+                $num = OwnSoul::unequipCount($uid) - (int)$member['souluse'];
+                if ($num > 0) {
+                    OwnSoul::addSouluse($uid, $num);
+                }
+                if ($num < 0) {
+                    OwnSoul::subSouluse($uid, -$num);
+                }
+            }
+            // 卸下所有坐骑
+            OwnMount::takeDownAll($uid, $gid);
+            // 禁用武将（旧版 disable = 时间戳，新版软删除）
+            $disable = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')
+                ->update(['deleted_at' => date('Y-m-d H:i:s', $now)]);
+            if ($disable <= 0) {
+                return $fail(-9, 9);
+            }
+            // 清除招募信息（update_pub_log：own = 0）
+            DB::table('pub_log')->where('uid', $uid)->where('generalid', (int)$general['generalid'])->whereNull('deleted_at')->update(['own' => 0]);
+            // 更新cd时间
+            if (DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->update(['general_sale' => $now]) <= 0) {
+                return $fail(-10, 10);
+            }
+            // 更新图鉴属性加成
+            GeneralBook::refresh($uid);
+            $addJade = TraderLog::addJade($uid, $paytype, $price, class: 'muster', method: 'sale_general', now: $now);
+            if ($addJade['status'] !== 1) {
+                return $fail(-11, 11);
+            }
+            Redis::del('player:' . $uid);
+            $list = self::saleGeneralList($uid, 1, 999);
+            if ($list['status'] !== 1) {
+                return $fail(-12, 12);
+            }
+            $return['status'] = 1;
+            $return['reward']['type'] = $paytype;
+            $return['reward']['num'] = $price;
+            $return['sale_cd'] = self::SALE_CD;
+            $return['list'] = $list['list'];
+            $return['first'] = $list['first'];
+            $return['page'] = $list['page'];
+            return $return;
+        });
+    }
+
+    /**
+     * 武将折旧后的将领列表（get_general_list：list 不带 quality；first 不带 quality）
+     *
+     * @return array{status: int, list?: array<int, array<string, mixed>>, page?: int, first?: array<string, mixed>}
+     */
+    private static function saleGeneralList(int $uid, int $page, int $perpage): array
+    {
+        $totals = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')->count();
+        if ($totals === 0) {
+            // 将领不存在
+            return ['status' => -2];
         }
-
-        if ((int)$general['goout'] === 1) {
-            return ['status' => 0, 'message' => '该武将正在出征中，请先休息'];
+        $listPage = min($page, (int)ceil($totals / $perpage));
+        $rows = DB::table('general')->where('uid', $uid)->whereNull('deleted_at')
+            ->orderBy('goout', 'DESC')->orderBy('star', 'DESC')->orderBy('level', 'DESC')->orderBy('id')
+            ->limit($perpage)->offset(($listPage - 1) * $perpage)->get();
+        $first = $rows[0];
+        if (!isset(Skill::ROWS[(int)$first['skillid']])) {
+            return ['status' => -5];
         }
-
-        $level = max(1, (int)$general['level']);
-        $severancePay = $level * 3000;
-
-        // 软删除武将 (遵循 deleted_at 规范)
-        DB::table('general')->where('id', $gid)->update([
-            'deleted_at' => date('Y-m-d H:i:s'),
-        ]);
-
-        MemberHandler::addCurrency($uid, silver: $severancePay);
-        Redis::del('player:' . $uid);
-
+        if (!isset(Talent::ROWS[(int)$first['talentid']])) {
+            return ['status' => -6];
+        }
+        $list = [];
+        foreach ($rows as $key => $value) {
+            $list[$key + 1] = [
+                'id' => (int)$value['id'],
+                'name' => (string)$value['name'],
+                'image' => (int)$value['image'],
+                'type' => (int)$value['type'],
+                'goout' => (int)$value['goout'],
+            ];
+        }
         return [
             'status' => 1,
-            'gid' => $gid,
-            'name' => $general['name'],
-            'severance_pay' => $severancePay,
-            'message' => "【{$general['name']}】功成身退，卸甲归田！奉送退役安家银两 {$severancePay}！",
+            'list' => $list,
+            'page' => $page,
+            'first' => self::generalFields($first, array_values(array_diff(self::INDEX_FIELD, ['quality']))),
         ];
+    }
+
+    /**
+     * 将领从所有阵法站位上撤下（go_rest / sale_general 共用；matrix_model->get_matrix_by_gid + go_rest）
+     *
+     * @return int 1 撤下后启用的阵法没有其他将领（tip）；0 正常；-1 下阵失败
+     */
+    private static function downMatrix(int $uid, int $gid): int
+    {
+        $tip = 0;
+        $info = OwnMatrix::byGid($uid, $gid);
+        if ($info === []) {
+            return $tip;
+        }
+        $matrixid = OwnMatrix::activeId($uid);
+        if ($matrixid !== 0) {
+            // 如果阵法已启用并且武将在阵法上,检查阵法上有几人
+            $mid = null;
+            foreach ($info as $value) {
+                if ($value['mid'] === $matrixid) {
+                    $mid = $matrixid;
+                }
+            }
+            if ($mid !== null) {
+                $matrix = OwnMatrix::own($uid, $mid);
+                $last = 1;
+                for ($i = 1; $i < 10; $i++) {
+                    if (($matrix['position' . $i] ?? 0) > 0 && $matrix['position' . $i] !== $gid) {
+                        $last = 0;
+                    }
+                }
+                $tip = $last;
+            }
+        }
+        foreach ($info as $key => $value) {
+            unset($value['uid']);
+            for ($i = 1; $i < 10; $i++) {
+                if (isset($value['position' . $i])) {
+                    $value['position' . $i] = 0;
+                }
+            }
+            $info[$key] = $value;
+        }
+        return OwnMatrix::goRest($uid, $info) === 1 ? $tip : -1;
     }
 
     /**

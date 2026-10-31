@@ -11,8 +11,10 @@ use Hanjiang\MasterData\CountryMineEvent;
 use Hanjiang\MasterData\CountryMineRatio;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
+use Hanjiang\Model\DailyTask;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\Message;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -28,10 +30,9 @@ use OmniPHP\Http\Context;
  * 客户端调用（countrymineworld.js / miscpop.js）：index、get_countrymine_info、caikuang、rob、get_reward、give_up、
  * send_to_chat。
  *
- * 依赖未移植：
- * - 好友（friend_model->get_list / get_friend_by_id，新版好友为自定数据），friend 恒为 0；
- * - message_model->record_pk_report 信件战报；日常任务 task_model->task_action(13)（主公 41 级以上）；
- * - 元宝流水。
+ * 抢夺写信件战报（Message::recordPkReport）、主公 41 级以上计日常任务 13（DailyTask）；元宝流水由 Member 记。
+ *
+ * 依赖未移植：好友（friend_model->get_list / get_friend_by_id，新版好友为自定数据），friend 恒为 0。
  */
 final class CountryMineHandler
 {
@@ -660,7 +661,10 @@ final class CountryMineHandler
         // 查询对方职业
         $toMember = self::member($touid);
 
-        // 依赖未移植：日常任务 task_model->task_action(13)（国家矿区抢夺，主公 41 级以上）
+        // 日常任务(13是国家矿区抢夺对应的类型)
+        if ((int)$member['level'] >= DailyTask::OPEN_LEVEL) {
+            DailyTask::action($uid, DailyTask::TYPE_COUNTRYMINE);
+        }
 
         $after = self::member($uid) ?? $member;
         $return['status'] = 1;
@@ -683,7 +687,14 @@ final class CountryMineHandler
             'gender' => $info['gender'],
         ];
 
-        // 依赖未移植：message_model->record_pk_report 信件战报（from / fromlevel / to / tolevel / report 落库供信件回放）
+        // 信件战报
+        Message::recordPkReport((int)$pmid, [
+            'from' => (string)$member['nickname'],
+            'fromlevel' => (int)$member['level'],
+            'to' => (string)$return['battle']['right_role']['name'],
+            'tolevel' => (int)$return['battle']['right_role']['level'],
+            'report' => $battle['info'] ?? null,
+        ]);
 
         $info['report'] = $pmid;
         $info['event_status'] = $event['status'];

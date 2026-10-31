@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Auth;
 
 use Hanjiang\Model\General;
+use Hanjiang\Model\OpenMap;
 use Hanjiang\Model\OwnMatrix;
+use Hanjiang\Model\Practice;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 
@@ -175,12 +177,20 @@ final class RegisterHandler
             'race_dateline' => 0,
             // 旧版 member_model 注册：默认启用阵法 1
             'matrixid' => OwnMatrix::INITIAL_MID,
+            // 旧版 member_model->insert_member：首次进入游戏时间（闯关竞速从此时起 3 天）
+            'start_time' => $now,
         ]);
+
+        // 初始化训练位信息：旧版 controllers/login.php 注册时 practice_model->init_practice(uid)（1、2 号训练位）
+        Practice::init($uid);
 
         // 初始武将：旧版 controllers/login.php 注册时 init_general(1, uid)，不送初始装备
         $genId = General::initGeneral($uid);
 
         // 初始化默认阵法：旧版 init_matrix(1, uid, 2, gid)，初始武将放在 1 号阵法 2 号位
         OwnMatrix::init($uid, OwnMatrix::INITIAL_MID, OwnMatrix::INITIAL_POSITION, $genId);
+
+        // 初始化地图：旧版 controllers/login.php 注册时 map_model->add_map_log(1, uid)，开启第一个势力
+        OpenMap::init($uid, $now);
     }
 }

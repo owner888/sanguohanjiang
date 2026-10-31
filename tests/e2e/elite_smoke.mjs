@@ -19,7 +19,7 @@ async function guest() {
     assert.ok(login.token, JSON.stringify(login));
     // 主线打通第 50 关（军团 1 开启）：Mission 50 = level 2 / stage 1 / mission 10
     execFileSync('mysql', ['-uroot', '-proot', 'zc_sanguo', '-e',
-        `DELETE FROM zc_sanguo_map WHERE uid=${Number(reg.uid)}; INSERT INTO zc_sanguo_map (uid, level, stage, mission) VALUES (${Number(reg.uid)}, 2, 1, 10);`],
+        `DELETE FROM zc_sanguo_open_map WHERE uid=${Number(reg.uid)}; INSERT INTO zc_sanguo_open_map (uid, level, stage, mission) VALUES (${Number(reg.uid)}, 2, 1, 10);`],
         { stdio: ['ignore', 'ignore', 'ignore'] });
     return { uid: Number(reg.uid), token: login.token };
 }

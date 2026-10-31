@@ -13,7 +13,8 @@ A high-performance Three Kingdoms tactical card RPG game server reconstructed wi
    - Request-scoped data (authenticated player, session token, timing) lives exclusively within `Context $ctx` and is garbage-collected automatically upon request completion.
 
 2. **Middleware Pipeline for Cross-Cutting Concerns**:
-   - Cross-cutting logic (CORS, protocol normalization, authentication, rate-limiting, and response envelope formatting) must reside in PSR-15-style Middlewares, not inside business Handlers.
+   - Cross-cutting logic (CORS, protocol normalization, authentication, rate-limiting, and response envelope formatting) must reside in Middlewares implementing `OmniPHP\Http\Middleware`, registered globally in `routes.php` via `OmniPHP\Http\Router::middleware()`, not inside business Handlers.
+   - Pipeline order (outermost first): `PublicAssets → Cors → ResponseEnvelope → Auth → Throttle → DailyCron → GameProtocol → GameProtocolMiddleware::execute`. `server.php` uses `OmniPHP\Http\Kernel::handle` as `onMessage`; tests call the same Router through `tests/Support/Gateway.php`. Never reintroduce a private router.
    - Handlers focus purely on deterministic game domain logic.
 
 3. **No Developer Identity in Code or Commits**:
@@ -44,16 +45,25 @@ A high-performance Three Kingdoms tactical card RPG game server reconstructed wi
    - Never write redundant standalone wrappers (`src/Context.php`, `src/Database/DB.php`). If domain extension is needed, legitimately extend the base class.
 
 9. **Worker Process Isolation & Zero Master fd Sharing Law (长连接子进程 Fork 隔离铁律)**:
-   - **Strictly forbidden**: Never initialize network connection pools (`DB::init()`, `Redis::init()`) in the Master process global scope before `Worker::runAll()`.
+   - **Strictly forbidden**: Never open MySQL / Redis connections (`Hanjiang\Support\Connections::init()`, `DatabaseBootstrap::initWorker()`, `DB::init()`, `Redis::init()`) in the Master process global scope before `Worker::runAll()`.
    - **Reason**: `pcntl_fork()` duplicates open socket file descriptors. Sharing an fd across workers leads to concurrent packet collision, `Packets out of order` MySQL crashes, and severe race corruption.
-   - **Required**: `DB::init()` and `Redis::init()` must be initialized strictly inside the `$worker->onWorkerStart` event callback for each child worker independently.
+   - **Required**: call `Hanjiang\Support\Connections::init()` (= `DatabaseBootstrap::initWorker()` + PDO options from `config/database.php` + `Redis::init()` with `config/cache.php` `redis`) inside each worker's `$worker->onWorkerStart`. CLI tools, `tests/Support/*_worker.php` and `tests/bootstrap.php` call it once after requiring `bootstrap.php`.
+
+10. **Fiber Event Loop & Request-Scoped State (Fiber 事件循环与请求级状态铁律)**:
+   - Workers run on Workerman's Fiber driver (`Application::workerman()`, Revolt): every connection event and timer callback runs in its own Fiber.
+   - **Strictly forbidden**: request-scoped data in static properties. Use `Context $ctx`, or Fiber-local storage `Workerman\Coroutine\Context` when a value must be reachable statically (see `Model\FlowLog::route()`; crons and `EliteRoom` set their own route).
+   - **Invariant**: PDO and phpredis are synchronous, so a request never suspends half-way. `Member::locked()` / `DB::transaction()` on the single per-process PDO and the `EliteRoom::$inLock` reentrancy flag rely on this. Introducing anything that suspends a Fiber mid-request (async MySQL / Redis clients, `Timer::sleep`) requires per-request connections and Fiber-local lock flags first. `usleep` waits (Siege / EliteRoom Redis locks) block the whole worker, exactly as before.
+   - Process-wide statics that are fine: reflection / handler-map caches (`GameProtocolMiddleware::$actionCache`, `HandlerRegistry`), WebSocket connection registries and timer ids (`ChatPush`, `EliteRoom`, `WebSocketHandler`), test-only clocks (`BossClock`, `EliteRoom::useClock`).
 
 ---
 
 ## 2. Directory Layout & Standards
 
 ```
-config/                  # Global application & database configurations
+bootstrap.php            # Required first by every entry point: OmniPHP\Application::boot() (paths, .env, timezone Asia/Shanghai unless APP_TIMEZONE, LOG_LEVEL, CrashHandler, ArchitectureGuard)
+routes.php               # OmniPHP Router: exception handler, global middleware pipeline, catch-all routes
+runtime/                 # hanjiang.pid + logs/ (git-ignored)
+config/                  # app.php (listen / workers / assets), database.php (MySQL, default => mysql), cache.php (Redis, prefix hj:)
 public/                  # Static assets & game client (index.html, static/js, css)
 src/
 ├── Battle/              # Pure memory deterministic combat simulator
@@ -61,11 +71,14 @@ src/
 │   ├── LegacyStats.php  # Legacy stat formulas (general / equipment / hp)
 │   ├── TeamBuilder.php  # Legacy team building (init_member/monster_team_info)
 │   └── Position.php     # 9-grid tactical position enum (1-9)
-├── Middleware/          # Middleware pipeline
-│   ├── MiddlewareInterface.php
+├── Middleware/          # Middleware pipeline (implements OmniPHP\Http\Middleware)
+│   ├── PublicAssetsMiddleware.php   # public/ files, dynamic config.js, autoload.js no-cache, audio Range
 │   ├── CorsMiddleware.php
-│   ├── GameProtocolMiddleware.php
-│   └── ResponseEnvelopeMiddleware.php
+│   ├── ResponseEnvelopeMiddleware.php
+│   ├── AuthMiddleware.php
+│   ├── ThrottleMiddleware.php
+│   ├── DailyCronMiddleware.php
+│   └── GameProtocolMiddleware.php   # c/m → Handler; execute() is the route endpoint
 ├── Handler/             # Stateless domain action handlers (DDD Layout)
 │   ├── Auth/            # Authentication & onboarding (Ios, User, Login, Register)
 │   ├── City/            # City infrastructure, levy, VIP & gifts (City, Member, DailySign, Vip)
@@ -78,12 +91,15 @@ src/
 │   ├── Faction.php           # 16 Three Kingdoms historical factions
 │   ├── FactionStatus.php     # Locked / Active / Cleared states
 │   └── BattleAssess.php      # Combat victory grading (-1, 1, 2, 3)
-└── Http/                # Workerman HTTP pipeline & router
-    ├── Router.php
-    └── Response.php
-server.php               # Workerman entrypoint
-tests/                   # PHPUnit end-to-end integration test suites
-└── Feature/GameApiTest.php
+├── Http/
+│   └── ExceptionHandler.php # extends OmniPHP ExceptionHandler; 500 + {"status":-500,"message":"系统异常: ..."}
+└── Support/
+    └── Connections.php  # per-process MySQL / Redis init (Iron Rule 9)
+server.php               # Workerman entrypoint: Application::workerman('hanjiang') + Kernel::handle
+tests/                   # PHPUnit (bootstrap: tests/bootstrap.php)
+├── Feature/GameApiTest.php
+├── Feature/HttpGatewayTest.php  # HTTP gateway contract via Kernel::handle
+└── Support/Gateway.php          # Router::dispatch for Context::mock() requests
 ```
 
 ---
@@ -104,9 +120,13 @@ tests/                   # PHPUnit end-to-end integration test suites
 3. **Service Management**:
    ```bash
    php server.php start -d   # Start background daemon
-   php server.php restart -d # Hot reload / restart
+   php server.php restart -d # Restart (required after changing routes.php or .env; reload does not re-read them)
    php server.php stop       # Stop daemon
    ```
+   - Config: env vars > `.env` (project root, git-ignored, loaded by `bootstrap.php`) > defaults in `config/*.php`. Alternate ports: `HTTP_LISTEN`, `WS_LISTEN`, `WS_PUBLIC_PORT`.
+   - Logs: `runtime/logs/hanjiang.log` (Workerman master), `runtime/logs/hanjiang_stdout.log` (daemon stdout: access log, PHP warnings / fatals), `runtime/logs/{level}_YYYYMMDD.log` (OmniPHP Logger). Read these first when something breaks.
+   - Migrations are manual: OmniPHP `MigrationRunner` only runs its own `database/migrations/*.php` classes; our migrations are hand-written `.sql`. Never call `DatabaseBootstrap::init()` with auto-migrate.
+   - `revolt/event-loop` is required by the Fiber driver; without it workers crash-loop with `Class "Revolt\EventLoop" not found`.
 
 4. **Agent Workflow Baseline**:
    - **Step 1**: Always run `./vendor/bin/phpunit` first. Ensure all existing tests pass in ~40ms before touching code.

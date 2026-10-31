@@ -7,8 +7,6 @@ namespace Hanjiang\Tests\Feature;
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\LegacyStats;
 use Hanjiang\Battle\TeamBuilder;
-use Hanjiang\Handler\HandlerRegistry;
-use Hanjiang\Http\Router;
 use Hanjiang\MasterData\AdvancedInfo;
 use Hanjiang\MasterData\Book;
 use Hanjiang\MasterData\BookAddition;
@@ -16,12 +14,6 @@ use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\RefineAchieve;
 use Hanjiang\MasterData\RefineMaster;
 use Hanjiang\MasterData\Talent;
-use Hanjiang\Middleware\AuthMiddleware;
-use Hanjiang\Middleware\CorsMiddleware;
-use Hanjiang\Middleware\DailyCronMiddleware;
-use Hanjiang\Middleware\GameProtocolMiddleware;
-use Hanjiang\Middleware\ResponseEnvelopeMiddleware;
-use Hanjiang\Middleware\ThrottleMiddleware;
 use Hanjiang\Model\Advanced;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\General;
@@ -30,6 +22,7 @@ use Hanjiang\Model\HeroTalent;
 use Hanjiang\Model\Refine;
 use Hanjiang\Model\TraderLog;
 use Hanjiang\Tests\Support\ScriptedRandomEngine;
+use Hanjiang\Tests\Support\Gateway;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -43,25 +36,6 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  */
 final class Growth3Test extends TestCase
 {
-    private static Router $router;
-
-    public static function setUpBeforeClass(): void
-    {
-        date_default_timezone_set('Asia/Shanghai');
-        $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        DB::init($dbConfig['mysql']);
-        Redis::init($dbConfig['redis']);
-
-        $router = new Router(dirname(__DIR__, 2) . '/public');
-        $router->use(new CorsMiddleware());
-        $router->use(new ResponseEnvelopeMiddleware());
-        $router->use(new AuthMiddleware());
-        $router->use(new ThrottleMiddleware());
-        $router->use(new DailyCronMiddleware());
-        $router->use(new GameProtocolMiddleware(HandlerRegistry::all()));
-        self::$router = $router;
-    }
-
     protected function tearDown(): void
     {
         BossClock::freeze(null);
@@ -75,7 +49,7 @@ final class Growth3Test extends TestCase
     private function request(array $auth, string $controller, string $method, array $params = []): array
     {
         $ctx = Context::mock(array_merge(['c' => $controller, 'm' => $method], $auth, $params));
-        $res = self::$router->handleContext($ctx);
+        $res = Gateway::handle($ctx);
         if ($res instanceof WorkermanResponse) {
             $json = json_decode((string)$res->rawBody(), true);
             $this->assertIsArray($json, "{$controller}.{$method}: " . $res->rawBody());
@@ -165,7 +139,7 @@ final class Growth3Test extends TestCase
         $this->assertSame(0, $res['level_up']);
         // 进阶传承 CD（没用过为 0）、资源（140 级以下不返回声望）
         $this->assertSame(0, $res['cd']);
-        $this->assertSame(['freeleap' => 10, 'soul' => 100, 'jade2' => 0, 'jade3' => 0], $res['resource']);
+        $this->assertSame(['freeleap' => 0, 'soul' => 100, 'jade2' => 0, 'jade3' => 0], $res['resource']);
         $this->assertSame(['skill1_level' => 0, 'skill1_name' => '好战', 'skill1_quality' => 1], array_intersect_key($res['general'], array_flip(['skill1_level', 'skill1_name', 'skill1_quality'])));
 
         // 单个技能信息

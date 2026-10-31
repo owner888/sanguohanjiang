@@ -36,7 +36,8 @@ use OmniPHP\Http\Context;
  * 与旧版的差别：旧版按装备 id 查装备时不限本人（equipment_model->get_info），可以精炼 / 继承别人的装备；新版只认本人的装备，
  * 别人的装备按「装备不存在」返回。
  *
- * 依赖未移植：元宝流水 gold_log、日常任务 5（元宝消费）与翻牌活动计数（member_model->sub_gold）。
+ * 元宝消耗由 Member::deductCurrency 记元宝流水与日常任务 5（元宝消费）。
+ * 依赖未移植：sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
  */
 final class RefineHandler
 {

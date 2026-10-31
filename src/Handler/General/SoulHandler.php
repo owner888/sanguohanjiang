@@ -5,8 +5,10 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnSoul;
+use Hanjiang\Model\StatPay;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -25,9 +27,8 @@ use OmniPHP\Http\Context;
  * 并发：会改数据的接口（levelup / convert / equip / unequip / unlock / merge_action）在 Member::locked 玩家行锁内执行。
  * 旧版 merge_action 的防刷锁 soul_merge_{uid} 只查不加（add_lock 从未调用），等于没有锁；这里由玩家行锁保证并发安全，
  * 不移植这个 Redis 键（-3 操作频繁不会出现，同旧版）。
- *
- * 依赖未移植：主线任务 mainquest_model->task_action(16, 等级)（将魂等级提升至 X 级）；元宝流水 gold_log 与
- * 消费统计 stat_model->unlock_pack（背包解锁）。
+ * 升级后计主线任务 16（将魂等级提升至 X 级，MainQuestTask）；背包解锁的元宝流水由 Member::deductCurrency 记，
+ * 并记付费点统计 unlock_pack（StatPay）。
  */
 final class SoulHandler
 {
@@ -386,7 +387,8 @@ final class SoulHandler
                 'next' => $next['info'],
                 'base_soul' => self::memberValue($uid, 'soul'),
             ];
-            // 依赖未移植：主线任务 mainquest_model->task_action(16, $level)（将魂等级提升至 X 级）
+            // 主线任务 16将魂等级提升至X级
+            MainQuestTask::action($uid, 16, $level);
             return $return;
         });
     }
@@ -673,7 +675,6 @@ final class SoulHandler
                 $return['status'] = 2;
                 return $return;
             }
-            // 依赖未移植：元宝流水 gold_log
             if (!Member::deductCurrency($uid, gold: $gold)) {
                 // 扣金币失败
                 $return['status'] = -3;
@@ -685,7 +686,8 @@ final class SoulHandler
                 $return['status'] = -4;
                 return $return;
             }
-            // 依赖未移植：消费统计 stat_model->unlock_pack($gold)
+            // 消费统计记录
+            StatPay::record($uid, 'unlock_pack', $gold);
 
             $soulpack = self::memberValue($uid, 'soulpack');
             $return['status'] = 1;
@@ -857,7 +859,7 @@ final class SoulHandler
      *
      * @return array<string, int>|null
      */
-    private static function generalSites(int $uid, int $gid): ?array
+    public static function generalSites(int $uid, int $gid): ?array
     {
         $site = OwnSoul::generalSoul($gid);
         if ($site !== []) {
@@ -879,7 +881,7 @@ final class SoulHandler
      * @param array<string, int> $site
      * @return list<array<string, int|string>>
      */
-    private static function equippedSouls(array $site): array
+    public static function equippedSouls(array $site): array
     {
         $soularr = [];
         for ($i = 1; $i < 9; $i++) {
@@ -898,7 +900,7 @@ final class SoulHandler
      * @param list<array<string, int|string>> $equip
      * @return array<int, array<string, mixed>>
      */
-    private static function siteInfo(array $site, int $unlockSite, array $equip): array
+    public static function siteInfo(array $site, int $unlockSite, array $equip): array
     {
         $return = [];
         for ($i = 1; $i < 9; $i++) {

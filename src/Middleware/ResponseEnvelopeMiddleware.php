@@ -5,9 +5,10 @@ declare(strict_types=1);
 namespace Hanjiang\Middleware;
 
 use OmniPHP\Http\Context;
+use OmniPHP\Http\Middleware;
 use Workerman\Protocols\Http\Response as WorkermanResponse;
 
-final class ResponseEnvelopeMiddleware implements MiddlewareInterface
+final class ResponseEnvelopeMiddleware implements Middleware
 {
     public function handle(Context $ctx, callable $next): mixed
     {

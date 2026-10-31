@@ -381,7 +381,8 @@ final class PassGeneral
                     }
                 } elseif (General::createFromTemplate($uid, $gid) !== null) {
                     $message .= self::LANG_CRON_GENERAL;
-                    // 依赖未移植：tavern_model->add_pub_log(gid, 1, 11, uid) 酒馆获得日志
+                    // 酒馆获得日志（tavern_model->add_pub_log(gid, 1, 11, uid)）
+                    PubLog::add($uid, $gid, 1, 11, $now);
                 }
                 break;
             case 14: // 精炼石
@@ -478,7 +479,7 @@ final class PassGeneral
      */
     public static function addFreeleap(int $uid, int $num): void
     {
-        DB::table('member_field')->where('uid', $uid)->whereNull('deleted_at')->increment('freeleap', $num);
+        FreeLeap::add($uid, $num);
         Redis::del('player:' . $uid);
     }
 

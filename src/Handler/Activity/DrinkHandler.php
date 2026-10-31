@@ -5,148 +5,187 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
-use OmniPHP\Cache\Redis;
+use Hanjiang\MasterData\Drink;
+use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberActivity;
+use Hanjiang\Model\StatPay;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
 /**
- * 青梅煮酒论英雄、痛饮杜康佳酿与军令体力犒赏处理器 (DDD Activity Domain)
+ * 每日对酒（移植旧版 controllers/drink.php + models/drink_model.php）
+ *
+ * 酒的配置取 MasterData Drink（type 1 银币，价格 = 主公等级 × 100；type 2 元宝）。每天对酒一次（member_activity.drinktime），
+ * 加军令（act_log）；梨花白（id 1）以外的对酒记一条 drink_log，界面显示全服最近 7 条。
+ * 客户端 drinkpop.js 调用 index、go_drink（type 酒 id）。
+ *
+ * 依赖未移植：春节送福活动计数（actnewyear_model->add_task_num(version, 21)，type 2 时；节日活动，旧版数据中已结束）。
+ * 与旧版的差别：对酒在玩家行锁里执行，并以 drinktime 条件更新抢占当天的次数（旧版先扣钱再改时间，并发可对多次）。
  */
 final class DrinkHandler
 {
     /**
-     * 3 大传世名酿配置字典
-     * type: 1 银两, 2 元宝
-     */
-    public const array WINES = [
-        1 => ['id' => 1, 'name' => '陈年竹叶青', 'type' => 1, 'cost_silver' => 3000, 'cost_gold' => 0, 'act' => 20, 'silver' => 8000, 'soul' => 20],
-        2 => ['id' => 2, 'name' => '百年状元红', 'type' => 2, 'cost_silver' => 0, 'cost_gold' => 20, 'act' => 50, 'silver' => 25000, 'soul' => 60],
-        3 => ['id' => 3, 'name' => '极品千年杜康', 'type' => 2, 'cost_silver' => 0, 'cost_gold' => 50, 'act' => 120, 'silver' => 60000, 'soul' => 150],
-    ];
-
-    /**
-     * 煮酒台主界面: c=drink&m=index
+     * 初始化接口: c=drink&m=index
      */
     public static function index(Context $ctx): array
     {
-        $uid = MemberHandler::resolveUid($ctx);
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $level = max(1, (int)($member['level'] ?? 1));
-
-        $todayStr = date('Ymd');
-        $lastDrink = (string)(Redis::get("user_drink_date:{$uid}") ?? '');
-        $status = ($lastDrink === $todayStr) ? 2 : 1; // 1: 今日可饮, 2: 今日已饮
-
-        // 格式化 3 种酒品 (1 号酒消耗银两随等级递增)
-        $list = [];
-        foreach (self::WINES as $id => $wine) {
-            $price = ($wine['type'] === 1) ? $level * 100 : (int)$wine['cost_gold'];
-            $list[] = [
-                'id' => $id,
-                'name' => $wine['name'],
-                'type' => (int)$wine['type'],
-                'price' => $price,
-                'act' => (int)$wine['act'],
-            ];
+        /**
+         * -2 获取活动信息失败
+         * -1 获取列表失败
+         *  0 失败
+         *  1 成功
+         *  2 当日对酒次数不足
+         */
+        $return = ['status' => 0, 'list' => []];
+        $member = self::member(MemberHandler::resolveUid($ctx));
+        if ($member === null) {
+            return $return;
         }
-
-        $logs = Redis::getJson('global_drink_logs') ?: [
-            ['nickname' => '常山赵子龙', 'type' => 3, 'act' => 120],
-            ['nickname' => '关云长', 'type' => 2, 'act' => 50],
-            ['nickname' => '燕人张翼德', 'type' => 1, 'act' => 20],
-        ];
-
-        return [
-            'status' => $status,
-            'list' => $list,
-            'log' => array_values($logs),
-            // 向下兼容保留原字段
-            'table_title' => '青梅煮酒论英雄',
-            'wines' => array_values(self::WINES),
-            'message' => 'ok',
-        ];
+        $uid = (int)$member['uid'];
+        // [drink_model]获取每日对酒活动列表
+        $list = self::drinkList((int)$member['level']);
+        // [drink_model]获取每日对酒log
+        $log = self::log();
+        // [member_model]获取活动信息
+        MemberActivity::ensure($uid);
+        $drinktime = (int)(MemberActivity::many([$uid], ['drinktime'])[$uid]['drinktime'] ?? 0);
+        $last = (int)date('Ymd', $drinktime);
+        $now = (int)date('Ymd', time());
+        // 当日对酒次数不足 2
+        $return['status'] = $now <= $last ? 2 : 1;
+        $return['list'] = $list;
+        $return['log'] = $log;
+        return $return;
     }
 
     /**
-     * 举杯对饮: c=drink&m=go_drink
+     * 对酒: c=drink&m=go_drink（type 酒 id）
      */
     public static function go_drink(Context $ctx): array
     {
+        /**
+         * -6 类型错误
+         * -5 扣除金币失败
+         * -4 扣除银币失败
+         * -3 获取对酒信息失败
+         * -2 当日对酒次数不足
+         * -1 获取活动信息失败
+         *  0 失败
+         *  1 成功
+         *  2 银币不足
+         *  3 金币不足
+         */
         $uid = MemberHandler::resolveUid($ctx);
-        $wineId = (int)($ctx->input('type', $ctx->input('id', 1)));
-
-        if (!isset(self::WINES[$wineId])) {
-            return ['status' => -3, 'message' => '美酒品级不存在'];
+        $type = (int)$ctx->input('type', 0);
+        if (self::member($uid) === null) {
+            return ['status' => 0, 'reward' => []];
         }
-
-        $todayStr = date('Ymd');
-        $lastDrink = (string)(Redis::get("user_drink_date:{$uid}") ?? '');
-        if ($lastDrink === $todayStr) {
-            return ['status' => -2, 'message' => '今日对酒次数已用尽，请明日再来'];
-        }
-
-        $cfg = self::WINES[$wineId];
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $level = max(1, (int)($member['level'] ?? 1));
-
-        $costSilver = ($cfg['type'] === 1) ? $level * 100 : 0;
-        $costGold = ($cfg['type'] === 2) ? (int)$cfg['cost_gold'] : 0;
-
-        if ($costGold > 0) {
-            if ((int)($member['gold'] ?? 0) < $costGold) {
-                return ['status' => 3, 'message' => '元宝不足'];
+        MemberActivity::ensure($uid);
+        return Member::locked($uid, static function () use ($uid, $type): array {
+            $return = ['status' => 0, 'reward' => []];
+            $member = self::member($uid);
+            $now = time();
+            $drinktime = (int)(MemberActivity::many([$uid], ['drinktime'])[$uid]['drinktime'] ?? 0);
+            if ((int)date('Ymd', $now) <= (int)date('Ymd', $drinktime)) {
+                // 当日对酒次数不足
+                $return['status'] = -2;
+                return $return;
             }
-            MemberHandler::deductCurrency($uid, gold: $costGold);
-        }
-
-        if ($costSilver > 0) {
-            if ((int)($member['silver'] ?? 0) < $costSilver) {
-                return ['status' => 2, 'message' => '银两不足'];
+            // [drink_model]根据id获取每日对酒信息(id)
+            $drink = Drink::ROWS[$type] ?? null;
+            if ($drink === null) {
+                // 获取对酒信息失败
+                $return['status'] = -3;
+                return $return;
             }
-            MemberHandler::deductCurrency($uid, silver: $costSilver);
+            if ($drink['type'] === 1) {
+                // 扣除银币（get_info_by_id：价格 × 主公等级）
+                if (!Member::deductCurrency($uid, silver: $drink['price'] * (int)$member['level'])) {
+                    // 银币不足 2
+                    $return['status'] = 2;
+                    return $return;
+                }
+            } elseif ($drink['type'] === 2) {
+                // 扣除元宝
+                if (!Member::deductCurrency($uid, gold: $drink['price'])) {
+                    // 金币不足
+                    $return['status'] = 3;
+                    return $return;
+                }
+                // 消费统计记录
+                StatPay::record($uid, 'drink', $drink['price']);
+            } else {
+                $return['status'] = -6;
+                return $return;
+            }
+
+            // 更新对酒时间
+            MemberActivity::update($uid, ['drinktime' => $now]);
+            // 加军令
+            Member::addCurrency($uid, act: $drink['act']);
+
+            // 添加对酒log
+            $data = [
+                'nickname' => (string)$member['nickname'],
+                'type' => $drink['id'],
+                'act' => $drink['act'],
+                'dateline' => $now,
+            ];
+            if ($drink['id'] > 1) {
+                DB::table('drink_log')->insert($data);
+            }
+            // 依赖未移植：春节送福活动计数 actnewyear_model->add_task_num(version, 21)（type 2 时）
+
+            $after = self::member($uid);
+            $return['status'] = 1;
+            $return['reward']['act'] = (int)$after['act'];
+            $return['reward']['gold'] = (int)$after['gold'];
+            $return['reward']['silver'] = (int)$after['silver'];
+            $return['log'] = $data;
+            return $return;
+        });
+    }
+
+    /**
+     * 对酒列表（get_list：type 1 的价格为主公等级 × 100）
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function drinkList(int $level): array
+    {
+        $return = [];
+        foreach (Drink::ROWS as $value) {
+            if ($value['type'] === 1) {
+                $value['price'] = $level * 100;
+            }
+            $return[] = $value;
         }
+        return $return;
+    }
 
-        // 发放军令体力
-        $rewardAct = (int)$cfg['act'];
-        MemberHandler::addCurrency($uid, act: $rewardAct);
+    /**
+     * 全服最近的对酒记录（get_log：最近 7 条，旧版不带 uid）
+     *
+     * @return list<array<string, mixed>>
+     */
+    private static function log(int $limit = 7): array
+    {
+        $rows = DB::table('drink_log')->select('id', 'nickname', 'dateline', 'type', 'act')
+            ->whereNull('deleted_at')->orderBy('id', 'DESC')->limit($limit)->get();
+        return array_map(static fn (array $row): array => [
+            'id' => (int)$row['id'],
+            'nickname' => (string)$row['nickname'],
+            'dateline' => (int)$row['dateline'],
+            'type' => (int)$row['type'],
+            'act' => (int)$row['act'],
+        ], $rows);
+    }
 
-        // 记录今日对酒完成
-        Redis::set("user_drink_date:{$uid}", $todayStr, 86400 * 2);
-        Redis::del('player:' . $uid);
-
-        $freshMember = DB::table('member')->where('uid', $uid)->first();
-        $nickname = (string)($freshMember['nickname'] ?? ('主公' . $uid));
-
-        // 记录全服对酒滚屏日志
-        $logs = Redis::getJson('global_drink_logs') ?: [];
-        array_unshift($logs, [
-            'nickname' => $nickname,
-            'type' => $wineId,
-            'act' => $rewardAct,
-        ]);
-        $logs = array_slice($logs, 0, 10);
-        Redis::setJson('global_drink_logs', $logs, 86400 * 7);
-
-        if ($wineId === 3) {
-        }
-
-        return [
-            'status' => 1,
-            'reward' => [
-                'silver' => (int)($freshMember['silver'] ?? 0),
-                'gold' => (int)($freshMember['gold'] ?? 0),
-                'act' => (int)($freshMember['act'] ?? 0),
-            ],
-            'log' => [
-                'nickname' => $nickname,
-                'type' => $wineId,
-                'act' => $rewardAct,
-            ],
-            // 向下兼容保留原字段
-            'wine_name' => $cfg['name'],
-            'silver' => (int)$cfg['silver'],
-            'soul' => (int)$cfg['soul'],
-            'message' => "对酒当歌，人生几何！痛饮【{$cfg['name']}】，结交天下豪杰，获得军令 {$rewardAct} 点！",
-        ];
+    /**
+     * @return array<string, mixed>|null
+     */
+    private static function member(int $uid): ?array
+    {
+        return $uid > 0 ? DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first() : null;
     }
 }

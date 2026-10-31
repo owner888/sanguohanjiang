@@ -13,9 +13,15 @@ use Hanjiang\MasterData\CountryDonate;
 use Hanjiang\MasterData\CountryJob;
 use Hanjiang\MasterData\CountryLearn;
 use Hanjiang\MasterData\CountryLevel;
+use Hanjiang\Model\Banquet;
+use Hanjiang\Model\Expostulation;
+use Hanjiang\Model\General;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\Message;
 use Hanjiang\Model\OwnMatrix;
+use Hanjiang\Model\StatPay;
+use Hanjiang\Model\WarCollege;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -219,7 +225,8 @@ final class CountryHandler
             $data['contribute'] = (int)$info['contribute'];
             $data['allcontribute'] = (int)$info['allcontribute'];
         }
-        // 依赖未移植：stat_model->create_country 消费统计记录
+        // 消费统计记录
+        StatPay::record($uid, 'create_country', self::CREATE_PRICE);
 
         $return['status'] = 1;
         $return['country'] = $add;
@@ -1013,12 +1020,16 @@ final class CountryHandler
         $list = self::allCountryPages();
 
         // 依赖未移植：overseastrade_model->clear_team 海外贸易队伍清理
-        // 依赖未移植：banquet_model->repaire_banquet 国家宴会队伍清理
+        // 国家宴会队伍清理
+        Banquet::repair($myCountry, $uid, $uid);
         // 国战报名状态清理
         SiegeHandler::clearSiegeStatus($uid);
-        // 依赖未移植：expostulation_model->clear_sup_status / clear_expos 国家谏言状态清理
+        // 国家谏言支持状态清理、清理没有采纳的谏言
+        Expostulation::clearSupStatus($uid);
+        Expostulation::clearExpos($uid);
         // 依赖未移植：dice_model->clear_dice_info 清除国家骰子信息
-        // 依赖未移植：warcollege_use_model->clear_buffcd 清理国家学院buffcd
+        // 清理国家学院buffcd
+        WarCollege::clearBuffcd($uid);
 
         // 添加国家退出记录(状态 1退出，2进入，3被踢出)
         self::addCountryLog([
@@ -1422,8 +1433,11 @@ final class CountryHandler
         Redis::set(self::FLOG_KEY, 1, self::TTL);
 
         // 依赖未移植：overseastrade_model->clear_team 海外贸易队伍清理
-        // 依赖未移植：banquet_model->repaire_banquet 国家宴会队伍清理
-        // 依赖未移植：expostulation_model->clear_sup_status / clear_expos 国家谏言状态清理
+        // 国家宴会队伍清理（旧版队伍前缀取踢人者的国家，即同一国家）
+        Banquet::repair($myCountry, $uid, $myUid);
+        // 国家谏言支持状态清理、清理没有采纳的谏言
+        Expostulation::clearSupStatus($uid);
+        Expostulation::clearExpos($uid);
         // 国战报名状态清理
         SiegeHandler::clearSiegeStatus($uid);
         // 依赖未移植：dice_model->clear_dice_info 清除国家骰子信息
@@ -1649,7 +1663,14 @@ final class CountryHandler
             $list = self::memberList($infoCountry);
         }
         if ($member !== null && $battleInfo !== null) {
-            // 依赖未移植：message_model->record_pk_report 信件战报（from/fromlevel/to/tolevel/report 落库供信件回放）
+            // 信件战报
+            Message::recordPkReport((int)$pmid, [
+                'from' => (string)$self['nickname'],
+                'fromlevel' => (int)$self['level'],
+                'to' => (string)$base['nickname'],
+                'tolevel' => (int)$base['level'],
+                'report' => $battle['info'],
+            ]);
             $battleInfo['report'] = $pmid;
             $battleInfo['uid'] = (int)$member['uid'];
         }
@@ -1873,7 +1894,8 @@ final class CountryHandler
 
             $rule = [];
             $rule['gold'] = self::donatePrice('gold', $times + 1);
-            // 依赖未移植：stat_model->country_donate 消费统计记录
+            // 消费统计记录
+            StatPay::record($uid, 'country_donate', $cost);
         } else {
             // 参数错误
             $return['status'] = -5;
@@ -2635,7 +2657,7 @@ final class CountryHandler
     /**
      * @return array<string, mixed>|null
      */
-    private static function countryByName(string $name): ?array
+    public static function countryByName(string $name): ?array
     {
         $row = DB::table('country')->where('name', $name)->whereNull('deleted_at')->first();
         return $row === null ? null : self::strip($row);
@@ -3029,6 +3051,45 @@ final class CountryHandler
     }
 
     /**
+     * 玩家为国家加贡献（国宴 / 谏言领奖共用：update_member_info 今日贡献与总贡献 + 增加国家经验 add_exp + 贡献 log）
+     *
+     * 贡献用一条 UPDATE 原子累加（旧版按请求开始时读到的贡献读改写）。
+     *
+     * @param array<string, mixed> $member 当前玩家（uid / level / vip / country）
+     * @param int $type 贡献 log 类型（3 谏言、4 国宴）
+     * @return array{contribute: int, allcontribute: int}|null 加完后的今日贡献与总贡献；不在国家里为 null
+     */
+    public static function addContribute(array $member, int $donate, int $type, string $class, string $method): ?array
+    {
+        $uid = (int)$member['uid'];
+        // 依赖未移植：member_country_taxes_model->change_taxes('+', 新增今日贡献 * 0.1) 国家税金累计
+        $affected = DB::execute(
+            'UPDATE `zc_sanguo_member_country` SET `contribute` = `contribute` + :add, `allcontribute` = `allcontribute` + :add2
+             WHERE `uid` = :uid AND `deleted_at` IS NULL',
+            ['add' => $donate, 'add2' => $donate, 'uid' => $uid]
+        );
+        if ($affected === 0) {
+            return null;
+        }
+        $row = self::memberCountry($uid);
+        $data = ['contribute' => (int)$row['contribute'], 'allcontribute' => (int)$row['allcontribute']];
+        // 查询国家信息，增加国家经验
+        $country = self::countryInfo((int)$member['country']);
+        if ($country !== null) {
+            self::addExp($country, $donate);
+        }
+        // 记录贡献log
+        self::addDonateLog($member, $method, [
+            'type' => $type,
+            'cost' => 0,
+            'donate' => $donate,
+            'contribute' => $data['contribute'],
+            'allcontribute' => $data['allcontribute'],
+        ], $class);
+        return $data;
+    }
+
+    /**
      * 增加国家经验
      *
      * @return array{status: int, info?: array<string, int>}
@@ -3055,7 +3116,8 @@ final class CountryHandler
             return $return;
         }
 
-        // 依赖未移植：warcollege_model->update_country_gold_info 增加国家税金（新增经验 * 0.1）
+        // 增加国家税金（新增经验 * 0.1）
+        WarCollege::updateCountryGold($country, $exp * 0.1, 2);
 
         $return['status'] = 1;
         return $return;
@@ -3122,92 +3184,8 @@ final class CountryHandler
      */
     public static function addGeneralExp(int $uid, int $heroLevel, int $gid, int $addexp): array
     {
-        /**
-         * -2 获取将领信息失败
-         * -1 更新拥有将领表失败
-         *  0 失败
-         *  1 成功
-         *  2 不在出征队列中
-         *  3 等级已达主公等级上限
-         *  4 需要转生
-         */
-        $return = ['status' => 0, 'info' => []];
-        if ($addexp <= 0) {
-            $return['status'] = -6;
-            return $return;
-        }
-        $general = DB::table('general')->where('id', $gid)->where('uid', $uid)->whereNull('deleted_at')->first();
-        if ($general === null) {
-            $return['status'] = -2;
-            return $return;
-        }
-        $level = (int)$general['level'];
-        $exp = (int)$general['exp'];
-        $levelupexp = self::generalLevelupExp($level);
-
-        if ((int)$general['goout'] === 0) {
-            // 不在出征队列中 2
-            $return['status'] = 2;
-            return $return;
-        }
-
-        // 等级限制(不超过主公)
-        if ($level > $heroLevel) {
-            $return['status'] = 3;
-            return $return;
-        }
-
-        if ($level === $heroLevel && $exp === $levelupexp) {
-            $return['status'] = 3;
-            return $return;
-        }
-        // 依赖未移植：武将转生 turn/get_turn_rule（转生等级上限 50 + 转数*5，到达时返回 4 需要转生）
-
-        $info = self::checkGeneralLevelup($exp + $addexp, $level, $heroLevel);
-        if ($info['level'] > $level) {
-            // 依赖未移植：expostulation_model->action(2, 升级数) 帮派谏言任务
-            // 依赖未移植：mainquest_model->task_action(3, 等级) 主线任务
-        }
-
-        $affected = DB::table('general')
-            ->where('uid', $uid)
-            ->where('id', $gid)
-            ->whereNull('deleted_at')
-            ->update(['level' => $info['level'], 'exp' => $info['exp']]);
-        if ($affected > 0) {
-            $return['info'] = [
-                'gid' => $gid,
-                'exp' => $info['exp'],
-                'level' => $info['level'],
-                'levelupexp' => $info['levelupexp'],
-                'addexp' => $addexp,
-                'isturn' => $info['status'] === 3 ? 1 : 0,
-            ];
-            $return['status'] = 1;
-        } else {
-            $return['status'] = -1;
-        }
-        return $return;
-    }
-
-    /**
-     * 武将检查是否升级（general_model->check_levelup，不含转生上限）
-     *
-     * @return array{level: int, exp: int, levelupexp: int, status: int}
-     */
-    private static function checkGeneralLevelup(int $exp, int $level, int $heroLevel): array
-    {
-        $levelupexp = self::generalLevelupExp($level);
-        // 大于主公等级
-        if ($level > $heroLevel) {
-            $level -= 1;
-            $levelupexp = self::generalLevelupExp($level);
-            return ['level' => $level, 'exp' => $levelupexp, 'levelupexp' => $levelupexp, 'status' => 2];
-        }
-        if ($exp >= $levelupexp) {
-            return self::checkGeneralLevelup($exp - $levelupexp, $level + 1, $heroLevel);
-        }
-        return ['level' => $level, 'exp' => $exp, 'levelupexp' => $levelupexp, 'status' => 1];
+        // 主公等级由 General::addExp 按将领所属玩家读取（旧版同：他人取 get_base_info）
+        return General::addExp($uid, $gid, $addexp);
     }
 
     /**
@@ -3240,7 +3218,7 @@ final class CountryHandler
      *
      * @param array{type: int, cost: int, donate: int, contribute: int, allcontribute: int} $info
      */
-    private static function addDonateLog(array $member, string $method, array $info): void
+    private static function addDonateLog(array $member, string $method, array $info, string $class = 'country'): void
     {
         DB::table('country_donate_log')->insert([
             'uid' => (int)$member['uid'],
@@ -3251,7 +3229,7 @@ final class CountryHandler
             'donate' => $info['donate'],
             'contribute' => $info['contribute'],
             'allcontribute' => $info['allcontribute'],
-            'class' => 'country',
+            'class' => $class,
             'method' => $method,
             'argument' => '',
             'dateline' => time(),

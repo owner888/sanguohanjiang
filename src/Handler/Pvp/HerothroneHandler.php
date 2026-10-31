@@ -41,7 +41,8 @@ use OmniPHP\Http\Context;
  * 依赖未移植：
  * - 跨服排行 uc_model->get_top_rank / update_top_rank（uc 服务器 herothrone 排行，旧版缓存在 Redis herothrone 键 1800 秒）：
  *   index / go_back 的 list 恒为空数组，过关刷新历史最高时不上报；
- * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数；银币 / 声望 / 原魂的流水。
+ * - sub_gold 的翻牌活动计数（flop，旧版数据中已结束）。
+ * （元宝 / 银币 / 声望 / 原魂的增减由 Member / OwnSoul 记流水，元宝消耗另计日常任务 5）
  */
 final class HerothroneHandler
 {

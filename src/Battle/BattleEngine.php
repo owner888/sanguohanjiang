@@ -31,14 +31,13 @@ use Random\Randomizer;
  * 默认 new Randomizer(new Mt19937())（随机种子），getInt / pickArrayKeys 与 mt_rand / array_rand 在同种子下逐个相同；
  * 测试注入固定种子或脚本化的 Engine。
  *
- * 将魂 _general_soul[ugid]、美人 _beauty_arr[uuid]、星魄 _star_arr[uuid]、名将成就 _addition_arr[uuid] 与名将进阶 _advanced_arr[ugid]
- * 由 TeamBuilder 记在玩家单位的 soul（[类型 => 属性]）/ beauty_arr（美人加成）/ star_arr（命格加成行）/ addition_arr（名将谱加成行）/
- * advanced（进阶行）上，这里照旧版计算：将魂生命(4) / 闪避(5) / 识破(6) / 暴击率(7) / 暴击伤害(8) / 抗晕(12)，
- * 美人闪避 / 识破 / 暴击伤害，星魄暴击率 / 闪避 / 识破 / 暴击伤害 / 抗晕，名将成就暴击率 / 闪避 / 识破，
- * 名将进阶技能 1 ~ 3 加到天赋攻防系数、技能 4 加到天赋血量系数。
+ * 将魂 _general_soul[ugid]、美人 _beauty_arr[uuid]、星魄 _star_arr[uuid]、名将成就 _addition_arr[uuid]、国家学院 _warcollege_arr[uuid]
+ * 与名将进阶 _advanced_arr[ugid] 由 TeamBuilder 记在玩家单位的 soul（[类型 => 属性]）/ beauty_arr（美人加成）/ star_arr（命格加成行）/
+ * addition_arr（名将谱加成行）/ warcollege_arr（国家学院加成）/ advanced（进阶行）上，这里照旧版计算：将魂生命(4) / 闪避(5) / 识破(6) /
+ * 暴击率(7) / 暴击伤害(8) / 抗晕(12)，美人闪避 / 识破 / 暴击伤害，星魄暴击率 / 闪避 / 识破 / 暴击伤害 / 抗晕，名将成就暴击率 / 闪避 / 识破，
+ * 国家学院闪避 / 识破（旧版学院的暴击伤害分支已注释掉），名将进阶技能 1 ~ 3 加到天赋攻防系数、技能 4 加到天赋血量系数。
  *
  * 依赖未移植（旧版对应数组在新版恒为空，相关分支不移植）：
- * 国家学院 _warcollege_arr、
  * 锻造套装 _suit_arr 与单位上的 suitbuff（回气 / 偷气 / 清气 / 反伤 / 最终增伤 / 暴击伤害 / 血量伤害倍增）、
  * 神树 _tree_info（buff 里的 tree）。
  * 坐骑的特殊属性（血量% / 抗晕 / 最终免伤 / 吸血，旧版也记在 _suit_arr 与 suitbuff）与 buff 里的 mount 由 TeamBuilder 记在单位的
@@ -466,11 +465,12 @@ final class BattleEngine
             $this->attackLog['attacktype'] = 0;
             if ((int)$attack['type'] === 1) {
                 $dodgeRate = self::talent($defense['talentid'], 'dodge');
-                // 玩家（有体力字段）的将魂(5) / 名将成就 / 美人 / 星魄闪避率加成（battle_model.php:2960）；依赖未移植：国家学院闪避率加成
+                // 玩家（有体力字段）的将魂(5) / 名将成就 / 美人 / 星魄 / 国家学院闪避率加成（battle_model.php:2960）
                 // （旧版套装闪避误加到暴击率变量上，且之后不再使用，无效果）
                 if (isset($defense['tili'])) {
                     $dodgeRate += ($defense['soul'][5] ?? 0) + ($defense['addition_arr']['dodge'] ?? 0)
-                        + ($defense['beauty_arr']['dodge'] ?? 0) + ($defense['star_arr']['dodge'] ?? 0);
+                        + ($defense['beauty_arr']['dodge'] ?? 0) + ($defense['star_arr']['dodge'] ?? 0)
+                        + ($defense['warcollege_arr']['dodge'] ?? 0);
                 }
 
                 // 降低攻击方的精准命中（effect 29）
@@ -495,9 +495,10 @@ final class BattleEngine
                 $penetrateRate = self::talent($defense['talentid'], 'penetrate');
                 // 玩家（有体力字段）
                 if (isset($defense['tili'])) {
-                    // 将魂(6) / 名将成就 / 美人 / 星魄识破率加成（battle_model.php:3022）；依赖未移植：国家学院 / 套装识破率加成
+                    // 将魂(6) / 名将成就 / 美人 / 星魄 / 国家学院识破率加成（battle_model.php:3022）；依赖未移植：套装识破率加成
                     $penetrateRate += ($defense['soul'][6] ?? 0) + ($defense['addition_arr']['penetrate'] ?? 0)
-                        + ($defense['beauty_arr']['penetrate'] ?? 0) + ($defense['star_arr']['penetrate'] ?? 0);
+                        + ($defense['beauty_arr']['penetrate'] ?? 0) + ($defense['star_arr']['penetrate'] ?? 0)
+                        + ($defense['warcollege_arr']['penetrate'] ?? 0);
 
                     // 降低攻击方的精准命中（effect 29；旧版此处把命中改写为识破率的折算值）
                     if (isset($this->sideDebuff[$L]['jingzhun']) && $this->sideDebuff[$L]['jingzhun']['round'] >= $round - 1) {

@@ -4,13 +4,15 @@ declare(strict_types=1);
 
 namespace Hanjiang\Middleware;
 
+use Hanjiang\Model\FlowLog;
 use OmniPHP\Http\Context;
+use OmniPHP\Http\Middleware;
 use OmniPHP\Logger;
 
 /**
  * 游戏协议分发中间件 (带智能平滑降级与 Logger Warning 跟踪)
  */
-final class GameProtocolMiddleware implements MiddlewareInterface
+final class GameProtocolMiddleware implements Middleware
 {
     /**
      * @param array<string, class-string> $handlers 映射字典: ['ios' => IosHandler::class, ...]
@@ -56,8 +58,31 @@ final class GameProtocolMiddleware implements MiddlewareInterface
         $ctx->set('protocol_c', $c);
         $ctx->set('protocol_m', $m);
         $ctx->set('handler_target', [$handlerClass, $m]);
+        // 货币流水的 class / method（旧版取当前请求的控制器 / 方法名），handler 返回后清空（见 FlowLog::route）
+        FlowLog::route($c, $m);
 
-        return $next($ctx);
+        try {
+            return $next($ctx);
+        } finally {
+            FlowLog::route('', '');
+        }
+    }
+
+    /**
+     * 路由终点（routes.php 注册给 OmniPHP Router）：执行本中间件选定的 Handler 动作
+     */
+    public static function execute(Context $ctx): mixed
+    {
+        /** @var callable|null $target */
+        $target = $ctx->get('handler_target');
+        if (is_callable($target)) {
+            return $target($ctx);
+        }
+
+        return [
+            'status' => 0,
+            'message' => '未定义执行动作',
+        ];
     }
 
     /** @var array<string, bool> */

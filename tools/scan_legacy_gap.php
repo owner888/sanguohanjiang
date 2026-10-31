@@ -15,6 +15,8 @@ declare(strict_types=1);
  * 只替换文档开头到「## 已实现但为写死 / 空壳的接口」之前的部分，其余手工维护的章节原样保留。
  */
 
+require dirname(__DIR__) . '/bootstrap.php';
+
 const LEGACY_APPS = ['s1', 'uc', 'battle', 'war'];
 const KEEP_FROM = '## 已实现但为写死 / 空壳的接口';
 

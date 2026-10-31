@@ -7,8 +7,10 @@ namespace Hanjiang\Handler\Campaign;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\GeneralHandler;
 use Hanjiang\MasterData\Matrix;
+use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnMatrix;
+use Hanjiang\Model\StatPay;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -256,7 +258,10 @@ final class MatrixHandler
             return $return;
         }
 
-        // 依赖未移植：主线任务 mainquest_model->task_action(6, 1)（同时上阵 5 个将领）
+        // 主线任务 6同时上阵5个将领
+        if (count($glist) === 5) {
+            MainQuestTask::action($uid, 6, 1);
+        }
 
         Redis::del('player:' . $uid);
         $return['status'] = 1;
@@ -358,8 +363,10 @@ final class MatrixHandler
             return $return;
         }
 
-        // 依赖未移植：主线任务 mainquest_model->task_action(5, 等级)（任意阵法升到 X 级）
-        // 依赖未移植：消费统计 stat_model->matrixlevelup(元宝)
+        // 主线任务 5任意阵法升到X级
+        MainQuestTask::action($uid, 5, $level);
+        // 消费统计记录
+        StatPay::record($uid, 'matrixlevelup', $levelup['info']['gold']);
 
         Redis::del('player:' . $uid);
         $levelup['info']['gold'] = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('gold') ?? 0);

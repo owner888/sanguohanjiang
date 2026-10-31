@@ -11,7 +11,7 @@ declare(strict_types=1);
  *   php tests/e2e/elite_smoke_server.php stop
  */
 
-require_once dirname(__DIR__, 2) . '/vendor/autoload.php';
+require_once dirname(__DIR__, 2) . '/bootstrap.php';
 
 \Hanjiang\WebSocket\EliteRoom::useClock(static fn (): int => (int)strtotime(date('Y-m-d') . ' 12:30:00'));
 

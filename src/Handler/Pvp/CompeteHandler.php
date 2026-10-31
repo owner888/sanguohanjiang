@@ -13,10 +13,11 @@ use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\MountTemp;
 use Hanjiang\MasterData\NewcompeteReward;
 use Hanjiang\Model\BossClock;
-use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Chat;
+use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\Message;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\PassGeneral;
 use OmniPHP\Cache\Redis;
@@ -35,10 +36,9 @@ use OmniPHP\Http\Context;
  *
  * 客户端调用（zhulupop.js / miscpop.js）：index、get_reward_list、get_reward、buy_pk_num、action、send_to_chat。
  *
- * 依赖未移植：
- * - 神树活动（activity_model->activity_status('sacredtree') / sacredtree_model->get_tree_by_uid），top_list 的 tree 恒为 0；
- * - message_model->record_pk_report 信件战报（pm_report，供信件回放）；
- * - 元宝流水。
+ * 挑战写信件战报（Message::recordPkReport）；元宝流水由 Member 记。
+ *
+ * 依赖未移植：神树活动（activity_model->activity_status('sacredtree') / sacredtree_model->get_tree_by_uid），top_list 的 tree 恒为 0。
  */
 final class CompeteHandler
 {
@@ -315,7 +315,7 @@ final class CompeteHandler
         $return['status'] = 1;
         $return['price'] = self::PRICE;
         if ($type === 1) {
-            // 判断金币是否足够，扣除金币（依赖未移植：gold_log 元宝流水）
+            // 判断金币是否足够，扣除金币
             if ((int)$member['gold'] < self::PRICE || !Member::deductCurrency($uid, gold: self::PRICE)) {
                 $return['status'] = -4;
                 return $return;
@@ -586,7 +586,14 @@ final class CompeteHandler
             'gender' => $toMember !== null ? (int)$toMember['gender'] : null,
         ];
 
-        // 依赖未移植：message_model->record_pk_report 信件战报（from / fromlevel / to / tolevel / report 落库供信件回放）
+        // 信件战报
+        Message::recordPkReport((int)$pmid, [
+            'from' => (string)$member['nickname'],
+            'fromlevel' => (int)$member['level'],
+            'to' => $toMember !== null ? (string)$toMember['nickname'] : '',
+            'tolevel' => $toMember !== null ? (int)$toMember['level'] : 0,
+            'report' => $battle['info'] ?? null,
+        ]);
 
         // 排名前三的用户
         $info['top_list'] = self::topList();

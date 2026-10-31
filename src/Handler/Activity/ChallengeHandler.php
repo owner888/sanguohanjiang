@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\Pvp\ArenaHandler;
+use Hanjiang\Model\Message;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -17,9 +18,9 @@ use OmniPHP\Http\Context;
  *
  * 客户端调用：action（miscpop.js battleByUid）。
  *
- * 依赖未移植：
- * - 信件战报 message_model->record_pk_report（pm_report，供信件回放）；信件存 Redis user_messages，info.report 为其 id；
- * - 春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(version, 15) 计数）。
+ * 信件与信件战报（pm / pm_report，info.report 为信件 id，供 c=message&m=report_detail 回放）见 Model\Message。
+ *
+ * 依赖未移植：春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(version, 15) 计数）。
  */
 final class ChallengeHandler
 {
@@ -89,7 +90,14 @@ final class ChallengeHandler
             'gender' => (int)$toMember['gender'],
         ];
 
-        // 依赖未移植：message_model->record_pk_report 信件战报（from / fromlevel / to / tolevel / report 落库供信件回放）
+        // 信件战报
+        Message::recordPkReport($pmid, [
+            'from' => (string)$member['nickname'],
+            'fromlevel' => (int)$member['level'],
+            'to' => (string)$toMember['nickname'],
+            'tolevel' => (int)$toMember['level'],
+            'report' => $battle['info'] ?? null,
+        ]);
         $return['info']['report'] = $pmid;
         $return['share'] = [
             'id' => $pmid,

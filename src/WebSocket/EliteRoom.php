@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Hanjiang\WebSocket;
 
 use Hanjiang\Handler\Activity\EliteHandler;
+use Hanjiang\Model\FlowLog;
 use Hanjiang\Handler\Pvp\CountryHandler;
 use Hanjiang\MasterData\EliteCity;
 use OmniPHP\Cache\Redis;
@@ -644,6 +645,8 @@ final class EliteRoom
             }
 
             $result = null;
+            // 货币流水的 class / method：旧版实时服务器调用 c=elite&m=action
+            FlowLog::route('elite', 'action');
             try {
                 $result = EliteHandler::fight($uid, $team['fid'], $teamId, $team['topteam'], $uid, implode(',', $uids));
                 $mapped = match ($result['status']) {
@@ -655,6 +658,8 @@ final class EliteRoom
             } catch (\Throwable $e) {
                 Logger::error('[EliteRoom] startfight 战斗失败: ' . $e->getMessage(), ['teamid' => $teamId]);
                 $mapped = -5;
+            } finally {
+                FlowLog::route('', '');
             }
             if ($mapped !== null) {
                 foreach ($uids as $memberUid) {
@@ -1001,6 +1006,10 @@ final class EliteRoom
 
     /**
      * 在全局锁内执行（多个 ws 进程共享 Redis 队伍状态；锁内再次调用直接执行）
+     *
+     * self::$inLock 是进程级的重入标记。Fiber 事件循环下它仍然正确，前提是 $fn 执行期间当前 Fiber 不挂起：
+     * phpredis / PDO 是同步调用，等锁的 usleep 也是阻塞整个进程而不是让出 Fiber。若以后在锁内引入会挂起 Fiber 的
+     * 异步 IO，另一个 Fiber 会看到 inLock=true 而不加锁直接执行，必须改为按 Fiber 记录（Workerman\Coroutine\Context）。
      *
      * @template T
      * @param callable(): T $fn

@@ -8,6 +8,7 @@ use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Model\Member;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Http\Context;
+use OmniPHP\Http\Middleware;
 
 /**
  * 每日计划任务触发中间件（移植自旧版 ZC_Controller::_cron_today）
@@ -15,7 +16,7 @@ use OmniPHP\Http\Context;
  * 已登录玩家（带 token）当天首次请求时执行 Member::dailyCron。
  * Redis 记录当日已执行，避免每个请求都打一次 member_field。
  */
-final class DailyCronMiddleware implements MiddlewareInterface
+final class DailyCronMiddleware implements Middleware
 {
     public function handle(Context $ctx, callable $next): mixed
     {

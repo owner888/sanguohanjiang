@@ -30,12 +30,6 @@ final class BattleEngineTest extends TestCase
     /** @var array<int, int> dump 将领 id => 新库将领 id */
     private array $gid = [];
 
-    public static function setUpBeforeClass(): void
-    {
-        $dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-        DB::init($dbConfig['mysql']);
-    }
-
     protected function tearDown(): void
     {
         $this->cleanup();

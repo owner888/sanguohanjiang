@@ -7,7 +7,10 @@ namespace Hanjiang\Handler\Pvp;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Chat;
+use Hanjiang\Model\DailyTask;
+use Hanjiang\Model\MainQuestTask;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\StatPay;
 use Hanjiang\Model\WorldBoss;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -186,7 +189,8 @@ final class WorldBossHandler
                 $return['status'] = 3;
                 return $return;
             }
-            // 依赖未移植：元宝流水 gold_log（member_model->sub_gold）、消费统计 stat_model->worldboss_relive
+            // 消费统计记录
+            StatPay::record($uid, 'worldboss_relive', self::RELIVE_COST);
             $return['info']['all_gold'] = self::gold($uid);
         } else {
             // 正常进入战斗：检查cd
@@ -236,8 +240,12 @@ final class WorldBossHandler
         }
         WorldBoss::updateMyHit($phase, $uid, $hit, $state['countdown']);
 
-        // 依赖未移植：主线任务 mainquest_model->task_action(11, 1)（参加一次世界BOSS）
-        // 依赖未移植：日常任务 task_model->task_action(12)（主公 41 级以上）
+        // 主线任务 11参加一次世界BOSS（只要有伤害）
+        MainQuestTask::action($uid, 11, 1);
+        // 日常任务(12是世界BOSS对应的类型)
+        if ((int)$member['level'] >= DailyTask::OPEN_LEVEL) {
+            DailyTask::action($uid, DailyTask::TYPE_WORLDBOSS);
+        }
 
         $return['battle'] = $info;
         $return['info']['win'] = $info['assess'] ?? null;
@@ -278,7 +286,8 @@ final class WorldBossHandler
                 $return['status'] = 2;
             } else {
                 $return['all_gold'] = self::gold($uid);
-                // 依赖未移植：元宝流水 gold_log、消费统计 stat_model->worldboss_powerup
+                // 消费统计记录
+                StatPay::record($uid, 'worldboss_powerup', $goldCost);
             }
         } else {
             $silver = self::powerUpPay($member);

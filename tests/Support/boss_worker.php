@@ -9,15 +9,13 @@ declare(strict_types=1);
  *       php boss_worker.php claim <uid>                          世界 BOSS（20:00 场）领奖删记录，输出 1 / 0
  */
 
-require dirname(__DIR__, 2) . '/vendor/autoload.php';
+require dirname(__DIR__, 2) . '/bootstrap.php';
 
 use Hanjiang\Model\CountryBoss;
 use Hanjiang\Model\WorldBoss;
-use OmniPHP\Cache\Redis;
+use Hanjiang\Support\Connections;
 
-date_default_timezone_set('Asia/Shanghai');
-$dbConfig = require dirname(__DIR__, 2) . '/config/database.php';
-Redis::init($dbConfig['redis']);
+Connections::init();
 
 $mode = $argv[1] ?? '';
 if ($mode === 'hit') {
