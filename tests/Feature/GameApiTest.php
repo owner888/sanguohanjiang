@@ -1259,7 +1259,6 @@ final class GameApiTest extends TestCase
         $this->assertSame([3, '消息太长！'], [$this->chatSend($s, str_repeat('汉', 67))['status'], $this->chatSend($s, str_repeat('汉', 67))['msg']]);
 
         // 世界频道：进公共队列与每个在线玩家的私人队列；发信人的 list 即其 read 结果（含自己这条）
-        // （双引号转成 &quot; 后含聊天屏蔽字 q，旧版按屏蔽处理，这里不带引号）
         $res = $this->chatSend($s, 'a<b>&');
         $this->assertSame(1, $res['status']);
         $nickname = (string)DB::table('member')->where('uid', $s['uid'])->value('nickname');
@@ -1282,6 +1281,12 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, count($res['list']));
         $this->assertSame([], $this->chatMessages($r));
         $this->assertSame([], $this->chatMessages($s));
+        // 带双引号的消息正常发出（旧版 &quot; 含屏蔽字 q 被当违规，已修正）；原文含 q 仍按屏蔽处理
+        $this->chatSend($s, '他说"你好"');
+        $this->assertSame([[0, '他说&quot;你好&quot;', 0, $s['uid']]], $this->chatMessages($r));
+        $res = $this->chatSend($s, '"加我qq"');
+        $this->assertSame(1, count($res['list']));
+        $this->assertSame([], $this->chatMessages($r));
         // 后台屏蔽词替换成 ***
         Redis::set('badword', ['坏蛋'], 600);
         $this->chatSend($s, '你这个坏蛋');

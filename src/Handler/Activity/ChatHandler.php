@@ -112,7 +112,9 @@ final class ChatHandler
         $status = self::memberStatus($row);
         $message = Chat::checkBadword($message);
 
-        $msg = str_replace(Chat::STRIP_CHARS, '', $message);
+        // 屏蔽字与重复判断按还原后的原文比较：旧版对 htmlspecialchars 之后的内容判断，
+        // 双引号转成 &quot; 后含屏蔽字 q，任何带双引号的消息都会被当成违规；开发者要求修正。
+        $msg = self::comparable($message);
         foreach (Chat::chatBanWords() as $value) {
             if (str_contains(strtolower($msg), $value)) {
                 // 含屏蔽字：按禁言处理（旧版记录到 illegal_chat 的调用已注释掉）
@@ -122,7 +124,7 @@ final class ChatHandler
         // 如果该条信息没有被屏蔽，判断是否是重复信息
         if ($status !== 2) {
             // 获取上次发送的语言
-            if ($msg == str_replace(Chat::STRIP_CHARS, '', (string)Chat::getLastSendMessage($uid))) {
+            if ($msg == self::comparable((string)Chat::getLastSendMessage($uid))) {
                 $status = 2;
             }
         }
@@ -242,4 +244,13 @@ final class ChatHandler
         }
         return $status;
     }
+
+    /**
+     * 屏蔽字 / 重复判断用的比较文本：把 htmlspecialchars 的实体还原成原文，再去掉符号
+     */
+    private static function comparable(string $escaped): string
+    {
+        return str_replace(Chat::STRIP_CHARS, '', html_entity_decode($escaped, ENT_COMPAT | ENT_HTML401, 'UTF-8'));
+    }
+
 }
