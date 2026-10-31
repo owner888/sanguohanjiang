@@ -23,7 +23,7 @@ return [
     // 配成该地址（http(s):// 或 ws(s):// 均可，适配层会转换）
     'socket_server_url' => getenv('SOCKET_SERVER_URL') ?: '',
     'assets' => [
-        'version'    => getenv('ASSET_VERSION') ?: '20261031_1',
+        'version'    => getenv('ASSET_VERSION') ?: '20261101_1',
         'static_url' => getenv('STATIC_URL') ?: 'static/',
         'cdn_url'    => getenv('CDN_URL') ?: 'static/',
         'api_url'    => getenv('API_URL') ?: 'index.php',

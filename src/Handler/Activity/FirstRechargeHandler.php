@@ -12,6 +12,7 @@ use Hanjiang\MasterData\FirstRecharge;
 use Hanjiang\MasterData\FirstRechargeLottery;
 use Hanjiang\MasterData\General as GeneralTemplate;
 use Hanjiang\MasterData\Pub;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\FirstRechargeLog;
 use Hanjiang\Model\General;
@@ -25,8 +26,8 @@ use OmniPHP\Http\Context;
  *
  * 玩家状态存 first_recharge_log（首充元宝、已领档位、是否已抽转盘）与 member_field.first_recharge（首充图标）；
  * 首充日志由充值流程写入（FirstRechargeLog::recordRecharge，依赖未移植：充值入口）。
- * 依赖未移植：聊天室 / 小喇叭广播（chat_model send_message_to_all / send_message_to_horn）、
- * 酒馆获得日志 tavern_model->add_pub_log。
+ * 首充紫装以上装备、天命转盘装备与 7 星以上武将发聊天室系统消息（get_message_str 33 / 34 / 35）与小喇叭。
+ * 依赖未移植：酒馆获得日志 tavern_model->add_pub_log。
  */
 final class FirstRechargeHandler
 {
@@ -38,6 +39,9 @@ final class FirstRechargeHandler
 
     /** 转盘抽到已拥有的武将时，按酒馆紫宝石价格的该折扣返还（旧版 $rebate） */
     private const float REBATE = 0.8;
+
+    /** 天命转盘 7 星以上武将小喇叭（general_lang.php：general_firstrecharge_get） */
+    private const string LANG_GENERAL_FIRSTRECHARGE_GET = '恭喜玩家【%s】在天命转盘中获得%s星武将-%s';
 
     /**
      * 首充页面: c=first_recharge&m=index（旧版 first_recharge.php:index）
@@ -129,7 +133,13 @@ final class FirstRechargeHandler
                     if ($tpl !== null) {
                         Equipment::addFromTemplate($uid, $value);
                     }
-                    // 依赖未移植：紫装以上的聊天室 / 小喇叭广播
+                    // 发送广播到聊天室和小喇叭：只发紫装以上品质的装备
+                    if ((int)($tpl['quality'] ?? 0) >= 5) {
+                        $name = Chat::quality($tpl['quality'], (string)$tpl['name']);
+                        $sender = Chat::sender($uid);
+                        Chat::sendToAll(Chat::getMessageStr(33, ['springequipment' => $name], $sender), Chat::TYPE_SYSTEM, 0, 0, $sender);
+                        Chat::sendToHorn(sprintf(Chat::LANG['chat_first_recharge_get'], $sender['nickname'] ?? '', $name), $sender);
+                    }
                     $return['info']['equip'] = self::equipInfo($tpl);
                     break;
                 case 3: // 黄宝石
@@ -273,8 +283,17 @@ final class FirstRechargeHandler
                     $return['info']['jadenum'] = (int)$pub['price'] * self::REBATE;
                     TavernHandler::addJade($uid, 3, (int)$return['info']['jadenum'], 'first_recharge', 'action');
                 } else {
-                    General::createFromTemplate($uid, $generalid);
-                    // 依赖未移植：7 星以上武将的小喇叭 / 聊天室广播、酒馆日志 add_pub_log(generalid, 1, 11)
+                    if (General::createFromTemplate($uid, $generalid) !== null) {
+                        // 7 星以上：小喇叭 + 聊天框
+                        $num = Chat::starWord((int)($tpl['star'] ?? 0));
+                        if ($num !== null) {
+                            $sender = Chat::sender($uid);
+                            Chat::sendToHorn(sprintf(self::LANG_GENERAL_FIRSTRECHARGE_GET, $sender['nickname'] ?? '', $num, $tpl['name']), $sender);
+                            $chat = Chat::getMessageStr(35, ['star_general' => $num, 'general' => $tpl['name']], $sender);
+                            Chat::sendToAll($chat, Chat::TYPE_SYSTEM, 0, 0, $sender);
+                        }
+                        // 依赖未移植：酒馆日志 add_pub_log(generalid, 1, 11)
+                    }
                 }
                 break;
             case 2: // 装备
@@ -282,7 +301,11 @@ final class FirstRechargeHandler
                 if ($tpl !== null) {
                     Equipment::addFromTemplate($uid, (int)$getinfo['getvalue']);
                 }
-                // 依赖未移植：聊天室 / 小喇叭广播
+                // 发送广播到聊天室和小喇叭（旧版不判断品级）
+                $name = Chat::quality($tpl['quality'] ?? '', (string)($tpl['name'] ?? ''));
+                $sender = Chat::sender($uid);
+                Chat::sendToAll(Chat::getMessageStr(34, ['springequipment' => $name], $sender), Chat::TYPE_SYSTEM, 0, 0, $sender);
+                Chat::sendToHorn(sprintf(Chat::LANG['chat_first_lottery_get'], $sender['nickname'] ?? '', $name), $sender);
                 $return['info'] = self::equipInfo($tpl);
                 break;
         }

@@ -161,6 +161,7 @@ final class VipHandler
      */
     public static function get_gift(Context $ctx): array
     {
+        // 依赖未移植：旧版 VIP 礼包 7 星以上武将 chat_model->send_message_to_horn(general_get) 小喇叭（随旧版 vip 礼包移植）
         $uid = MemberHandler::resolveUid($ctx);
         $targetVip = (int)($ctx->input('level', $ctx->input('l', $ctx->input('vip_level', 1))));
 

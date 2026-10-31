@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class FlopHandler
 {
@@ -112,15 +111,6 @@ final class FlopHandler
 
         $state['turned'][] = $cardId;
         Redis::setJson('user_flop:' . $uid, $state, 86400);
-
-        if ($cardId === 9 || $rewardGold >= 50) {
-            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "洪福齐天！主公【{$pName}】于翻牌夺宝中手气爆棚，翻开【{$prize['name']}】，独揽 {$rewardGold} 元宝！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,

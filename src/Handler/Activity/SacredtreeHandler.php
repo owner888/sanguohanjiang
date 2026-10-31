@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class SacredtreeHandler
 {
@@ -76,15 +75,6 @@ final class SacredtreeHandler
         $rewardGold = $leveledUp ? 20 : 5;
 
         MemberHandler::addCurrency($uid, silver: $rewardSilver, gold: $rewardGold);
-
-        if ($leveledUp) {
-            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "瑞气千条！主公【{$pName}】精心灌溉聚宝神树，神树突破至第 {$curLevel} 阶，金叶漫天！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,

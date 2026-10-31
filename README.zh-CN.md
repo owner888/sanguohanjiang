@@ -67,7 +67,8 @@
 │   │   ├── Router.php       # 流水线驱动器及静态文件服务器
 │   │   └── Response.php     # 统一协议响应助手
 │   └── WebSocket/           # WebSocket 网关（18101 端口）
-│       ├── WebSocketHandler.php # 连接生命周期、心跳、鉴权、世界聊天、跑马灯
+│       ├── WebSocketHandler.php # 连接生命周期、心跳、鉴权
+│       ├── ChatPush.php     # 聊天室实时推送（弹出玩家的旧版聊天队列）
 │       └── EliteRoom.php    # 多人副本实时组队房间（按旧版 elitepop.js 协议）
 ├── tools/
 │   ├── gen_master_data.php  # 从旧版 mysqldump 重新生成 src/MasterData
@@ -162,7 +163,7 @@
 - `c=tavern&m=index`：酒馆将领招募与会客商人
 - `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`：校场武将挂机演武训练、突飞猛进与扫荡、8大训练位进阶解锁及武将转生
 - `c=activity&m=index`：每日精彩活动列表总览、开放时段区间判定与签到红点气泡；世界 BOSS 项按旧版 `worldboss_init`（12:00–12:15、20:00–20:15，有未领奖励时亮红点）
-- `c=chat&m=read|send`：世界与国家频道实时消息流
+- `c=chat&m=index|send|read|getuid|ban_uid`：聊天室（按旧版移植，`Hanjiang\Model\Chat`）：世界 / 国家 / 私聊频道，存储同旧版 Redis 队列（公共队列 30 条、国家队列 10 条、每个在线玩家一个私人队列），主公 50 级可发言、200 字节、3 秒间隔，含屏蔽字或重复发言只有自己可见，`member.status` / `statustime` 禁言，屏蔽某人 24 小时。系统公告、小喇叭与战报分享（`send_to_chat`，2 元宝）用旧版 `get_message_str` 模板。`GameWS` 鉴权后由 WebSocket 进程弹出该玩家的队列，以 `chat_message`（载荷同 `read`）推送，客户端不再轮询；HTTP 进程经 Redis（`chat_ws_{uid}` / `chat_push_{进程号}`）通知，HTTP 与 WebSocket 进程数任意
 - `c=mainquest&m=index`：主线任务进度与里程碑领奖
 - `c=shop&m=index`：商城道具（旧版 `Shop` 表：兵符，装备 7、9–15、53–56）与军令体力购买
 - `c=arena&m=index|action|buy_pk_num|get_reward|get_reward_list|clear_cd|send_to_chat|shop_index|shop_exchange`：演武榜（按旧版移植）：主公 26 级以「最后一名 + 1」入榜，挑战名次在前的玩家、胜则互换名次（带旧版战报），每日 15 次挑战与元宝购买次数，按昨日名次领演武积分，积分商城取 `ArenaExchange`
@@ -282,7 +283,7 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] 多武将同屏协同出征作战，真实九宫格站位多目标推演与战报回放
 - [x] 演武榜 (`arena`) 按旧版移植：玩家名次挑战与互换、旧版战报、每日排名积分与积分商城
 - [x] 主城征收与强征系统 (`city`)，支持丰收暴击银两倍数与元宝强征加倍收益
-- [x] 原生 WebSocket 全双工长连接网关，支持鉴权、实时世界聊天与全服跑马灯大喇叭广播
+- [x] 原生 WebSocket 全双工长连接网关，支持鉴权与聊天室实时推送（旧版聊天队列到达即推）
 - [x] 完全对齐 `smart-book` 标准的纯粹 RFC 6455 协议级心跳机制（0x9/0xA 控制帧 ping/pong，杜绝应用层冗余载荷开销）
 - [x] 全面废除冗余的业务中间继承层，全站业务 Handler 与中间件直接原生消费 `OmniPHP\Http\Context`（完全对齐 Go Gin 标准）
 - [x] 直接使用框架原生 `OmniPHP\WebSocket\Context` 与 `Broadcaster` 接管全双工事件载荷、用户会话与纯内存极速测试
@@ -297,7 +298,7 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] 全面打通前端全量高频日常交互系统：每日签到福利 (`dailysign`)、VIP 特权俸禄与晋级礼包 (`vip`)、系统信箱与飞鸽传书 (`message`)、好友社交系统 (`friend`)、银矿占领挂机采矿 (`mine`)
 - [x] 原版殿堂级中后期核心系统全线打通：铜雀台绝色美人 (`beauty`)、名驹坐骑系统 (`mount`)、神装宝石镶嵌与合成 (`gem`)、通天塔 (`heaven`)、世界 BOSS 刑天 (`worldboss`)
 - [x] 国战都城争夺 (`siege`，按旧版移植)、跨服 GVG 巅峰争霸赛与押注分红 (`gvg`)
-- [x] 前端网络层内置全服金色流光跑马灯大喇叭横幅渲染引擎（硬件加速流动字幕动效）
+- [x] 聊天室 (`chat`) 按旧版移植：世界 / 国家 / 私聊频道、小喇叭、系统公告与战报分享，消息模板同旧版
 - [x] 经典保值与开服生态全线贯通：武将经验属性传承 (`general_inherit`)、神秘黑市珍宝 (`blackmarket`)、首充返利与天命转盘 (`first_recharge`)、海上丝绸之路远洋贸易 (`overseastrade`)
 - [x] 原版高阶衍生趣味玩法全线攻克：伯乐相马场 (`studfarm`)、原石翡翠赌石坊 (`jadegamble`)、古墓寻龙藏宝图 (`treasuremap`)、官府军械工坊 (`workshop`)
 - [x] 战神殿与朝堂宏图系统打通：四象圣域 (`sanctum`)、群雄逐鹿排名活动 (`compete`，按旧版移植)、国家宗庙祭天 (`countrysacrifice`)、群臣治国诤言 (`expostulation`)

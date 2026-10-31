@@ -13,6 +13,7 @@ use Hanjiang\MasterData\CopiesInfo;
 use Hanjiang\MasterData\CopiesReward;
 use Hanjiang\MasterData\CopiesVipBuyTimes;
 use Hanjiang\MasterData\Equip;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnMaterials;
@@ -34,7 +35,6 @@ use OmniPHP\Http\Context;
  * buy_times、pk、mop_up、get_mopup_price、get_report_list、get_report_info、send_to_chat。旧版公开方法即这 10 个。
  *
  * 依赖未移植：
- * - 聊天室战报广播 chat_model->get_message_str(53, …) / send_message_to_all（send_to_chat 暂返回 0，不扣元宝）；
  * - member_model 的流水与附带计数：sub_gold 的 gold_log、日常任务 task_model->task_action(5)、翻牌活动 flopgold；
  *   sub_act 的 act_log、翻牌活动 flopact；add_reputation 的 reputation_log。
  */
@@ -87,6 +87,8 @@ final class CopiesHandler
     private const string LANG_MOP_UP_TIMES_ERROR = '次数错误';
     private const string LANG_MOP_UP_TIMES_NOT = '次数不足';
     private const string LANG_GOLD_ERROR = '元宝不足';
+    /** 副本难度名（diff_id_1 ~ diff_id_3） */
+    private const array LANG_DIFF_ID = [1 => '简单', 2 => '普通', 3 => '困难'];
     private const string LANG_REPORT_LIST_ERROR = '获取攻略列表失败';
     private const string LANG_REPORT_ERROR = '攻略不存在';
     private const string LANG_SWEEP_ERROR = '无法扫荡';
@@ -630,16 +632,29 @@ final class CopiesHandler
         }
 
         // 获取怪物信息
-        if (self::monsterInfo((int)$id, (int)$diffId, (int)$monsterId) === null) {
+        $monsterInfo = self::monsterInfo((int)$id, (int)$diffId, (int)$monsterId);
+        if ($monsterInfo === null) {
             $return['status'] = -3;
             $return['msg'] = self::LANG_MONSTER_ERROR;
             return $return;
         }
 
-        // 依赖未移植：chat_model->get_message_str(53, ['id' => report|id, 'monster_info' => 怪物名(难度)])
-        // + send_message_to_all(…, 53, report) 聊天室战报广播。
-        // 旧版在这里先校验元宝（-4）、扣 SHARE_PRICE 再广播并返回 all_gold；聊天室未移植前广播发不出去，
-        // 开发者要求暂不扣元宝，返回 0（失败），客户端提示「暂时无法分享战报」。聊天室移植后恢复旧版流程。
+        // 判断金币是否足够 / 扣除金币
+        $allGold = (int)$member['gold'] < self::SHARE_PRICE ? null : Chat::chargeShare((int)$member['uid'], self::SHARE_PRICE);
+        if ($allGold === null) {
+            $return['status'] = -4;
+            $return['msg'] = self::LANG_GOLD_ERROR;
+            return $return;
+        }
+        $sender = Chat::sender((int)$member['uid']);
+        $message = Chat::getMessageStr(53, [
+            'id' => $report . '|' . $id,
+            'monster_info' => $monsterInfo['name'] . '(' . (self::LANG_DIFF_ID[(int)$diffId] ?? '') . ')',
+        ], $sender);
+        // 发送战报
+        Chat::sendToAll($message, 53, (string)$report, 0, $sender);
+        $return['status'] = 1;
+        $return['all_gold'] = $allGold;
         return $return;
     }
 

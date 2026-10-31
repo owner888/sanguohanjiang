@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 海外商贸、远洋船队组队远航与拦截打劫处理器 (DDD Activity Domain)

@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class JadegambleHandler
 {
@@ -115,15 +114,6 @@ final class JadegambleHandler
         $stone['cut_result'] = $outcome['title'];
         $stone['final_value'] = $finalValue;
         Redis::setJson('jadegamble_stone:' . $uid, $stone, 86400 * 2);
-
-        if (!empty($outcome['is_jackpot'])) {
-            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "一刀暴富！主公【{$pName}】于赌石坊一刀切出【{$outcome['title']}】，身价瞬间暴涨！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,

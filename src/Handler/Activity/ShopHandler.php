@@ -11,7 +11,6 @@ use Hanjiang\Model\Equipment;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 兵符商城、军令采买与全服消费记录处理器 (DDD Activity Domain)

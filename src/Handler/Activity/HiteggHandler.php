@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 砸金蛋彩蛋、连环暴击与稀世奇珍大奖处理器 (DDD Activity Domain)
@@ -58,6 +57,7 @@ final class HiteggHandler
      */
     public static function hit_egg(Context $ctx): array
     {
+        // 依赖未移植：旧版砸到 7 星以上武将 send_message_to_horn(general_get_by_hitegg) + get_message_str(22) 系统消息（随旧版 hitegg 移植）
         $uid = MemberHandler::resolveUid($ctx);
         $eggId = (int)($ctx->input('id', $ctx->input('egg_id', 1)));
 
@@ -107,14 +107,6 @@ final class HiteggHandler
         }
 
         $freshMember = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-
-        if ($eggId === 3 || $rewardGold >= 50) {
-            $pName = $freshMember['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "金花四溅！主公【{$pName}】一锤砸开【{$cfg['name']}】，金光耀目，独揽 {$rewardGold} 元宝大暴击！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         Redis::del('player:' . $uid);
 

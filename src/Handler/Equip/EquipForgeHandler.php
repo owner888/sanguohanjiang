@@ -10,7 +10,6 @@ use Hanjiang\Model\Equipment;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class EquipForgeHandler
 {
@@ -46,6 +45,7 @@ final class EquipForgeHandler
      */
     public static function fabrication(Context $ctx): array
     {
+        // 依赖未移植：旧版打造成功 chat_model->send_message_to_horn(chat_msg) 小喇叭（随旧版 newequip 打造移植）
         $uid = MemberHandler::resolveUid($ctx);
         $recipeId = (int)($ctx->input('id', $ctx->input('recipe_id', 1)));
 
@@ -75,14 +75,6 @@ final class EquipForgeHandler
 
         // 铸造成品写入背包（入库走唯一入口，属性取 MasterData Equip 模板）
         Equipment::addFromTemplate($uid, (int)$cfg['equipid']);
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $pName = $member['nickname'] ?? ('主公' . $uid);
-
-        Broadcaster::broadcast('marquee', [
-            'content' => "神工开物！主公【{$pName}】于天工坊开炉淬火，成功锻造出绝世神兵【{$cfg['name']}】！",
-            'type' => 'system_broadcast',
-        ]);
 
         return [
             'status' => 1,

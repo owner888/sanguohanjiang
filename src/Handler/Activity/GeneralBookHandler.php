@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class GeneralBookHandler
 {
@@ -68,14 +67,6 @@ final class GeneralBookHandler
         $newLvl = $curLvl + 1;
         $unlockedCombos[$comboId] = $newLvl;
         Redis::setJson('general_book:' . $uid, $unlockedCombos, 86400 * 30);
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $pName = $member['nickname'] ?? ('主公' . $uid);
-
-        Broadcaster::broadcast('marquee', [
-            'content' => "万古流芳！主公【{$pName}】点亮名将录羁绊【{$cfg['name']}】，全军将士士气大振，属性暴增！",
-            'type' => 'system_broadcast',
-        ]);
 
         return [
             'status' => 1,

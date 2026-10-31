@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 武将经验传承、洗髓资质转移与神将继承处理器 (DDD General Domain)
@@ -254,15 +253,6 @@ final class GeneralInheritHandler
         ]);
 
         Redis::del('player:' . $uid);
-
-        if ($type >= 3) {
-            $m = DB::table('member')->where('uid', $uid)->first();
-            $nick = (string)($m['nickname'] ?? ('主公' . $uid));
-            Broadcaster::broadcast('marquee', [
-                'content' => "天命传承！主公【{$nick}】麾下大将【{$fromGen['name']}】倾囊相授，神力尽传【{$toGen['name']}】，突破至 Lv.{$newLevel}！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,

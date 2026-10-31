@@ -14,6 +14,7 @@ use Hanjiang\MasterData\MountTemp;
 use Hanjiang\MasterData\NewcompeteReward;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Equipment;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\OwnMount;
@@ -37,7 +38,7 @@ use OmniPHP\Http\Context;
  * 依赖未移植：
  * - 神树活动（activity_model->activity_status('sacredtree') / sacredtree_model->get_tree_by_uid），top_list 的 tree 恒为 0；
  * - message_model->record_pk_report 信件战报（pm_report，供信件回放）；
- * - 聊天室战报分享（send_to_chat，见该方法）；元宝流水。
+ * - 元宝流水。
  */
 final class CompeteHandler
 {
@@ -391,21 +392,38 @@ final class CompeteHandler
      */
     public static function send_to_chat(Context $ctx): array
     {
+        $uid = MemberHandler::resolveUid($ctx);
         $touid = (int)$ctx->input('touid', 0);
         $report = (int)$ctx->input('report', 0);
-        $member = self::member(MemberHandler::resolveUid($ctx));
+        $win = (int)$ctx->input('win', 0);
+        $member = self::member($uid);
         // 判断参数是否完整
         if ($touid === 0 || $report === 0 || $member === null) {
             return ['status' => -1];
         }
+        // 判断金币是否足够
+        if ((int)$member['gold'] < self::SHARE_PRICE) {
+            return ['status' => -2];
+        }
         // 取用户信息
-        if (self::member($touid) === null) {
+        $toUser = self::member($touid);
+        if ($toUser === null) {
             return ['status' => -3];
         }
-        // 依赖未移植：chat_model->get_message_str(3, to / id / win) + send_message_to_all(…, 3, report) 聊天室战报广播。
-        // 旧版在这里先校验元宝(-2)、扣 SHARE_PRICE 再广播；聊天室未移植前广播发不出去，
-        // 开发者要求暂不扣元宝，返回 0（失败），客户端提示「暂时无法分享战报」。聊天室移植后恢复旧版流程（花费 SHARE_PRICE）。
-        return ['status' => 0];
+        // 扣除金币
+        $allGold = Chat::chargeShare($uid, self::SHARE_PRICE);
+        if ($allGold === null) {
+            return ['status' => -2];
+        }
+        $sender = Chat::sender($uid);
+        $message = Chat::getMessageStr(3, [
+            'to' => ['uid' => $touid, 'nickname' => $toUser['nickname']],
+            'id' => $report,
+            'win' => Chat::winWord($win),
+        ], $sender);
+        Chat::sendToAll($message, Chat::TYPE_REPORT, $report, 0, $sender);
+
+        return ['status' => 1, 'all_gold' => $allGold];
     }
 
     /**

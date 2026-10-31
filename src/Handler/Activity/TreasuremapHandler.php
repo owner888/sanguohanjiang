@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 摸金校尉古墓寻宝、罗盘分金升星与藏宝图组队探秘处理器 (DDD Activity Domain)

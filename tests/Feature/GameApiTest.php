@@ -1243,31 +1243,152 @@ final class GameApiTest extends TestCase
 
     public function testChatSystem(): void
     {
-        $send = $this->request('chat', 'send', ['message' => '测试三国聊天']);
-        $this->assertSame(1, $send['status']);
-        $this->assertArrayHasKey('list', $send, '聊天发送成功必须包含 list 供前端 chatpop.js 立即渲染');
-        $this->assertSame(0, $send['list'][0]['type']);
-        $this->assertNotEmpty($send['list'][0]['nickname']);
+        $this->chatReset();
+        $s = $this->chatPlayer();
+        $r = $this->chatPlayer();
+        $this->chatOnline($s);
+        $this->chatOnline($r);
 
-        // 测试拉取全量聊天频道记录
-        $index = $this->request('chat', 'index');
-        $this->assertSame(1, $index['status']);
-        $this->assertNotEmpty($index['list']);
+        // 50 级以下不能发言（旧版 status 6，msg 为 chat_send_need_level）
+        DB::table('member')->where('uid', $s['uid'])->update(['level' => 49]);
+        $res = $this->chatSend($s, '你好');
+        $this->assertSame([6, '您必须达到等级50级才能在世界频道发言！'], [$res['status'], $res['msg']]);
+        DB::table('member')->where('uid', $s['uid'])->update(['level' => 50]);
+        // 内容为空 / 超过 200 字节（htmlspecialchars 之后按字节算）
+        $this->assertSame([2, '消息不能为空！'], [$this->chatSend($s, '')['status'], $this->chatSend($s, '')['msg']]);
+        $this->assertSame([3, '消息太长！'], [$this->chatSend($s, str_repeat('汉', 67))['status'], $this->chatSend($s, str_repeat('汉', 67))['msg']]);
 
-        // 测试增量读取接口 c=chat&m=read (由于刚发完并初始化过，此时增量列表为空，避免客户端 DOM 重复追加)
-        $read = $this->request('chat', 'read');
-        $this->assertSame(1, $read['status']);
-        $this->assertIsArray($read['list']);
-        $this->assertEmpty($read['list'], '增量轮询在没有新消息时必须为空数组，杜绝客户端重复追加');
+        // 世界频道：进公共队列与每个在线玩家的私人队列；发信人的 list 即其 read 结果（含自己这条）
+        // （双引号转成 &quot; 后含聊天屏蔽字 q，旧版按屏蔽处理，这里不带引号）
+        $res = $this->chatSend($s, 'a<b>&');
+        $this->assertSame(1, $res['status']);
+        $nickname = (string)DB::table('member')->where('uid', $s['uid'])->value('nickname');
+        $own = $res['list'][0];
+        $this->assertSame(['uid' => $s['uid'], 'type' => 0, 'nickname' => $nickname, 'message' => 'a&lt;b&gt;&amp;', 'id' => 0, 'rank' => 0, 'tree' => 0, 'system' => 0], array_diff_key($own, ['time' => 1]));
+        $this->assertMatchesRegularExpression('/^\d{2}:\d{2}:\d{2}$/', $own['time']);
+        $this->assertSame([[0, 'a&lt;b&gt;&amp;', 0, $s['uid']]], $this->chatMessages($r));
+        $this->assertSame([], $this->chatMessages($r), 'read 弹出后队列为空');
+        $index = $this->request('chat', 'index', $r['auth']);
+        $this->assertSame([1, 'a&lt;b&gt;&amp;'], [$index['status'], end($index['list'])['message']]);
 
-        // 测试探活接口 c=index&m=index
-        $rootIndex = $this->request('index', 'index');
-        $this->assertSame(1, $rootIndex['status']);
+        // 3 秒内再发：发送太快
+        $this->assertSame([4, '发送太快！'], [$this->chatSend($s, '再来', [], false)['status'], $this->chatSend($s, '再来', [], false)['msg']]);
+        // 与上次内容相同（去掉符号后比较）：仅自己可见
+        $res = $this->chatSend($s, 'a<b>&');
+        $this->assertSame([1, 0], [$res['status'], $res['list'][0]['type']]);
+        $this->assertSame([], $this->chatMessages($r));
+        // 含聊天屏蔽字（大小写不敏感、先去掉符号）：仅自己可见
+        $res = $this->chatSend($s, '来淘-宝买');
+        $this->assertSame(1, count($res['list']));
+        $this->assertSame([], $this->chatMessages($r));
+        $this->assertSame([], $this->chatMessages($s));
+        // 后台屏蔽词替换成 ***
+        Redis::set('badword', ['坏蛋'], 600);
+        $this->chatSend($s, '你这个坏蛋');
+        $this->assertSame([[0, '你这个***', 0, $s['uid']]], $this->chatMessages($r));
+        Redis::del('badword');
 
-        // 清理单测写入的测试聊天消息，绝不污染真实在线玩家屏幕
-        $all = Redis::getJson('chat_messages') ?: [];
-        $cleaned = array_values(array_filter($all, static fn(array $m): bool => ($m['message'] ?? '') !== '测试三国聊天'));
-        Redis::setJson('chat_messages', $cleaned, 86400);
+        // 禁言（member.status 1 / 2）：世界频道只发给自己；禁言到期自动解除
+        DB::table('member')->where('uid', $s['uid'])->update(['status' => 1, 'statustime' => time() + 600]);
+        $res = $this->chatSend($s, '禁言中');
+        $this->assertSame([1, '禁言中'], [count($res['list']), $res['list'][0]['message']]);
+        $this->assertSame([], $this->chatMessages($r));
+        DB::table('member')->where('uid', $s['uid'])->update(['status' => 1, 'statustime' => time() - 1]);
+        $this->chatSend($s, '解禁了');
+        $this->assertSame([[0, '解禁了', 0, $s['uid']]], $this->chatMessages($r));
+        $this->assertSame([0, 0], array_map(intval(...), array_values(DB::table('member')->select('status', 'statustime')->where('uid', $s['uid'])->first())));
+
+        // 私聊：只进对方私人队列（type 1），自己的 list 不含这条
+        $x = $this->chatPlayer();
+        $this->chatOnline($x);
+        $res = $this->chatSend($s, '悄悄话', ['uid' => $r['uid']]);
+        $this->assertSame([1, []], [$res['status'], $res['list']]);
+        $this->assertSame([[1, '悄悄话', 0, $s['uid']]], $this->chatMessages($r));
+        $this->assertSame([], $this->chatMessages($x));
+        // 私聊对象不在线：消息丢弃（同旧版）
+        $offline = $this->chatPlayer();
+        $this->chatSend($s, '不在线', ['uid' => $offline['uid']]);
+        $this->assertSame([], $this->chatMessages($offline));
+
+        // 国家频道：未加入国家 status 5；同国成员与国家队列可见，别国不可见
+        $res = $this->chatSend($s, '国家', ['country' => 1]);
+        $this->assertSame([5, '未加入国家，无法发送！'], [$res['status'], $res['msg']]);
+        $this->chatJoinCountry($s, 9001);
+        $this->chatJoinCountry($r, 9001);
+        $this->chatJoinCountry($x, 9002);
+        $res = $this->chatSend($s, '本国集合', ['country' => 1]);
+        $this->assertSame([6, '本国集合'], [$res['list'][0]['type'], $res['list'][0]['message']]);
+        $this->assertSame([[6, '本国集合', 0, $s['uid']]], $this->chatMessages($r));
+        $this->assertSame([], $this->chatMessages($x));
+        $this->assertSame('本国集合', $this->request('chat', 'index', $r['auth'])['list'][0]['message'], '国家队列排在公共队列前面');
+        $this->assertNotContains('本国集合', array_column($this->request('chat', 'index', $x['auth'])['list'], 'message'));
+
+        // 恢复后第一次读取（first = 1）：不取消息
+        $this->chatSend($s, '第一次');
+        $this->assertSame([1, []], [$this->request('chat', 'read', $r['auth'] + ['first' => 1])['status'], $this->request('chat', 'read', $r['auth'] + ['first' => 1])['list']]);
+        $this->assertSame(['第一次'], array_column($this->chatMessages($r), 1));
+        $this->chatMessages($x);
+
+        // 按昵称查 uid
+        $this->assertSame(['status' => 1, 'uid' => $s['uid']], array_intersect_key($this->request('chat', 'getuid', $r['auth'] + ['name' => $nickname]), ['status' => 1, 'uid' => 1]));
+        $this->assertSame(2, $this->request('chat', 'getuid', $r['auth'] + ['name' => '没有这个人'])['status']);
+
+        // 屏蔽某人 24 小时：返回去掉此人消息的 index 列表，之后 read 也过滤；重复屏蔽 -1
+        $res = $this->request('chat', 'ban_uid', $r['auth'] + ['touid' => $s['uid']]);
+        $this->assertSame(1, $res['status']);
+        $this->assertNotContains($s['uid'], array_column(array_filter($res['list'], static fn(array $m): bool => $m['type'] !== 6), 'uid'));
+        $this->assertSame(-1, $this->request('chat', 'ban_uid', $r['auth'] + ['touid' => $s['uid']])['status']);
+        $this->chatSend($s, '被屏蔽了');
+        $this->assertSame([], $this->chatMessages($r));
+        $this->assertSame(['被屏蔽了'], array_column($this->chatMessages($x), 1));
+
+        // 公共队列最多 30 条、国家队列最多 10 条
+        for ($i = 0; $i < 35; $i++) {
+            \Hanjiang\Model\Chat::sendToAll('系统' . $i, \Hanjiang\Model\Chat::TYPE_SYSTEM);
+            \Hanjiang\Model\Chat::sendToCountry('国家' . $i, [], \Hanjiang\Model\Chat::TYPE_COUNTRY, 1, 9001);
+        }
+        $list = $this->request('chat', 'index', $r['auth'])['list'];
+        $this->assertCount(40, $list);
+        $this->assertSame(['国家25', '国家34', '系统5', '系统34'], [$list[0]['message'], $list[9]['message'], $list[10]['message'], $list[39]['message']]);
+        // 喇叭（type 2）不进公共队列，只进在线玩家的私人队列
+        \Hanjiang\Model\Chat::sendToHorn('喇叭');
+        $this->assertNotContains('喇叭', array_column($this->request('chat', 'index', $r['auth'])['list'], 'message'));
+        $this->assertContains([2, '喇叭', 0, 0], $this->chatMessages($x));
+
+        // 探活接口 c=index&m=index
+        $this->assertSame(1, $this->request('index', 'index')['status']);
+    }
+
+    /**
+     * 系统消息模板（get_message_str）：参数顺序、默认发信人、各战报类型的 {类型,[查看战报],id}
+     */
+    public function testChatMessageTemplates(): void
+    {
+        $sender = ['uid' => 7, 'nickname' => '张三', 'country' => 0, 'rank' => 0];
+        $to = ['uid' => 8, 'nickname' => '李四'];
+        $C = \Hanjiang\Model\Chat::class;
+        $this->assertSame('{1,张三 ,7} 击败了 {1,李四 ,8} 升至演武榜 {10,第1名}  {2,[查看战报],9}', $C::getMessageStr(2, ['to' => $to, 'rank' => 1, 'id' => 9], $sender));
+        $this->assertSame('{1,王五 ,3} 将“刑天”最后击杀，奖励额外增加50%', $C::getMessageStr(12, ['from' => ['uid' => 3, 'nickname' => '王五']], $sender));
+        $this->assertSame('{1,王五 ,3} 将“蚩尤”最后击杀，奖励额外增加50%', $C::getMessageStr(17, ['from' => ['uid' => 3, 'nickname' => '王五']], null));
+        $this->assertSame('恭喜【{1,张三 ,7}】在西域马场选中名马-<em class="q6">赤兔</em>，真乃当世雄主', $C::getMessageStr(28, ['rebate' => '赤兔', 'mount' => 6], $sender));
+        $this->assertSame('{9,魏}击败了{9,蜀}，攻占【{9,洛阳}】{14,[查看战报],3}', $C::getMessageStr(20, ['siege1' => '魏', 'siege2' => '蜀', 'siege3' => '洛阳', 'id' => 3], null));
+        $this->assertSame('{9,蜀}被{9,魏}击败了，【{9,洛阳}】被攻占{14,[查看战报],3}', $C::getMessageStr(19, ['siege1' => '蜀', 'siege2' => '魏', 'siege3' => '洛阳', 'id' => 3], null));
+        $this->assertSame('{9,魏}击败了{9,蜀}，成功守住【{9,洛阳}】{14,[查看战报],3}', $C::getMessageStr(18, ['siege1' => '魏', 'siege2' => '蜀', 'siege3' => '洛阳', 'id' => 3], null));
+        $this->assertSame('{9,魏}被{9,蜀}击败了，【{9,洛阳}】攻占失败。{14,[查看战报],3}', $C::getMessageStr(21, ['siege1' => '魏', 'siege2' => '蜀', 'siege3' => '洛阳', 'id' => 3], null));
+        $this->assertSame('恭喜【{1,张三 ,7}】在过关斩将中获得七星武将-{9,关羽}', $C::getMessageStr(45, ['star_general' => '七', 'general' => '关羽'], $sender));
+        $this->assertSame('恭喜【{1,张三 ,7}】在过关斩将中获得八星神将-{9,吕布}', $C::getMessageStr(46, ['star_general' => '八', 'general' => '吕布'], $sender));
+        $this->assertSame('恭喜【{1,张三 ,7}】在天命转盘获得九星武将-{9,赵云}', $C::getMessageStr(35, ['star_general' => '九', 'general' => '赵云'], $sender));
+        $this->assertSame('恭喜【{1,张三 ,7}】在首充双倍返利中获得装备-<em class="q5">青釭剑</em>', $C::getMessageStr(33, ['springequipment' => '<em class="q5">青釭剑</em>'], $sender));
+        $this->assertSame('{1,张三 ,7} 在铜雀台中大展雄风，战胜了{1,李四 ,8} {49,[查看战报],4}', $C::getMessageStr(49, ['to' => $to, 'id' => 4, 'win' => 1], $sender));
+        $this->assertSame('{1,张三 ,7} 和 {1,李四 ,8} 在铜雀台中战成 打成平局 {49,[查看战报],4}', $C::getMessageStr(51, ['to' => $to, 'id' => 4, 'win' => '打成平局'], $sender));
+        $this->assertSame('{1,张三 ,7} 在矿区抢夺 {1,李四 ,8} 的矿中 失败  {2,[查看战报],4}', $C::getMessageStr(27, ['to' => $to, 'id' => 4, 'win' => '失败'], $sender));
+        $this->assertSame('恭喜 {1,张三 ,7} 在幸运大转盘抽到了 {5,100元宝}', $C::getMessageStr(6, ['gold' => 100], $sender));
+        $this->assertSame('玩家 {1,张三 ,7} 达成 x3 幸运通商，获得银币x3 。', $C::getMessageStr(13, ['times' => 'x3'], $sender));
+        // 计划任务里没有发信人
+        $this->assertSame('恭喜 {1, ,} 成功招募到武将 {9,张飞}', $C::getMessageStr(10, ['general' => '张飞'], null));
+        // 未定义 / 预留的类型
+        $this->assertSame('', $C::getMessageStr(1, [], $sender));
+        $this->assertSame('', $C::getMessageStr(99, [], $sender));
     }
 
     public function testMainquestSystem(): void
@@ -1709,14 +1830,20 @@ final class GameApiTest extends TestCase
     public function testTowerSendToChat(): void
     {
         $p = $this->towerPlayer();
+        $w = $this->newGuestPlayer();
+        $this->chatOnline($w);
         $this->assertSame(['status' => -1], $this->towerRequest('send_to_chat', $p['auth'] + ['id' => 1]));
         $this->assertSame(['status' => -2], $this->towerRequest('send_to_chat', $p['auth'] + ['id' => 999, 'report' => 5]));
-        // 聊天室未移植：分享返回失败且不扣元宝
+        // 元宝不足
+        DB::table('member')->where('uid', $p['uid'])->update(['gold' => 1]);
+        $this->assertSame(['status' => -2], $this->towerRequest('send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5]));
+        // 旧版扣 2 元宝，全服发将魂战报（type 5）
         DB::table('member')->where('uid', $p['uid'])->update(['gold' => 10]);
-        $this->assertSame(['status' => 0], $this->towerRequest('send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5, 'win' => 3]));
-        $this->assertSame(10, $this->towerMember($p['uid'], 'gold'));
+        $this->assertSame(['status' => 1, 'all_gold' => 8], $this->towerRequest('send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5, 'win' => 3]));
+        $this->assertSame(8, $this->towerMember($p['uid'], 'gold'));
+        $name = \Hanjiang\MasterData\SoulMission::ROWS[1]['name'];
+        $this->assertSame([[5, $this->chatFrom($p) . ' 在将魂星路击败了 {9,' . $name . '} {4,[查看战报],5}', 5, $p['uid']]], $this->chatMessages($w));
     }
-
 
     public function testShopSystem(): void
     {
@@ -1862,6 +1989,7 @@ final class GameApiTest extends TestCase
 
         // B 阵法里没有武将：旧版 battle_pk 按空队伍继续战斗，A 不消耗随机数直接完胜（assess 3）
         $this->emptyFormation($b['uid']);
+        $this->chatOnline($c);
         $res = $this->request('arena', 'action', $a['auth'] + ['t' => $b['uid']]);
         $this->assertSame(1, $res['status']);
         $info = $res['info'];
@@ -1901,6 +2029,9 @@ final class GameApiTest extends TestCase
         $last = end($mail);
         $this->assertSame([4, $a['uid'], $info['report']], [$last['type'], $last['fromuid'], $last['id']]);
         $this->assertStringEndsWith('在演武榜将您击败，排名跌落至第4名', $last['message']);
+        // 登上第 1 名：全服战报（get_message_str 2，send_message_to_report：type 3，id 为信件战报）
+        $bName = (string)DB::table('arena')->where('uid', $b['uid'])->value('username');
+        $this->assertSame([[3, $this->chatFrom($a) . ' 击败了 {1,' . $bName . ' ,' . $b['uid'] . '} 升至演武榜 {10,第1名}  {2,[查看战报],' . $info['report'] . '}', $info['report'], $a['uid']]], $this->chatMessages($c));
 
         // 排名比我低的不能打：C（2）打 B（4）
         $this->assertSame(-3, $this->request('arena', 'action', $c['auth'] + ['t' => $b['uid']])['status']);
@@ -2120,34 +2251,91 @@ final class GameApiTest extends TestCase
     public function testArenaSendToChat(): void
     {
         [$b, $a] = $this->freshArenaPlayers(2);
+        $this->chatOnline($b);
         $this->assertSame(-1, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid']])['status']);
         $this->assertSame(-3, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => 999999999, 'report' => 5])['status']);
-        // 聊天室未移植：分享返回失败且不扣元宝
+        DB::table('member')->where('uid', $a['uid'])->update(['gold' => 1]);
+        $this->assertSame(-2, $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid'], 'report' => 5])['status']);
+        // 旧版扣 2 元宝，全服发切磋战报（get_message_str 3，type 3）
         DB::table('member')->where('uid', $a['uid'])->update(['gold' => 10]);
         $res = $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid'], 'report' => 5, 'win' => 3]);
-        $this->assertSame(0, $res['status']);
-        $this->assertSame(10, (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
+        $this->assertSame([1, 8], [$res['status'], $res['all_gold']]);
+        $this->assertSame(8, (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
+        $this->assertSame([[3, $this->chatFrom($a) . ' 在与 ' . $this->chatFrom($b) . ' 比武中 胜利  {2,[查看战报],5}', 5, $a['uid']]], $this->chatMessages($b));
+        // 平局 / 战败
+        $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid'], 'report' => 6, 'win' => 0]);
+        $this->request('arena', 'send_to_chat', $a['auth'] + ['touid' => $b['uid'], 'report' => 7, 'win' => -2]);
+        $this->assertSame([
+            $this->chatFrom($a) . ' 在与 ' . $this->chatFrom($b) . ' 比武中 打成平局  {2,[查看战报],6}',
+            $this->chatFrom($a) . ' 在与 ' . $this->chatFrom($b) . ' 比武中 失败  {2,[查看战报],7}',
+        ], array_column($this->chatMessages($b), 1));
+        $this->assertSame(4, (int)DB::table('member')->where('uid', $a['uid'])->value('gold'));
+    }
+
+    /**
+     * 新补的分享战报接口：c=map / mine / beauty 的 send_to_chat（旧版扣 2 元宝，全服广播）
+     */
+    public function testMapMineBeautySendToChat(): void
+    {
+        $p = $this->chatPlayer();
+        $q = $this->chatPlayer();
+        $w = $this->chatPlayer();
+        $this->chatOnline($w);
+        $from = $this->chatFrom($p);
+        $to = $this->chatFrom($q);
+
+        // 过图战报（type 4）：l / s / id 定位 Mission 关卡
+        $this->assertSame(-1, $this->request('map', 'send_to_chat', $p['auth'] + ['l' => 1, 's' => 1, 'id' => 1])['status']);
+        $this->assertSame(-2, $this->request('map', 'send_to_chat', $p['auth'] + ['l' => 99, 's' => 1, 'id' => 1, 'report' => 5])['status']);
+        DB::table('member')->where('uid', $p['uid'])->update(['gold' => 1]);
+        $this->assertSame(-2, $this->request('map', 'send_to_chat', $p['auth'] + ['l' => 1, 's' => 1, 'id' => 1, 'report' => 5])['status']);
+        DB::table('member')->where('uid', $p['uid'])->update(['gold' => 100]);
+        $res = $this->request('map', 'send_to_chat', $p['auth'] + ['l' => 1, 's' => 1, 'id' => 1, 'report' => 5]);
+        $this->assertSame([1, 98], [$res['status'], $res['all_gold']]);
+        $mission = null;
+        foreach (\Hanjiang\MasterData\Mission::ROWS as $row) {
+            if ((int)$row['missionlevel'] === 1 && (int)$row['missionstage'] === 1 && (int)$row['missionid'] === 1) {
+                $mission = $row['name'];
+            }
+        }
+        $this->assertSame([[4, $from . ' 击败了 {9,' . $mission . '} {3,[查看战报],5}', 5, $p['uid']]], $this->chatMessages($w));
+
+        // 矿区战报（get_message_str 27，type 3）
+        $this->assertSame(-1, $this->request('mine', 'send_to_chat', $p['auth'] + ['touid' => $q['uid']])['status']);
+        $this->assertSame(-3, $this->request('mine', 'send_to_chat', $p['auth'] + ['touid' => 999999999, 'report' => 6])['status']);
+        $res = $this->request('mine', 'send_to_chat', $p['auth'] + ['touid' => $q['uid'], 'report' => 6, 'win' => -1]);
+        $this->assertSame([1, 96], [$res['status'], $res['all_gold']]);
+        $this->assertSame([[3, $from . ' 在矿区抢夺 ' . $to . ' 的矿中 失败  {2,[查看战报],6}', 6, $p['uid']]], $this->chatMessages($w));
+
+        // 群雄逐鹿切磋战报（get_message_str 3，type 3）
+        $this->assertSame(-1, $this->request('compete', 'send_to_chat', $p['auth'] + ['report' => 6])['status']);
+        $res = $this->request('compete', 'send_to_chat', $p['auth'] + ['touid' => $q['uid'], 'report' => 10, 'win' => 2]);
+        $this->assertSame([1, 94], [$res['status'], $res['all_gold']]);
+        $this->assertSame([[3, $from . ' 在与 ' . $to . ' 比武中 胜利  {2,[查看战报],10}', 10, $p['uid']]], $this->chatMessages($w));
+
+        // 铜雀台战报（胜 49 / 平 51 / 败 50，消息 type 49）
+        $this->assertSame(['status' => -1, 'msg' => '参数错误'], array_intersect_key($this->request('beauty', 'send_to_chat', $p['auth'] + ['touid' => $q['uid']]), ['status' => 1, 'msg' => 1]));
+        $this->assertSame(['status' => -3, 'msg' => '获取用户信息失败'], array_intersect_key($this->request('beauty', 'send_to_chat', $p['auth'] + ['touid' => 999999999, 'report' => 7]), ['status' => 1, 'msg' => 1]));
+        foreach ([1 => 7, 0 => 8, -1 => 9] as $win => $report) {
+            $this->assertSame(1, $this->request('beauty', 'send_to_chat', $p['auth'] + ['touid' => $q['uid'], 'report' => $report, 'win' => $win])['status']);
+        }
+        $this->assertSame([
+            [49, $from . ' 在铜雀台中大展雄风，战胜了' . $to . ' {49,[查看战报],7}', 7, $p['uid']],
+            [49, $from . ' 和 ' . $to . ' 在铜雀台中战成 打成平局 {49,[查看战报],8}', 8, $p['uid']],
+            [49, $from . ' 妄图抢劫' . $to . ' 的美人，被狠狠教训了一顿 {49,[查看战报],9}', 9, $p['uid']],
+        ], $this->chatMessages($w));
+        $this->assertSame(88, (int)DB::table('member')->where('uid', $p['uid'])->value('gold'));
+        DB::table('member')->where('uid', $p['uid'])->update(['gold' => 0]);
+        $this->assertSame(['status' => -2, 'msg' => '金币不足'], array_intersect_key($this->request('beauty', 'send_to_chat', $p['auth'] + ['touid' => $q['uid'], 'report' => 7]), ['status' => 1, 'msg' => 1]));
     }
 
     public function testWebSocketAndBroadcasterSystem(): void
     {
-        // 1. 发送跑马灯大喇叭广播
-        \Hanjiang\WebSocket\WebSocketHandler::handleMarquee(\OmniPHP\WebSocket\Context::mock(['content' => '全服通告：三国争霸正式开启！']));
-
-        // 2. 检查 Redis 广播历史
-        $history = \OmniPHP\Cache\Redis::getJson('broadcast_history');
-        $this->assertIsArray($history);
-
-        // 3. 通过聊天拉取跑马灯历史
-        $chat = $this->request('chat', 'read');
-        $this->assertSame(1, $chat['status']);
-        $this->assertArrayHasKey('marquee', $chat);
-
-        // 4. 广播自定义全服事件
+        // 1. 广播自定义全服事件
         $sentCount = \OmniPHP\WebSocket\Broadcaster::broadcast('system_alert', ['info' => '军令已补满']);
         $this->assertGreaterThanOrEqual(0, $sentCount);
 
-        // 5. 对齐 smart-book 标准: 严格验证 RFC 6455 协议级控制帧 ping (0x9) 与 pong 响应
+        // 2. 对齐 smart-book 标准: 严格验证 RFC 6455 协议级控制帧 ping (0x9) 与 pong 响应
         $pingData = "protocol_ping_payload";
         $mockConn = $this->createMock(\Workerman\Connection\TcpConnection::class);
         $mockConn->expects($this->once())
@@ -2157,7 +2345,7 @@ final class GameApiTest extends TestCase
         \Hanjiang\WebSocket\WebSocketHandler::onWebSocketPing($mockConn, $pingData);
         $this->assertGreaterThan(0, $mockConn->lastActiveTime ?? 0, '必须刷新连接最后活跃时间戳');
 
-        // 6. 对齐 smart-book 标准: 验证超时无心跳僵尸连接回收清理 (sweep)
+        // 3. 对齐 smart-book 标准: 验证超时无心跳僵尸连接回收清理 (sweep)
         $zombieConn = $this->createMock(\Workerman\Connection\TcpConnection::class);
         $zombieConn->id = 88888;
         $zombieConn->expects($this->once())->method('close');
@@ -2168,44 +2356,129 @@ final class GameApiTest extends TestCase
         $swept = \OmniPHP\WebSocket\Broadcaster::sweep(60);
         $this->assertGreaterThanOrEqual(1, $swept, '超时僵尸连接应被自动识别并清理');
 
-        // 7. 验证前端 WebSocket 客户端脚本就绪 (纯粹协议级设计，包含指数退避重连机制)
+        // 4. 前端 WebSocket 客户端脚本就绪 (纯粹协议级设计，包含指数退避重连机制)
         $clientScript = dirname(__DIR__, 2) . '/public/static/js/network/ws_client.js';
         $this->assertFileExists($clientScript);
         $content = (string)file_get_contents($clientScript);
         $this->assertStringContainsString('scheduleReconnect', $content);
         $this->assertStringContainsString('RFC 6455', $content);
 
-        // 8. 验证直接使用 OmniPHP 官方核心 HTTP Context (完全对标 Go Gin 设计模式)
+        // 5. 直接使用 OmniPHP 官方核心 HTTP Context (完全对标 Go Gin 设计模式)
         $ctx = \OmniPHP\Http\Context::mock(['foo' => 'bar']);
         $this->assertInstanceOf(\OmniPHP\Http\Context::class, $ctx);
         $this->assertSame('bar', $ctx->input('foo'));
         $ctx->set('user_role', 'admin');
         $this->assertSame('admin', $ctx->get('user_role'));
 
-        // 9. 验证直接使用 OmniPHP 官方核心 WebSocket Context (解耦底层的极速纯内存单测能力)
-        $wsCtx = \OmniPHP\WebSocket\Context::mock([
-            'action' => 'chat',
-            'message' => '来自框架原生 Context 的测试战报！',
-        ], uid: self::$uid);
-
-        $this->assertInstanceOf(\OmniPHP\WebSocket\Context::class, $wsCtx);
-        $this->assertSame('chat', $wsCtx->action());
-        $this->assertSame('来自框架原生 Context 的测试战报！', $wsCtx->input('message'));
+        // 6. OmniPHP 官方核心 WebSocket Context (解耦底层的极速纯内存单测能力)
+        $wsCtx = \OmniPHP\WebSocket\Context::mock(['action' => 'ping'], uid: self::$uid);
+        $this->assertSame('ping', $wsCtx->action());
         $this->assertSame(self::$uid, $wsCtx->uid());
-
-        // 执行分发
         \Hanjiang\WebSocket\WebSocketHandler::dispatch($wsCtx);
+        $this->assertStringContainsString('"pong"', $wsCtx->sentMessages[0]);
 
-        // 未 auth 的连接不能发聊天（不再回退到请求里的 uid）
+        // 未 auth 的连接不能发业务事件；聊天不再走 ws（旧版发言是 HTTP c=chat&m=send）
         $anonCtx = \OmniPHP\WebSocket\Context::mock(['action' => 'chat', 'message' => '冒名', 'uid' => self::$uid]);
         \Hanjiang\WebSocket\WebSocketHandler::dispatch($anonCtx);
         $this->assertStringContainsString('auth_fail', $anonCtx->sentMessages[0]);
-
-        // 验证 Context 错误响应机制
-        $errCtx = \OmniPHP\WebSocket\Context::mock(['action' => 'chat', 'message' => ''], uid: self::$uid);
+        $errCtx = \OmniPHP\WebSocket\Context::mock(['action' => 'chat', 'message' => 'x'], uid: 1);
         \Hanjiang\WebSocket\WebSocketHandler::dispatch($errCtx);
-        $this->assertNotEmpty($errCtx->sentMessages);
-        $this->assertStringContainsString('聊天内容不能为空', $errCtx->sentMessages[0]);
+        $this->assertStringContainsString('未知的事件类型: chat', $errCtx->sentMessages[0]);
+    }
+
+    /**
+     * 聊天室实时推送：GameWS 鉴权后由 ws 进程弹出私人队列推送（载荷同 c=chat&m=read），HTTP 发言 / 系统消息都推
+     */
+    public function testChatWebSocketPush(): void
+    {
+        $this->chatReset();
+        \Hanjiang\WebSocket\ChatPush::reset(0);
+        $s = $this->chatPlayer();
+        $a = $this->chatPlayer();
+        $b = $this->chatPlayer();
+        $this->chatOnline($s);
+
+        // 鉴权失败不登记
+        $bad = $this->chatWsAuth(['token' => 'nope']);
+        $this->assertSame(['auth_fail'], array_column($this->chatFrames($bad), 0));
+        // 鉴权前积压在私人队列里的消息（玩家在线时收到的）鉴权后立即推送
+        $this->chatOnline($a);
+        $this->chatSend($s, '鉴权前');
+        $inboxA = $this->chatWsAuth($a['auth']);
+        $frames = $this->chatFrames($inboxA);
+        $this->assertSame(['auth_success', 'chat_message'], array_column($frames, 0));
+        $this->assertSame(1, $frames[1][1]['status']);
+        $this->assertSame(['鉴权前'], array_column($frames[1][1]['list'], 'message'));
+        // 鉴权后玩家算在线（不再轮询也会收到全服消息）
+        $inboxB = $this->chatWsAuth($b['auth']);
+        $this->assertSame(['auth_success'], array_column($this->chatFrames($inboxB), 0));
+        $this->assertSame(0, Redis::get('chat_ws_' . $b['uid']), '记下所在 ws 进程 0');
+
+        // HTTP 发言 → 收件人所在 ws 进程的通知集合 → drain 推送，与 read 的结果完全相同
+        $res = $this->chatSend($s, '大家好');
+        \Hanjiang\WebSocket\ChatPush::drain();
+        foreach ([$inboxA, $inboxB] as $inbox) {
+            $frames = $this->chatFrames($inbox);
+            $this->assertSame('chat_message', $frames[0][0]);
+            $this->assertSame(1, $frames[0][1]['status']);
+            $this->assertCount(1, $frames[0][1]['list']);
+            $this->assertSame(array_diff_key($res['list'][0], ['time' => 1]), array_diff_key($frames[0][1]['list'][0], ['time' => 1]));
+        }
+        // 已推送的消息不会再被 read 取到（队列弹出，只送达一次）
+        $this->assertSame([], $this->chatMessages($a));
+        // 没有新消息时不推
+        \Hanjiang\WebSocket\ChatPush::drain();
+        $this->assertSame([], $this->chatFrames($inboxA));
+
+        // 系统消息 / 喇叭 / 私聊同样推送
+        \Hanjiang\Model\Chat::sendToHorn('喇叭来了');
+        $this->chatSend($s, '只给你', ['uid' => $a['uid']]);
+        \Hanjiang\WebSocket\ChatPush::drain();
+        $this->assertSame([[2, '喇叭来了'], [1, '只给你']], array_map(static fn(array $m): array => [$m['type'], $m['message']], $this->chatFrames($inboxA)[0][1]['list']));
+        $this->assertSame([[2, '喇叭来了']], array_map(static fn(array $m): array => [$m['type'], $m['message']], $this->chatFrames($inboxB)[0][1]['list']));
+
+        // 推送同样过滤屏蔽的人
+        $this->request('chat', 'ban_uid', $b['auth'] + ['touid' => $s['uid']]);
+        $this->chatSend($s, '屏蔽测试');
+        \Hanjiang\WebSocket\ChatPush::drain();
+        $this->assertSame(['屏蔽测试'], array_column($this->chatFrames($inboxA)[0][1]['list'], 'message'));
+        $this->assertSame([], $this->chatFrames($inboxB));
+
+        // 多 ws 进程：玩家在进程 1 上时通知进程 1 的集合，进程 0 不推、不弹出他的队列
+        \Hanjiang\Model\Chat::markWs($b['uid'], 'b', 1);
+        \Hanjiang\Model\Chat::sendToAll('跨进程', \Hanjiang\Model\Chat::TYPE_SYSTEM);
+        \Hanjiang\WebSocket\ChatPush::drain();
+        $this->assertSame(['跨进程'], array_column($this->chatFrames($inboxA)[0][1]['list'], 'message'));
+        $this->assertSame([], $this->chatFrames($inboxB));
+        $this->assertSame([$b['uid']], array_map(intval(...), Redis::sMembers('chat_push_1')));
+        // 进程 1 取通知并推送
+        \Hanjiang\WebSocket\ChatPush::reset(1);
+        $inboxB1 = $this->chatWsAuth($b['auth']);
+        $this->assertSame(['auth_success', 'chat_message'], array_column($this->chatFrames($inboxB1), 0));
+        \Hanjiang\WebSocket\ChatPush::drain();
+        $this->assertSame([], Redis::sMembers('chat_push_1'));
+
+        // 断线：去掉进程标记，之后的消息留在私人队列，客户端改回轮询 read 取走
+        $conn = $this->createStub(\Workerman\Connection\TcpConnection::class);
+        $conn->id = 777;
+        $live = new \OmniPHP\WebSocket\Context($conn, (string)json_encode(['action' => 'auth', 'token' => $a['auth']['token']]));
+        $frames = [];
+        $conn->method('send')->willReturnCallback(static function (string $frame) use (&$frames): bool {
+            $frames[] = json_decode($frame, true)['type'];
+            return true;
+        });
+        \Hanjiang\WebSocket\WebSocketHandler::dispatch($live);
+        $this->assertSame(['auth_success'], $frames);
+        $this->chatSend($s, '真连接');
+        \Hanjiang\WebSocket\ChatPush::drain();
+        $this->assertSame(['auth_success', 'chat_message'], $frames);
+        \Hanjiang\WebSocket\WebSocketHandler::onClose($conn);
+        $this->assertNull(Redis::get('chat_ws_' . $a['uid']));
+        $this->chatSend($s, '断线后');
+        \Hanjiang\WebSocket\ChatPush::drain();
+        $this->assertSame(['auth_success', 'chat_message'], $frames);
+        $this->assertSame(['断线后'], array_column($this->chatMessages($a), 1));
+        \Hanjiang\WebSocket\ChatPush::reset(0);
     }
 
     public function testSoulSystem(): void
@@ -3168,9 +3441,15 @@ final class GameApiTest extends TestCase
             $this->assertSame(['status' => 2, 'reward' => []], $this->bossRequest('worldboss', 'reward', $q['auth']));
 
             // 结束后：伤害榜 + 奖励（第 1 名 1000 积分，最后一击 × 1.5）
+            $w = $this->chatPlayer();
+            $this->chatOnline($w);
             $this->bossAt('2026-10-30 12:16:00');
             $res = $this->bossRequest('worldboss', 'index', $p['auth']);
             $this->assertSame(1, $res['status']);
+            // 最后一击全服系统公告（get_message_str 12），只发一次
+            $this->assertSame([[7, '{1,boss' . $uid . ' ,' . $uid . '} 将“刑天”最后击杀，奖励额外增加50%', 0, $uid]], $this->chatMessages($w));
+            $this->bossRequest('worldboss', 'index', $q['auth']);
+            $this->assertSame([], $this->chatMessages($w));
             $this->assertSame(['intnum' => 1500, 'lasthit' => 1, 'rank' => 1, 'hit' => $hit], $res['reward']);
             $this->assertSame([(string)$uid], array_column($res['top'], 'uid'));
             $this->assertSame(1, $this->bossRequest('member', 'index', $p['auth'])['openbossreward']);
@@ -3455,11 +3734,21 @@ final class GameApiTest extends TestCase
             $this->assertSame(1, $this->request('first_recharge', 'lottery')['lottery']);
             mt_srand(20261031);
             $expected = \Hanjiang\Handler\Activity\FirstRechargeHandler::lotteryRow(mt_rand(1, \Hanjiang\Handler\Activity\FirstRechargeHandler::lotteryTotalRate()));
+            $w = $this->chatPlayer();
+            $this->chatOnline($w);
             mt_srand(20261031);
             $draw = $this->request('first_recharge', 'action');
             $this->assertSame(1, $draw['status']);
             $this->assertSame(1, $draw['info']['gettype']);
             $this->assertSame($expected['getvalue'], $draw['info']['id']);
+            // 7 星以上武将：小喇叭（general_firstrecharge_get）+ 聊天室系统消息（get_message_str 35）
+            $gen = \Hanjiang\MasterData\General::ROWS[$expected['getvalue']];
+            $nick = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+            $num = \Hanjiang\Model\Chat::starWord($gen['star']);
+            $this->assertSame($num === null ? [] : [
+                [2, '恭喜玩家【' . $nick . '】在天命转盘中获得' . $num . '星武将-' . $gen['name'], 0, $uid],
+                [7, '恭喜【{1,' . $nick . ' ,' . $uid . '}】在天命转盘获得' . $num . '星武将-{9,' . $gen['name'] . '}', 0, $uid],
+            ], $this->chatMessages($w));
             $this->assertNotNull(DB::table('general')->where('uid', $uid)->where('generalid', $expected['getvalue'])->whereNull('deleted_at')->first());
             $this->assertSame(1, (int)DB::table('first_recharge_log')->where('uid', $uid)->first()['lottery']);
             $this->assertSame(5, $this->request('first_recharge', 'action')['status'], '只能抽一次');
@@ -3552,6 +3841,19 @@ final class GameApiTest extends TestCase
             $this->assertSame([1, 0, 200], [$again['status'], $again['first'], $again['jade2']]);
             $this->assertSame([$expect, $quality], [$again['info']['mid'], $again['info']['quality']]);
             $this->assertSame(-2, $this->request('studfarm', 'action', ['id' => 1, 'new' => 1])['status']);
+
+            // 首次万里挑一必得 6 品：5 品以上发聊天室系统消息（get_message_str 28）与小喇叭（chat_mount_get）
+            $w = $this->chatPlayer();
+            $this->chatOnline($w);
+            \Hanjiang\Model\TraderLog::addJade($uid, 3, 100000);
+            $top = $this->request('studfarm', 'action', ['id' => 3, 'new' => 1]);
+            $this->assertSame([1, 6], [$top['status'], $top['info']['quality']]);
+            $nick = (string)DB::table('member')->where('uid', $uid)->value('nickname');
+            $mount = '<em class="q6">' . \Hanjiang\MasterData\MountTemp::ROWS[$top['info']['mid']]['name'] . '</em>';
+            $this->assertSame([
+                [7, '恭喜【{1,' . $nick . ' ,' . $uid . '}】在西域马场选中名马-' . $mount . '，真乃当世雄主', 0, $uid],
+                [2, '恭喜【' . $nick . '】在西域马场选中名马-' . $mount . '，真乃当世雄主', 0, $uid],
+            ], $this->chatMessages($w));
         });
     }
 
@@ -3626,6 +3928,115 @@ final class GameApiTest extends TestCase
     /**
      * @return array{uid: int, auth: array{token: string, uid: int}}
      */
+    /**
+     * 聊天室：清空全部聊天 Redis 键（在线标记、队列、屏蔽、发言间隔）
+     */
+    private function chatReset(): void
+    {
+        $prefix = (string)Redis::instance()->getOption(\Redis::OPT_PREFIX);
+        foreach (Redis::keys('chat_*') as $key) {
+            Redis::del(substr($key, strlen($prefix)));
+        }
+    }
+
+    /**
+     * 聊天室：50 级可发言的新玩家
+     *
+     * @return array{uid: int, auth: array{token: string, uid: int}}
+     */
+    private function chatPlayer(): array
+    {
+        $p = $this->newGuestPlayer();
+        DB::table('member')->where('uid', $p['uid'])->update(['level' => 50]);
+        return $p;
+    }
+
+    /**
+     * 聊天室发言（c=chat&m=send）；默认世界频道（不带 uid），默认先清掉 3 秒发言间隔
+     *
+     * @param array{uid: int, auth: array<string, mixed>} $p
+     * @param array<string, mixed> $extra
+     * @return array<string, mixed>
+     */
+    private function chatSend(array $p, string $message, array $extra = [], bool $clearDelay = true): array
+    {
+        if ($clearDelay) {
+            Redis::del('chat_lock_' . $p['uid']);
+        }
+        return $this->request('chat', 'send', array_merge($p['auth'], ['uid' => '', 'message' => $message], $extra));
+    }
+
+    /**
+     * 聊天室：把玩家加入国家（member.country + member_country 成员表；用不存在的国家 id，不影响军团用例）
+     *
+     * @param array{uid: int} $p
+     */
+    private function chatJoinCountry(array $p, int $country): void
+    {
+        DB::table('member')->where('uid', $p['uid'])->update(['country' => $country]);
+        DB::table('member_country')->insert(['uid' => $p['uid'], 'country' => $country]);
+    }
+
+    /**
+     * GameWS 鉴权（auth），返回该连接的收件箱（之后推给他的帧都追加到这里）
+     *
+     * @param array<string, mixed> $auth
+     */
+    private function chatWsAuth(array $auth): \OmniPHP\WebSocket\Context
+    {
+        $ctx = \OmniPHP\WebSocket\Context::mock(['action' => 'auth', 'token' => $auth['token'] ?? '']);
+        \Hanjiang\WebSocket\WebSocketHandler::dispatch($ctx);
+        return $ctx;
+    }
+
+    /**
+     * 取出并清空收到的帧：[[事件名, 载荷], ...]
+     *
+     * @return list<array{0: string, 1: mixed}>
+     */
+    private function chatFrames(\OmniPHP\WebSocket\Context $inbox): array
+    {
+        $frames = array_map(static function (string $raw): array {
+            $frame = json_decode($raw, true);
+            return [$frame['type'], $frame['data']];
+        }, $inbox->sentMessages);
+        $inbox->sentMessages = [];
+        return $frames;
+    }
+
+    /**
+     * 聊天室：玩家上线（同旧版轮询 c=chat&m=read 刷新在线标记 chat_online_{uid}），并取走积压的消息
+     *
+     * @param array{uid: int, auth: array<string, mixed>} $p
+     */
+    private function chatOnline(array $p): void
+    {
+        $this->assertSame(1, $this->request('chat', 'read', $p['auth'])['status']);
+    }
+
+    /**
+     * 聊天室：取走玩家私人队列里的消息（c=chat&m=read），返回 [type, message, id, uid] 列表
+     *
+     * @param array{uid: int, auth: array<string, mixed>} $p
+     * @return list<array{0: int, 1: string, 2: mixed, 3: int}>
+     */
+    private function chatMessages(array $p): array
+    {
+        $res = $this->request('chat', 'read', $p['auth']);
+        $this->assertSame(1, $res['status']);
+        return array_map(static fn(array $m): array => [$m['type'], $m['message'], $m['id'], $m['uid']], $res['list']);
+    }
+
+    /**
+     * 聊天室消息里的玩家标签（get_message_str 的 from / to：{1,昵称 ,uid}）
+     *
+     * @param array{uid: int} $p
+     */
+    private function chatFrom(array $p): string
+    {
+        return '{1,' . DB::table('member')->where('uid', $p['uid'])->value('nickname') . ' ,' . $p['uid'] . '}';
+    }
+
     private function newGuestPlayer(): array
     {
         $reg = $this->request('register', 'guest', ['token' => '', 'uid' => '']);
@@ -4036,9 +4447,13 @@ final class GameApiTest extends TestCase
         $this->assertSame(['status' => -2], $this->eliteRequest('sendinvite', $p['auth'] + ['fid' => 99, 'teamid' => 5]));
         // 军团未开启
         $this->assertSame(['status' => -2], $this->eliteRequest('sendinvite', $p['auth'] + ['fid' => 1, 'teamid' => 5]));
-        // 聊天室未移植：广播发不出去，返回 0
+        // 全服系统消息：组队邀请（get_message_str 11，前端 {12,fid|teamid|countryid} 解析为「加入队伍」）
+        $w = $this->newGuestPlayer();
+        $this->chatOnline($w);
         $this->eliteMissionProgress($p['uid'], 50);
-        $this->assertSame(['status' => 0], $this->eliteRequest('sendinvite', $p['auth'] + ['fid' => 1, 'teamid' => 5, 'countryid' => 0]));
+        $this->assertSame(['status' => 1], $this->eliteRequest('sendinvite', $p['auth'] + ['fid' => 1, 'teamid' => 5, 'countryid' => 3]));
+        $city = \Hanjiang\MasterData\EliteCity::ROWS[1]['name'];
+        $this->assertSame([[7, $this->chatFrom($p) . '准备攻打{9,' . $city . '}，天下英雄们速来协助 {12,1|5|3}', 0, $p['uid']]], $this->chatMessages($w));
     }
 
     public function testEliteActionGuards(): void
@@ -5416,12 +5831,23 @@ final class GameApiTest extends TestCase
         $this->assertEqualsWithDelta(time(), (int)$beat['dateline'], 5);
         $this->assertSame(0, \Hanjiang\MasterData\ActivityTime::ROWS[74]['endtime'], 'double_copies 活动未开启：免费次数不翻倍');
 
-        // 战报分享：聊天室未移植，参数与怪物校验照旧版，然后返回 0、不扣元宝
-        $gold = (int)DB::table('member')->where('uid', $uid)->value('gold');
+        // 战报分享：参数 / 怪物 / 元宝校验照旧版，扣 2 元宝，全服发平乱战报（type 53，id 为「战报id|副本id」）
+        $w = $this->newGuestPlayer();
+        $this->chatOnline($w);
         $this->assertSame(['status' => -2, 'msg' => '传参错误。'], $this->copiesRequest('send_to_chat', $p['auth'] + ['id' => 1, 'diff_id' => 1, 'monster_id' => 1]));
         $this->assertSame(['status' => -3, 'msg' => '获取怪物信息失败。'], $this->copiesRequest('send_to_chat', $p['auth'] + ['report' => 1, 'id' => 1, 'diff_id' => 1, 'monster_id' => 99]));
-        $this->assertSame(['status' => 0], $this->copiesRequest('send_to_chat', $p['auth'] + ['report' => 1, 'id' => 1, 'diff_id' => 1, 'monster_id' => 1]));
-        $this->assertSame($gold, (int)DB::table('member')->where('uid', $uid)->value('gold'));
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1]);
+        $this->assertSame(['status' => -4, 'msg' => '元宝不足'], $this->copiesRequest('send_to_chat', $p['auth'] + ['report' => 1, 'id' => 1, 'diff_id' => 1, 'monster_id' => 1]));
+        DB::table('member')->where('uid', $uid)->update(['gold' => 5]);
+        $this->assertSame(['status' => 1, 'all_gold' => 3], $this->copiesRequest('send_to_chat', $p['auth'] + ['report' => 1, 'id' => 1, 'diff_id' => 2, 'monster_id' => 1]));
+        $this->assertSame(3, (int)DB::table('member')->where('uid', $uid)->value('gold'));
+        $monster = null;
+        foreach (\Hanjiang\MasterData\CopiesInfo::ROWS as $row) {
+            if ($row['copies_id'] === 1 && $row['diff_id'] === 2 && $row['monster_id'] === 1) {
+                $monster = $row['name'];
+            }
+        }
+        $this->assertSame([[53, $this->chatFrom($p) . '击败了' . $monster . '(普通) {53,[查看战报],1|1}', '1', $uid]], $this->chatMessages($w));
     }
 
     public function testBeatengodSystem(): void
@@ -5580,8 +6006,21 @@ final class GameApiTest extends TestCase
             // BOSS 已死：不能再打，index 显示领奖（胜利）
             Redis::del('countryboss_hit_lock_' . $a['uid']);
             $this->assertSame(4, $this->bossRequest('countryboss', 'battle', $a['auth'])['status']);
+            $this->chatJoinCountry($a, $country);
+            $this->chatJoinCountry($b, $country);
+            $this->chatJoinCountry($c, $other);
+            $this->chatOnline($b);
+            $this->chatOnline($c);
             $res = $this->bossRequest('countryboss', 'index', $a['auth']);
             $this->assertSame([1, 1], [$res['status'], $res['win']]);
+            // 最后一击国家聊天公告（get_message_str 17，type 6 系统），只发给本国成员、只发一次
+            $notice = '{1,boss' . $b['uid'] . ' ,' . $b['uid'] . '} 将“蚩尤”最后击杀，奖励额外增加50%';
+            $read = $this->request('chat', 'read', $b['auth'])['list'];
+            $this->assertSame([[6, 1, $notice, $a['uid']]], array_map(static fn (array $m): array => [$m['type'], $m['system'], $m['message'], $m['uid']], $read));
+            $this->assertSame([], $this->chatMessages($c));
+            $this->assertSame($notice, $this->request('chat', 'index', $b['auth'])['list'][0]['message'], '进本国国家队列');
+            $this->bossRequest('countryboss', 'index', $b['auth']);
+            $this->assertSame([], $this->chatMessages($b));
             $this->assertSame(0, $this->bossRequest('countryboss', 'index', $c['auth'])['level']);
 
             // 领奖：按国家内排名取胜利奖励，最后一击（b）宝石 × 1.5
@@ -6529,6 +6968,34 @@ final class GameApiTest extends TestCase
         }
     }
 
+    /**
+     * 过关斩将奖励的广播：紫装以上装备小喇叭；7 星以上武将小喇叭 + 聊天室 45，神将 46
+     */
+    public function testPassGeneralRewardBroadcasts(): void
+    {
+        $p = $this->passPlayer();
+        $member = DB::table('member')->where('uid', $p['uid'])->first();
+        $nick = (string)$member['nickname'];
+        $w = $this->chatPlayer();
+        $this->chatOnline($w);
+        $add = new \ReflectionMethod(\Hanjiang\Handler\Campaign\PassGeneralHandler::class, 'addReward');
+        $equip = \Hanjiang\MasterData\Equip::ROWS[15];
+        $add->invoke(null, $member, ['type' => 8, 'id' => 15, 'value' => 1], 'action', time());
+        $add->invoke(null, $member, ['type' => 8, 'id' => 1, 'value' => 1], 'action', time());
+        $add->invoke(null, $member, ['type' => 12, 'id' => 6, 'value' => 1], 'action', time());
+        $this->assertSame([
+            [2, '恭喜【' . $nick . '】在过关斩将中获得装备-<em class="q5">' . $equip['name'] . '</em>', 0, $p['uid']],
+            [2, '恭喜玩家【' . $nick . '】在过关斩将中获得八星武将-赵云', 0, $p['uid']],
+            [7, '恭喜【{1,' . $nick . ' ,' . $p['uid'] . '}】在过关斩将中获得八星武将-{9,赵云}', 0, $p['uid']],
+        ], $this->chatMessages($w));
+        DB::table('general')->where('uid', $p['uid'])->where('generalid', 6)->update(['deleted_at' => date('Y-m-d H:i:s')]);
+        $add->invoke(null, $member, ['type' => 26, 'id' => 6, 'value' => 1], 'action', time());
+        $this->assertSame([
+            [2, '恭喜玩家【' . $nick . '】在过关斩将中获得八星神将-赵云', 0, $p['uid']],
+            [7, '恭喜【{1,' . $nick . ' ,' . $p['uid'] . '}】在过关斩将中获得八星神将-{9,赵云}', 0, $p['uid']],
+        ], $this->chatMessages($w));
+    }
+
     public function testPassGeneralRandArrIntervals(): void
     {
         // 区间 [k + 1, rate × 10 + k]，随机数须大于下限（下限本身落空）；最多掷 count 次，凑够 1 个即停
@@ -7138,11 +7605,16 @@ final class GameApiTest extends TestCase
         $this->assertSame([$doubled + 300, $doubled + 300], [$res['all_gem'], \Hanjiang\Model\OwnGem::chip($uid)]);
         $this->assertSame([[$doubled, 'get_reward'], [300, 'get_reward']], array_map(static fn (array $r): array => [(int)$r['gem'], $r['method']], DB::table('gem_log')->where('uid', $uid)->orderBy('id')->get()));
 
-        // 战报分享：聊天室未移植，返回失败且不扣元宝
+        // 战报分享：扣 2 元宝，全服发四象圣域战报（get_message_str 25，消息 type 11，战报 id 为「战报id|圣域」）
+        $w = $this->newGuestPlayer();
+        $this->chatOnline($w);
         $this->assertSame(['status' => -1], $this->b2Request('sanctum', 'send_to_chat', $p['auth'] + ['id' => 1]));
         $this->assertSame(['status' => -2], $this->b2Request('sanctum', 'send_to_chat', $p['auth'] + ['id' => 999, 'report' => 5]));
-        $this->assertSame(['status' => 0], $this->b2Request('sanctum', 'send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5]));
-        $this->assertSame(1000 - $ratio[2]['sub'], $this->b2Member($uid, 'gold'));
+        $gold = 1000 - $ratio[2]['sub'];
+        $this->assertSame(['status' => 1, 'all_gold' => $gold - 2], $this->b2Request('sanctum', 'send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5]));
+        $this->assertSame($gold - 2, $this->b2Member($uid, 'gold'));
+        $mission = array_column(\Hanjiang\MasterData\SanctumMission::ROWS, null, 'id')[1];
+        $this->assertSame([[11, $this->chatFrom($p) . ' 在四象圣域击败了 {9,' . $mission['name'] . '} {16,[查看战报],5|' . $mission['city'] . '}', 5, $uid]], $this->chatMessages($w));
     }
 
     public function testHeavenIndexAndPkLoseGuards(): void
@@ -7246,7 +7718,15 @@ final class GameApiTest extends TestCase
 
         $this->assertSame(['status' => -1, 'msg' => '传递类型错误'], $this->b2Request('heaven', 'send_to_chat', $p['auth'] + ['id' => 1]));
         $this->assertSame(['status' => -3, 'msg' => '获取关卡列表失败'], $this->b2Request('heaven', 'send_to_chat', $p['auth'] + ['id' => 999, 'report' => 5]));
-        $this->assertSame(['status' => 0], $this->b2Request('heaven', 'send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5]));
+        // 战报分享：扣 2 元宝，全服发通天塔战报（type 38）
+        $w = $this->newGuestPlayer();
+        $this->chatOnline($w);
+        DB::table('member')->where('uid', $uid)->update(['gold' => 1]);
+        $this->assertSame(['status' => -2, 'msg' => '元宝不足'], $this->b2Request('heaven', 'send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5]));
+        DB::table('member')->where('uid', $uid)->update(['gold' => 2]);
+        $this->assertSame(['status' => 1, 'all_gold' => 0], $this->b2Request('heaven', 'send_to_chat', $p['auth'] + ['id' => 1, 'report' => 5]));
+        $name = \Hanjiang\MasterData\HeavenMission::ROWS[1]['name'];
+        $this->assertSame([[38, $this->chatFrom($p) . ' 在通天塔击败了 {9,' . $name . '} {17,[查看战报],5}', 5, $uid]], $this->chatMessages($w));
     }
 
     public function testHeavenMopUpBuyAndDailyReward(): void
@@ -7600,11 +8080,16 @@ final class GameApiTest extends TestCase
         $this->assertSame([11, 1], [$index['list'][0]['id'], $index['list'][0]['openstatus']]);
         $this->assertSame(11, $this->b2Row('member_activity', $uid, ['islandid'])['islandid']);
 
+        // 战报分享：扣 2 元宝，全服发金银洞战报（type 8）
+        $w = $this->newGuestPlayer();
+        $this->chatOnline($w);
         $gold = $this->b2Member($uid, 'gold');
         $this->assertSame(['status' => -1], $this->b2Request('island', 'send_to_chat', $p['auth'] + ['id' => 6]));
         $this->assertSame(['status' => -2], $this->b2Request('island', 'send_to_chat', $p['auth'] + ['id' => 999, 'report' => 5]));
-        $this->assertSame(['status' => 0], $this->b2Request('island', 'send_to_chat', $p['auth'] + ['id' => 6, 'report' => 5]));
-        $this->assertSame($gold, $this->b2Member($uid, 'gold'));
+        $this->assertSame(['status' => 1, 'all_gold' => $gold - 2], $this->b2Request('island', 'send_to_chat', $p['auth'] + ['id' => 6, 'report' => 5]));
+        $this->assertSame($gold - 2, $this->b2Member($uid, 'gold'));
+        $name = \Hanjiang\MasterData\Island::ROWS[6]['name'];
+        $this->assertSame([[8, $this->chatFrom($p) . ' 在金银洞击败了 {9,' . $name . '} {11,[查看战报],5}', 5, $uid]], $this->chatMessages($w));
     }
 
     // ---------------------------------------------------------------
@@ -8018,7 +8503,11 @@ final class GameApiTest extends TestCase
             $this->assertNotEmpty($real['battle']['rightteam']);
             $this->assertSame($real['battle']['assess'] >= 1 ? $a2['uid'] : $b['uid'], (int)DB::table('country_mine')->where('page', 2)->where('site', 1)->value('uid'));
 
-            $this->assertSame(['status' => 0], $this->b2Request('countrymine', 'send_to_chat', $b['auth'] + ['touid' => $a['uid'], 'report' => 5, 'win' => 1]));
+            // 战报分享：扣 2 元宝，全服发国家矿区战报（get_message_str 26，消息 type 3）
+            $this->chatOnline($a);
+            $gold = $this->b2Member($b['uid'], 'gold');
+            $this->assertSame(['status' => 1, 'all_gold' => $gold - 2], $this->b2Request('countrymine', 'send_to_chat', $b['auth'] + ['touid' => $a['uid'], 'report' => 5, 'win' => 1]));
+            $this->assertSame([[3, $this->chatFrom($b) . ' 在国家矿区抢夺 ' . $this->chatFrom($a) . ' 的矿中 胜利  {2,[查看战报],5}', 5, $b['uid']]], $this->chatMessages($a));
             $this->assertSame(['status' => -1], $this->b2Request('countrymine', 'send_to_chat', $b['auth'] + ['touid' => 0, 'report' => 5]));
         } finally {
             \Hanjiang\Model\BossClock::freeze(null);
@@ -8166,9 +8655,18 @@ final class GameApiTest extends TestCase
             $this->emptyFormation($kingY['uid']);
             $this->b2Overpower($kingX['uid']);
             DB::table('matrix')->where('uid', $kingX['uid'])->update(['position5' => (int)DB::table('general')->where('uid', $kingX['uid'])->value('id')]);
+            $w = $this->chatPlayer();
+            $this->chatOnline($w);
+            $this->chatOnline($kingY);
             $force = $this->b2Request('siege', 'occupy', $kingX['auth'] + ['id' => 1, 'force' => 1, 'sure' => 1]);
             $this->assertSame(1, $force['status']);
             $this->assertSame(3, $force['info']['win']);
+            // 聊天室：两条至尊攻城小喇叭（全服），并进相关三国成员的国家聊天室（type 6 系统）
+            $horns = $this->chatMessages($w);
+            $this->assertSame([2, 2], array_column($horns, 0));
+            $this->assertStringContainsString('发起至尊攻城成功', $horns[0][1]);
+            $this->assertStringContainsString('获得挑战资格', $horns[1][1]);
+            $this->assertSame([[2, $horns[0][1]], [2, $horns[1][1]], [6, $horns[1][1]], [6, $horns[0][1]]], array_map(static fn (array $m): array => [$m[0], $m[1]], $this->chatMessages($kingY)));
             $this->assertSame(3000, $this->b2Member($kingX['uid'], 'gold'));
             $this->assertSame([$x, 1], [(int)DB::table('country_city')->where('maplevel', 1)->value('challengercid'), (int)DB::table('country_city')->where('maplevel', 1)->value('lock')]);
             $this->assertSame(0, (int)DB::table('country_city')->where('maplevel', 8)->value('challengercid'));
@@ -8238,7 +8736,16 @@ final class GameApiTest extends TestCase
             // 计划任务 18:27 起算出战斗：5 名玩家各连胜 6 场打完 28 名 NPC 守将，攻方胜，X 占领濮阳
             $this->assertSame(0, \Hanjiang\Cron\SiegeCron::battle((int)strtotime('2026-10-31 18:26:00')));
             $at = (int)strtotime('2026-10-31 18:27:00');
+            $w = $this->chatPlayer();
+            $this->chatOnline($w);
+            $this->chatOnline($players[1]);
             $this->assertSame(1, \Hanjiang\Cron\SiegeCron::battle($at));
+            // 聊天室：全服系统公告；攻方国家成员收到国家战报 20（计划任务里没有发信人，旧版把国家id 错位传进 tree）
+            $xName = (string)DB::table('country')->where('id', $x)->value('name');
+            $win = '【' . $xName . '】击败了【张角军团】 ，成功占领【濮阳】。';
+            $this->assertSame([[7, $win, 0, 0]], $this->chatMessages($w));
+            $read = $this->request('chat', 'read', $players[1]['auth'])['list'];
+            $this->assertSame([[7, 0, 0, $win], [6, 1, $x, '{9,' . $xName . '}击败了{9,张角军团}，攻占【{9,濮阳}】{14,[查看战报],1}']], array_map(static fn (array $m): array => [$m['type'], $m['system'], $m['tree'], $m['message']], $read));
             $this->assertSame(0, \Hanjiang\Cron\SiegeCron::battle($at + 60), '已有战报不重复计算');
             $city = DB::table('country_city')->where('maplevel', 1)->first();
             $this->assertSame([$x, 0, $at, 0], [(int)$city['cid'], (int)$city['challengercid'], (int)$city['dateline'], (int)$city['lock']]);

@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class BlackmarketHandler
 {
@@ -67,6 +66,7 @@ final class BlackmarketHandler
      */
     public static function buy(Context $ctx): array
     {
+        // 依赖未移植：旧版买到 7 星以上武将 send_message_to_horn(general_get_by_blackmarket) + get_message_str(14) 系统消息（随旧版 blackmarket 移植）
         $uid = MemberHandler::resolveUid($ctx);
         $goodsId = (int)($ctx->input('id', 1));
 
@@ -93,16 +93,6 @@ final class BlackmarketHandler
 
         $goods[$goodsId]['bought'] = 1;
         Redis::setJson('user_blackmarket:' . $uid, $goods, 86400);
-
-        // 如果是高阶黄金道具，全服广播
-        if ($costGold >= 50) {
-            $member = DB::table('member')->where('uid', $uid)->first();
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "西域传宝！主公【{$pName}】于神秘黑市淘得稀世珍宝【{$item['name']}】，引各路诸侯艳羡！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,

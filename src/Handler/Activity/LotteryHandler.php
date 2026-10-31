@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 天赐幸运大转盘、扇区抽奖与每日购买次数处理器 (DDD Activity Domain)
@@ -96,6 +95,7 @@ final class LotteryHandler
      */
     public static function action(Context $ctx): array
     {
+        // 依赖未移植：旧版抽中元宝 / 武将 / 装备 / 突飞卡时 get_message_str(6 / 7) + send_message_to_all(…, 7) 系统消息（随旧版 Lottery 分组抽奖移植）
         $uid = MemberHandler::resolveUid($ctx);
         $times = (int)(Redis::get('user_lottery_times:' . $uid) ?? 3);
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
@@ -161,14 +161,6 @@ final class LotteryHandler
 
         // 重新获取最新货币资产
         $freshMember = DB::table('member')->where('uid', $uid)->first();
-
-        if ($rewardGold >= 50) {
-            $pName = $freshMember['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "天赐鸿运！主公【{$pName}】转动幸运大转盘命中【{$prizeItem['itemname']}】，斩获 {$rewardGold} 元宝！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         $info = array_merge($prizeItem, [
             'all_silver' => (int)($freshMember['silver'] ?? 0),

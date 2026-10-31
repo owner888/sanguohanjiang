@@ -7,6 +7,7 @@ namespace Hanjiang\Handler\Activity;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\MountRatio;
 use Hanjiang\MasterData\MountTemp;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\TraderLog;
@@ -22,8 +23,7 @@ use OmniPHP\Http\Context;
  * rate1 ~ rate7 为各品级权重。每档第一次选马必得该档最高品级（十里挑一 4 金、百里挑一 5 紫、万里挑一 6 红），
  * 记在 mount_log.first{id}；之后按权重抽品级。坐骑在该品级的 MountTemp 模板里等概率抽（id >= 100 的抽不到）。
  *
- * 依赖未移植：选中 5 品以上坐骑时的聊天室 / 小喇叭广播（chat_model get_message_str(28) / send_message_to_all /
- * send_message_to_horn）。
+ * 选中 5 品以上坐骑时发聊天室系统消息（get_message_str 28）与小喇叭（chat_mount_get）。
  * 与旧版的差别：选马在 Member::locked（玩家行锁）里执行；数值字段输出为整数。
  */
 final class StudfarmHandler
@@ -183,8 +183,14 @@ final class StudfarmHandler
                 return $return;
             }
 
-            // 依赖未移植：品级 >= 5 时 chat_model->get_message_str(28, ['rebate' => 坐骑名, 'mount' => 品级]) +
-            // send_message_to_all(…, 7) 聊天室广播，及 send_message_to_horn 小喇叭「恭喜【昵称】在西域马场选中名马-…」
+            // 如果获得的坐骑品级大于5  发送广播到聊天室和小喇叭
+            if ($quality >= 5) {
+                $sender = Chat::sender($uid);
+                $message = Chat::getMessageStr(28, ['rebate' => $result['info']['name'], 'mount' => $quality], $sender);
+                Chat::sendToAll($message, Chat::TYPE_SYSTEM, 0, 0, $sender);
+                $qualityStr = Chat::quality($quality, (string)$result['info']['name']);
+                Chat::sendToHorn(sprintf(Chat::LANG['chat_mount_get'], $sender['nickname'] ?? '', $qualityStr), $sender);
+            }
 
             $jade = TraderLog::get($uid);
             // 成功返回

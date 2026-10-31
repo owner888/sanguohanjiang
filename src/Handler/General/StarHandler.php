@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class StarHandler
 {
@@ -82,14 +81,6 @@ final class StarHandler
         Redis::del('player:' . $uid);
 
         // 待按旧版重写：旧版武将没有逐将升星，wuliup/zhiliup/tiliup 只属于培养（cultivate），这里不写三围
-
-        if ($newStar >= 5) {
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "七星照命！主公【{$pName}】麾下大将【{$general['name']}】突破觉醒至【{$newStar} 星】神将形态！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,

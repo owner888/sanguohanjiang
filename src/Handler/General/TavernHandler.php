@@ -236,6 +236,7 @@ final class TavernHandler
      */
     public static function buy(Context $ctx): array
     {
+        // 依赖未移植：旧版招到 7 星以上武将 chat_model->send_message_to_horn(general_get) 小喇叭（随旧版 Pub 名将池移植）
         $uid = MemberHandler::resolveUid($ctx);
         $gid = (int)($ctx->input('id', $ctx->input('generalid', 10)));
 

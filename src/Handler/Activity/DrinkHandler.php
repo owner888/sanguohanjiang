@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 青梅煮酒论英雄、痛饮杜康佳酿与军令体力犒赏处理器 (DDD Activity Domain)
@@ -129,10 +128,6 @@ final class DrinkHandler
         Redis::setJson('global_drink_logs', $logs, 86400 * 7);
 
         if ($wineId === 3) {
-            Broadcaster::broadcast('marquee', [
-                'content' => "对酒当歌！主公【{$nickname}】青梅煮酒痛饮【千年杜康】，天赐豪气，斩获 {$rewardAct} 点军令大增益！",
-                'type' => 'system_broadcast',
-            ]);
         }
 
         return [

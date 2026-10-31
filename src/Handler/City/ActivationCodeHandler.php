@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class ActivationCodeHandler
 {
@@ -65,14 +64,6 @@ final class ActivationCodeHandler
 
         MemberHandler::addCurrency($uid, silver: $rewardSilver, gold: $rewardGold, act: $rewardAct);
         Redis::set($usedKey, '1', 86400 * 365);
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $pName = $member['nickname'] ?? ('主公' . $uid);
-
-        Broadcaster::broadcast('marquee', [
-            'content' => "天官赐福！主公【{$pName}】成功兑换特权礼包【{$cfg['title']}】，喜获 {$rewardGold} 元宝！",
-            'type' => 'system_broadcast',
-        ]);
 
         return [
             'status' => 1,

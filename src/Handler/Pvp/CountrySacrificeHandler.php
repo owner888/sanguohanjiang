@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class CountrySacrificeHandler
 {
@@ -83,14 +82,8 @@ final class CountrySacrificeHandler
 
         $countryName = DB::table('country')->where('id', $country)->whereNull('deleted_at')->value('name');
 
-        // 高阶天祭全服通告
-        if ($sacId === 3) {
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "天地感应！【{$countryName}】主公【{$pName}】设九鼎太牢祭天祈福，受上苍庇佑，国运亨通！",
-                'type' => 'system_broadcast',
-            ]);
-        }
+        // 依赖未移植：旧版祭祀完成时 chat_model->get_message_str(9, sacrificename) + send_message_to_country(…, 国家成员, 6, 1)
+        // 国家聊天室公告（本玩法为新版自定，随旧版 countrysacrifice 移植）
 
         return [
             'status' => 1,

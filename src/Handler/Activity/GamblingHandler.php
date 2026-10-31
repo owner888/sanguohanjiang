@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class GamblingHandler
 {
@@ -64,6 +63,7 @@ final class GamblingHandler
      */
     public static function cut(Context $ctx): array
     {
+        // 依赖未移植：旧版切石大奖 chat_model->send_message_to_horn(gambling_accomplish) 小喇叭（本玩法为新版自定，随旧版 gambling 移植）
         $uid = MemberHandler::resolveUid($ctx);
         $state = Redis::getJson('user_gamble:' . $uid);
 
@@ -82,15 +82,6 @@ final class GamblingHandler
         $state['is_cut'] = 1;
         $state['value'] = $finalVal;
         Redis::setJson('user_gamble:' . $uid, $state, 86400);
-
-        if ($multiplier >= 3.0) {
-            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "财星高照！主公【{$pName}】聚宝博彩开出 3 倍聚宝天赐大奖，估价翻腾！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,

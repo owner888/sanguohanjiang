@@ -14,6 +14,7 @@ use Hanjiang\MasterData\Equip;
 use Hanjiang\MasterData\Mission;
 use Hanjiang\MasterData\Price;
 use Hanjiang\MasterData\TalentScroll;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
@@ -39,7 +40,6 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  * 依赖未移植：
  * - 春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(…, 24, uid) 计数）；
  * - 主线任务 mainquest_model->task_action(10, 1, uid)（参加一次多人副本）；
- * - 聊天室邀请广播 chat_model->get_message_str(11, …) / send_message_to_all(…, 7)（sendinvite 返回 0）；
  * - 消费统计 stat_model->elite_times；member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、
  *   四方来朝元宝计数；
  * - 征战进度：旧版 map_model->get_mission_max 读 zc_sanguo_open_map（未移植），这里按新版 zc_sanguo_map 推算。
@@ -617,9 +617,12 @@ final class EliteHandler
             return $return;
         }
 
-        // 依赖未移植：chat_model->get_message_str(11, ['elite' => "fid|teamid|countryid", 'general' => 军团名])
-        // + send_message_to_all(…, 7) 聊天室组队邀请广播。聊天室未移植前广播发不出去，
-        // 按开发者要求的同类做法返回 0（失败），客户端提示「邀请失败」。聊天室移植后恢复旧版流程（成功返回 1）。
+        // 发送
+        $str = implode('|', [$id, $teamid, self::intInput($ctx, 'countryid')]);
+        $sender = Chat::sender((int)$member['uid']);
+        $message = Chat::getMessageStr(11, ['elite' => $str, 'general' => EliteCity::ROWS[$id]['name']], $sender);
+        Chat::sendToAll($message, Chat::TYPE_SYSTEM, 0, 0, $sender);
+        $return['status'] = 1;
         return $return;
     }
 

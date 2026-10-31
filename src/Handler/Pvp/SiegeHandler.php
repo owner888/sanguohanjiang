@@ -11,6 +11,7 @@ use Hanjiang\MasterData\CountryJob;
 use Hanjiang\MasterData\CountryMission;
 use Hanjiang\MasterData\Mission;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberJade;
 use OmniPHP\Cache\Redis;
@@ -36,9 +37,9 @@ use OmniPHP\Http\Context;
  * occupy、battle_prepare、join_battle、action、get_reward、get_report、siege_notice。get_report_info 客户端不调用，不开放。
  * 主城国战提示（member index 的 country_war 等字段）由 countryWar() 提供。
  *
+ * 聊天室：至尊攻城小喇叭、国战胜负全服系统公告、双方国家聊天室战报（get_message_str 18 ~ 21，type 6 系统）。
+ *
  * 依赖未移植：
- * - 聊天室：至尊攻城小喇叭（chat_model->send_message_to_horn）、国战胜负全服公告（send_message_to_all 7）、
- *   国家聊天室战报（send_message_to_country 18 ~ 21 / 6）；
  * - 通商免费次数 member_activity.freebusiness（都城效果 type 2）；
  * - 元宝流水。
  */
@@ -101,6 +102,9 @@ final class SiegeHandler
     private const string LANG_SIEGE_CHANGE_OCCPY_CITY = '您当前已经申请打城池【%s】，确认攻打【%s】放弃【%s】吗？（一个国家只能攻打或拥有一座城池）';
     private const string LANG_SIEGE_START_TIME = '国战报名将于周六%s开启,请准时参加';
     private const string LANG_SIEGE_ONT_OCCUPY = '%s 已被【%s】发起至尊攻城，普通攻占无法取代占领资格！';
+    /** 国战胜负全服公告（siege_lang.php：siege_battle_win / siege_battle_lose） */
+    private const string LANG_SIEGE_BATTLE_WIN = '【%s】击败了【%s】 ，成功占领【%s】。';
+    private const string LANG_SIEGE_BATTLE_LOSE = '【%s】击败了前来攻城的【%s】，%s防守成功。';
     private const string LANG_SIEGE_FORCE_ATTACK_WIN = '【%s】君主【%s】对【%s】发起至尊攻城成功，国家【%s】无法弃城，双方将决一死战！';
     private const string LANG_SIEGE_FORCE_ATTACK_CHALLENGER_WIN = '【%s】君主【%s】对【%s】发起至尊挑战，战胜另一挑战者【%s】的君主【%s】，获得挑战资格。';
     private const string LANG_SIEGE_FORCE_OCCUPY_NEED_VIP = 'vip等级达到7级才可使用至尊攻城！';
@@ -1158,7 +1162,8 @@ final class SiegeHandler
                 $defenseName = self::maxMissionByCity($id)['name'] ?? null;
             }
             $message = sprintf(self::LANG_SIEGE_FORCE_ATTACK_WIN, $myCountry['name'] ?? '', $member['nickname'], $info['name'], $defenseName);
-            // 依赖未移植：chat_model->send_message_to_horn 小喇叭
+            $sender = Chat::sender((int)$member['uid']);
+            Chat::sendToHorn($message, $sender);
             $uids = [];
             if ($cityInfo !== null && $cityInfo['cid'] !== 0) {
                 $uids = self::memberUids($cityInfo['cid']);
@@ -1167,15 +1172,17 @@ final class SiegeHandler
             if ($cityInfo !== null && $cityInfo['challengercid'] > 0) {
                 // 【xx】君主【xx】对【xx】发起至尊挑战，战胜另一挑战者【xx】的君主【xx】，获得挑战资格。
                 $message2 = sprintf(self::LANG_SIEGE_FORCE_ATTACK_CHALLENGER_WIN, $myCountry['name'] ?? '', $member['nickname'], $info['name'], $cityInfo['challengername'], $oldKingInfo['nickname'] ?? null);
-                // 依赖未移植：chat_model->send_message_to_horn 小喇叭
+                Chat::sendToHorn($message2, $sender);
                 $challengerUids = self::memberUids($cityInfo['challengercid']);
                 if ($challengerUids !== []) {
                     $uids = array_merge($uids, $challengerUids);
-                    // 依赖未移植：chat_model->send_message_to_country 国家聊天室
+                    // 国家聊天室（旧版国家队列取发起人的国家）
+                    Chat::sendToCountry($message2, $uids, Chat::TYPE_COUNTRY, 1, 0, 0, $sender);
                     CountryHandler::sendMessage($uids, $message2);
                 }
             }
-            // 依赖未移植：chat_model->send_message_to_country 国家聊天室
+            // 国家聊天室
+            Chat::sendToCountry($message, $uids, Chat::TYPE_COUNTRY, 1, 0, 0, $sender);
             if ($uids !== []) {
                 CountryHandler::sendMessage($uids, $message);
             }
@@ -1493,8 +1500,11 @@ final class SiegeHandler
         Redis::del($attackKeys, $defenseKeys);
         // 清理城池锁定状态
         self::lockCity($city, 0);
+        // 玩家请求里现算时以该玩家为发信人；计划任务里没有发信人（旧版 cron 把 $this->member 置空）
+        $sender = $selfUid > 0 ? Chat::sender($selfUid) : null;
         if ($battle['win'] === 1) {
-            // 依赖未移植：chat_model->send_message_to_all(siege_battle_win, 7) 全服公告
+            //【哈哈肥猪】击败了【张角军团】 ，成功占领【濮阳城】。
+            Chat::sendToAll(sprintf(self::LANG_SIEGE_BATTLE_WIN, $data['attack_name'], $data['defense_name'], $effect['name']), Chat::TYPE_SYSTEM, 0, 0, $sender);
             // 攻击方胜利（修改城池占领者）
             self::updateOccupant($city, $now);
             if ($info['challengercid'] !== 0 && $selfUid > 0) {
@@ -1503,10 +1513,13 @@ final class SiegeHandler
                     self::getCityEffect([], $now, (int)$val['country'], (int)$val['uid']);
                 }
             }
-            // 依赖未移植：chat_model->send_message_to_country 国家聊天室战报（攻方 20、守方 19）
+            // 把战报发送到国家聊天室（攻方 20、守方 19）
+            self::sendSiegeReport(20, $info['challengercid'], $data['attack_name'], $data['defense_name'], $effect, $sender);
+            self::sendSiegeReport(19, $info['cid'], $data['defense_name'], $data['attack_name'], $effect, $sender);
             self::addFightSiegeNotice($data, $effect, $reportId, 1, $info['lock'], $now);
         } else {
-            // 依赖未移植：chat_model->send_message_to_all(siege_battle_lose, 7) 全服公告
+            //【张角军团】击败了前来攻城的【哈哈肥猪队】，濮阳城防守成功。
+            Chat::sendToAll(sprintf(self::LANG_SIEGE_BATTLE_LOSE, $data['defense_name'], $data['attack_name'], $effect['name']), Chat::TYPE_SYSTEM, 0, 0, $sender);
             // 失败，修改挑战者为空
             self::updateCastellan($city, null, 0);
             // 把挑战者的国家都城状态和占领都城都改成0
@@ -1515,10 +1528,44 @@ final class SiegeHandler
                 // 把占领者的国家状态改成已占领
                 self::updateCityStatus($info['cid'], $city, 1);
             }
-            // 依赖未移植：chat_model->send_message_to_country 国家聊天室战报（攻方 21、守方 18）
+            // 把战报发送到国家聊天室（攻方 21、守方 18）
+            self::sendSiegeReport(21, $info['challengercid'], $data['attack_name'], $data['defense_name'], $effect, $sender);
+            self::sendSiegeReport(18, $info['cid'], $data['defense_name'], $data['attack_name'], $effect, $sender);
             self::addFightSiegeNotice($data, $effect, $reportId, 2, $info['lock'], $now);
         }
         return ['data' => $data, 'report_id' => $reportId];
+    }
+
+    /**
+     * 国战战报发到一方国家聊天室（get_message_str 18 ~ 21 + send_message_to_country(…, 6, 1)）
+     *
+     * 旧版玩家请求里国家队列取发起请求的玩家的国家（两方战报都进他的国家队列）；计划任务 cron.php:siege_battle 的调用
+     * send_message_to_country($message, $uid, 6, 1, 0, 国家id) 把国家id 错位传进了 tree 参数，国家队列为 chat_country_0、
+     * 消息的 tree 为国家id。两种情况照旧版，成员的私人队列都正确。
+     *
+     * @param array<string, mixed> $effect 城池（id、name）
+     * @param array{uid: int, nickname: string, country: int, rank: int}|null $sender
+     */
+    private static function sendSiegeReport(int $type, int $country, mixed $siege1, mixed $siege2, array $effect, ?array $sender): void
+    {
+        if ($country === 0) {
+            return;
+        }
+        $uids = self::memberUids($country);
+        if ($uids === []) {
+            return;
+        }
+        $message = Chat::getMessageStr($type, [
+            'siege1' => $siege1,
+            'siege2' => $siege2,
+            'siege3' => $effect['name'],
+            'id' => $effect['id'],
+        ], $sender);
+        if ($sender !== null) {
+            Chat::sendToCountry($message, $uids, Chat::TYPE_COUNTRY, 1, 0, 0, $sender);
+        } else {
+            Chat::sendToCountry($message, $uids, Chat::TYPE_COUNTRY, 1, 0, $country);
+        }
     }
 
     /**

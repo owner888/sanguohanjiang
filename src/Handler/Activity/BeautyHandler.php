@@ -5,16 +5,27 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Model\Chat;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 铜雀台绝色佳人、红颜技能与后宫互动处理器 (DDD Activity Domain)
+ *
+ * send_to_chat 按旧版移植（战报分享 49 / 50 / 51，扣 2 元宝）；其余玩法为新版自定。
+ * 依赖未移植：旧版掠夺奖励紫装以上小喇叭 chat_beauty_get_quality（add_loot_reward，随旧版 beauty 移植）。
  */
 final class BeautyHandler
 {
+    /** 战报分享到聊天室的元宝花费（旧版 send_to_chat 的 $price） */
+    private const int SHARE_PRICE = 2;
+    /** 旧版语言包 beauty_lang.php：beauty_error5、beauty_gold_error、share_info_error、beauty_deuce */
+    private const string LANG_SHARE_PARAM_ERROR = '参数错误';
+    private const string LANG_SHARE_GOLD_ERROR = '金币不足';
+    private const string LANG_SHARE_INFO_ERROR = '获取用户信息失败';
+    private const string LANG_BEAUTY_DEUCE = '打成平局';
+
     /**
      * 绝色美人图鉴配置
      *
@@ -325,14 +336,6 @@ final class BeautyHandler
         Redis::del('player:' . $uid);
 
         $beautyName = self::BEAUTIES[$bid]['name'];
-        if ($leveledUp) {
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "铜雀生辉！主公【{$pName}】与绝色佳人【{$beautyName}】情深意浓，晋阶至 {$curLvl} 重天，全军属性暴增！",
-                'type' => 'system_broadcast',
-            ]);
-        }
-
         $specialSkill = [
             'id' => 13,
             'skill_name' => '天香红颜',
@@ -402,14 +405,6 @@ final class BeautyHandler
         Redis::del('player:' . $uid);
 
         $beautyName = self::BEAUTIES[$bid]['name'];
-        if ($leveledUp) {
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "国色天香！主公【{$pName}】赏赐珠宝博得佳人【{$beautyName}】倾城一笑，等级突破至 {$curLvl} 级！",
-                'type' => 'system_broadcast',
-            ]);
-        }
-
         $specialSkill = [
             'id' => 13,
             'skill_name' => '天香红颜',
@@ -578,5 +573,55 @@ final class BeautyHandler
             'all_gold' => (int)($freshMember['gold'] ?? 0),
             'message' => '开启铜雀台免战成功！2小时内不受任何劫掠侵扰！',
         ];
+    }
+
+    /**
+     * 分享铜雀台战报: c=beauty&m=send_to_chat（touid 对方 uid，report 战报 id，win 战斗评级；移植旧版 controllers/beauty.php，扣 2 元宝）
+     *
+     * status：-1 参数错误；-2 金币不足；-3 获取用户信息失败；1 成功（all_gold）
+     */
+    public static function send_to_chat(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $touid = (int)$ctx->input('touid', 0);
+        $report = (int)$ctx->input('report', 0);
+        $win = (int)$ctx->input('win', 0);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        // 判断参数是否完整
+        if ($touid === 0 || $report === 0 || $member === null) {
+            return ['status' => -1, 'msg' => self::LANG_SHARE_PARAM_ERROR];
+        }
+        // 判断金币是否足够
+        if ((int)$member['gold'] < self::SHARE_PRICE) {
+            return ['status' => -2, 'msg' => self::LANG_SHARE_GOLD_ERROR];
+        }
+        // 取用户信息
+        $toUser = DB::table('member')->where('uid', $touid)->whereNull('deleted_at')->first();
+        if ($toUser === null) {
+            return ['status' => -3, 'msg' => self::LANG_SHARE_INFO_ERROR];
+        }
+        // 扣除金币
+        $allGold = Chat::chargeShare($uid, self::SHARE_PRICE);
+        if ($allGold === null) {
+            return ['status' => -2, 'msg' => self::LANG_SHARE_GOLD_ERROR];
+        }
+        $sender = Chat::sender($uid);
+        $info = [
+            'to' => ['uid' => $touid, 'nickname' => $toUser['nickname']],
+            'id' => $report,
+        ];
+        if ($win >= 1) {
+            $info['win'] = 1;
+            $message = Chat::getMessageStr(49, $info, $sender);
+        } elseif ($win === 0) {
+            $info['win'] = self::LANG_BEAUTY_DEUCE;
+            $message = Chat::getMessageStr(51, $info, $sender);
+        } else {
+            $info['win'] = 2;
+            $message = Chat::getMessageStr(50, $info, $sender);
+        }
+        // 发送战报
+        Chat::sendToAll($message, 49, $report, 0, $sender);
+        return ['status' => 1, 'all_gold' => $allGold];
     }
 }

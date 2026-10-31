@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class BeatengodHandler
 {
@@ -67,6 +66,7 @@ final class BeatengodHandler
      */
     public static function get_box_reward(Context $ctx): array
     {
+        // 依赖未移植：旧版宝箱紫装以上 chat_model->send_message_to_horn(chat_beatengod_get_quality) 小喇叭（随旧版 beatengod 移植）
         $uid = MemberHandler::resolveUid($ctx);
         $times = (int)(Redis::get('beatengod_times:' . $uid) ?: 0);
         $boxClaimed = (int)(Redis::get('beatengod_box:' . $uid) ?: 0);

@@ -26,6 +26,7 @@ final class FriendHandler
      */
     public static function index(Context $ctx): array
     {
+        // 依赖未移植：旧版好友在线状态取聊天室在线列表 chat_model->get_online_list（Chat::onlineList），随旧版 friend 移植
         $uid = MemberHandler::resolveUid($ctx);
         $page = (int)($ctx->input('p', 1));
         $limit = (int)($ctx->input('l', 4));

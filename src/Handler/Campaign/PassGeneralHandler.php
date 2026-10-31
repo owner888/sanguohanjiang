@@ -17,6 +17,7 @@ use Hanjiang\MasterData\Pub;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\General;
 use Hanjiang\Model\Member;
@@ -49,9 +50,10 @@ use OmniPHP\Http\Context;
  * 奖励类型 6 玉石（MemberJade）、9 宝石碎片（OwnGem::addChip）、14 ~ 16 精炼石 / 五彩石 / 上古血石（MemberStone，member 三列）、
  * 17 ~ 25 装备精华（Equipment::addTowerItem）照旧版发放并记流水。
  *
+ * 紫装以上装备发小喇叭，7 星以上武将 / 神将发小喇叭与聊天室系统消息（get_message_str 45 / 46）。
+ *
  * 依赖未移植：
- * - 聊天室 / 小喇叭广播（紫装以上装备、7 星以上武将：chat_model->send_message_to_horn / get_message_str(45 / 46) +
- *   send_message_to_all）；酒馆获得日志 tavern_model->add_pub_log(gid, 1, 11)；
+ * - 酒馆获得日志 tavern_model->add_pub_log(gid, 1, 11)；
  * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数；
  *   add_reputation / add_soul / add_act 的流水。
  */
@@ -83,6 +85,9 @@ final class PassGeneralHandler
     private const string LANG_BOX_REWARD_ERROR = '获取宝箱奖励失败';
     private const string LANG_REWARD_ERROR = '获取过人奖励失败';
     private const string LANG_GOLD_ERROR = '元宝不足';
+    /** 7 星以上武将 / 神将小喇叭（passgeneral_lang.php：pass_general_general_get / pass_general_general_pr_get） */
+    private const string LANG_GENERAL_GET = '恭喜玩家【%s】在过关斩将中获得%s星武将-%s';
+    private const string LANG_GENERAL_PR_GET = '恭喜玩家【%s】在过关斩将中获得%s星神将-%s';
     private const string LANG_FAST_ERROR = '操作太快了！';
     private const string LANG_STYPE_ERROR = '传参类型错误';
     private const string LANG_IS_PASS = '已经突破过该球员';
@@ -893,7 +898,12 @@ final class PassGeneralHandler
                 if ($item !== null) {
                     Equipment::addFromTemplate($uid, $id);
                 }
-                // 依赖未移植：紫装以上 chat_model->send_message_to_horn(chat_passgeneral_get_quality) 小喇叭广播
+                // 发送广播到小喇叭：只发紫装以上品质的装备
+                if ((int)($item['quality'] ?? 0) >= 5) {
+                    $name = Chat::quality($item['quality'], (string)$item['name']);
+                    $sender = Chat::sender($uid);
+                    Chat::sendToHorn(sprintf(Chat::LANG['chat_passgeneral_get_quality'], $member['nickname'], $name), $sender);
+                }
                 $return['info'] = [
                     'id' => $item['id'] ?? null,
                     'image' => $item['id'] ?? null,
@@ -932,8 +942,16 @@ final class PassGeneralHandler
                     $general = self::addGeneral($uid, $gid);
                     if ($general !== null) {
                         $return['info'] = $general;
-                        // 依赖未移植：7 星以上 chat_model->send_message_to_horn(pass_general_general_get / pr_get) +
-                        // get_message_str(45 / 46) + send_message_to_all(…, 7) 小喇叭与聊天室广播
+                        // 7 星以上：小喇叭 + 聊天框（武将 pass_general_general_get / 45，神将 pass_general_general_pr_get / 46）
+                        $num = Chat::starWord((int)$general['star']);
+                        if ($num !== null) {
+                            $sender = Chat::sender($uid);
+                            $horn = $type === 26 ? self::LANG_GENERAL_PR_GET : self::LANG_GENERAL_GET;
+                            Chat::sendToHorn(sprintf($horn, $member['nickname'], $num, $general['name']), $sender);
+                            // 聊天框发送消息
+                            $chat = Chat::getMessageStr($type === 26 ? 46 : 45, ['star_general' => $num, 'general' => $general['name']], $sender);
+                            Chat::sendToAll($chat, Chat::TYPE_SYSTEM, 0, 0, $sender);
+                        }
                         // 依赖未移植：tavern_model->add_pub_log(gid, 1, 11) 酒馆获得日志
                     }
                 }

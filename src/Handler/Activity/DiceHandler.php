@@ -8,7 +8,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 国家逍遥神骰行大运、掷骰积分榜与大顺子/豹子暴击处理器 (DDD Activity Domain)
@@ -145,15 +144,6 @@ final class DiceHandler
 
         // 发放奖励
         MemberHandler::addCurrency($uid, silver: $rewardSilver, gold: $rewardGold);
-
-        if ($isBaozi) {
-            $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-            $pName = $member['nickname'] ?? ('主公' . $uid);
-            Broadcaster::broadcast('marquee', [
-                'content' => "气运滔天！主公【{$pName}】逍遥掷骰掷出【{$d1}-{$d2}-{$d3}】至尊豹子，独揽 50 元宝与 5 万巨额银饷！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         $curPoints = (int)$diceData['points'];
         $rewardList = [

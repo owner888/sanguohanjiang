@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class AdvancedHandler
 {
@@ -98,17 +97,6 @@ final class AdvancedHandler
         ]);
 
         Redis::del('player:' . $uid);
-
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $pName = $member['nickname'] ?? ('主公' . $uid);
-
-        // 高阶进阶全服大喇叭
-        if ($newQuality >= 4) {
-            Broadcaster::broadcast('marquee', [
-                'content' => "天地异象！主公【{$pName}】麾下名将【{$general['name']}】参透大道，羽化飞升至【{$nextTier['name']}】！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,

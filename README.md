@@ -67,7 +67,8 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   │   ├── Router.php       # Pipeline runner & static asset server
 │   │   └── Response.php     # Protocol response helper
 │   └── WebSocket/           # WebSocket gateway (port 18101)
-│       ├── WebSocketHandler.php # Connection lifecycle, heartbeat, auth, world chat, marquee
+│       ├── WebSocketHandler.php # Connection lifecycle, heartbeat, auth
+│       ├── ChatPush.php     # Chat room real-time push (pops each player's legacy chat queue)
 │       └── EliteRoom.php    # Elite campaign real-time team rooms (legacy elitepop.js protocol)
 ├── tools/
 │   ├── gen_master_data.php  # Regenerates src/MasterData from the legacy mysqldump
@@ -162,7 +163,7 @@ The HTTP gateway seamlessly bridges original client requests mapped through `?c=
 - `c=tavern&m=index`: General recruitment tavern & guest trade
 - `c=practice&m=index|practice_start|practice_stop|go_leap|mop|get_levelup_price|levelup|get_unlock_price|unlock|turn`: Martial training grounds, rapid leaps & sweeps, 8-slot unlocks & reincarnation
 - `c=activity&m=index`: Daily special activities overview, schedule windows, and sign-in popo notifications; the world boss entry follows legacy `worldboss_init` (12:00–12:15, 20:00–20:15, popo when a reward is unclaimed)
-- `c=chat&m=read|send`: World and country real-time messaging
+- `c=chat&m=index|send|read|getuid|ban_uid`: Chat room (legacy port, `Hanjiang\Model\Chat`): world / country / private channels with the legacy Redis queues (public queue 30, country queue 10, a per-player queue for every online player), lord level 50 to speak, 200 bytes, 3-second interval, banned words and repeats visible only to the sender, mute via `member.status` / `statustime`, 24-hour per-player blocking. System messages, horns and battle-report shares (`send_to_chat`, 2 gold) use the legacy `get_message_str` templates. Once `GameWS` authenticates, the WebSocket worker pops the player's queue and pushes it as `chat_message` (same payload as `read`) instead of the client polling; HTTP workers notify it through Redis (`chat_ws_{uid}` / `chat_push_{worker}`), so any number of HTTP and WebSocket workers work together
 - `c=mainquest&m=index`: Main storyline quest milestones and rewards
 - `c=shop&m=index`: Item mall (legacy `Shop` table: army tallies, equip 7, 9–15, 53–56) & stamina purchasing
 - `c=arena&m=index|action|buy_pk_num|get_reward|get_reward_list|clear_cd|send_to_chat|shop_index|shop_exchange`: Military ranking arena (legacy port): players join at lord level 26 as last rank + 1, challenge higher-ranked players and swap ranks on victory (legacy battle report), 15 daily challenges plus gold-bought extras, daily arena points by yesterday's rank, and the points shop from `ArenaExchange`
@@ -282,7 +283,7 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] Multi-hero cooperative combat simulation with live battle report replay and positioning strategy
 - [x] Military Arena (`arena`) ported from legacy: player rank challenges and swaps, legacy battle reports, daily rank points and the points shop
 - [x] Main city infrastructure & imposition/levy system (`city`) with critical harvest multipliers and gold forced taxation
-- [x] Native WebSocket full-duplex gateway with live world chat, player authentication, and server-wide marquee broadcast
+- [x] Native WebSocket full-duplex gateway with player authentication and real-time chat room push (legacy chat queues delivered as they arrive)
 - [x] Pure RFC 6455 opcode 0x9/0xA protocol-level ping/pong heartbeat standard aligned with `smart-book` (zero application payload overhead)
 - [x] Directly consume native `OmniPHP\Http\Context` (modeled after Go Gin) across all Handlers and Middlewares without redundant subclassing
 - [x] Directly consume native `OmniPHP\WebSocket\Context` and `Broadcaster` for full-duplex events, sessions, and headless unit testing
@@ -297,7 +298,7 @@ php tests/e2e/elite_smoke_server.php stop
 - [x] Full alignment with live client daily loops: Continuous Check-in (`dailysign`), VIP tiers & gifts (`vip`), in-game mailbox (`message`), social friends (`friend`), and silver mine territory conquests (`mine`)
 - [x] Hall-of-Fame end-game systems: Bronze Sparrow beauties (`beauty`), legendary steeds (`mount`), divine gear gem socketing (`gem`), the Tower of Heaven (`heaven`), and world boss Xingtian (`worldboss`)
 - [x] Country war over capitals (`siege`, legacy port), GVG cross-server championship tournament betting (`gvg`)
-- [x] Built-in golden flowing marquee banner UI renderer in `ws_client.js` with hardware-accelerated broadcast animations
+- [x] Chat room (`chat`) ported from legacy: world / country / private channels, horns, system announcements and battle-report sharing with the legacy message templates
 - [x] Martial inheritance system (`general_inherit`), Western black market (`blackmarket`), first-recharge rebate & Fate Wheel (`first_recharge`), and maritime silk road (`overseastrade`)
 - [x] High-tier diversion mechanics: Bole stud farm (`studfarm`), rough jade gambling (`jadegamble`), tomb raiding maps (`treasuremap`), and weaponry workshop (`workshop`)
 - [x] Four Symbols Sanctum (`sanctum`), the Contest of Heroes ladder (`compete`, legacy port), national altar sacrifices (`countrysacrifice`), and imperial court expostulations (`expostulation`)

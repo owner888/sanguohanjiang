@@ -8,6 +8,7 @@ use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Island;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
 use OmniPHP\Database\DB;
@@ -26,7 +27,6 @@ use OmniPHP\Http\Context;
  * 旧版公开方法即这 6 个。
  *
  * 依赖未移植：
- * - 聊天室战报广播 chat_model->get_message_str(8, …) / send_message_to_all（send_to_chat 暂返回 0，不扣元宝）；
  * - 日常任务 task_model->task_action(9)（主公 41 级以上挑战金银洞）；
  * - member_model 的流水与附带计数：sub_act 的 act_log、翻牌活动 flopact；add_gold / add_silver 的流水。
  * 战斗 CD 照旧版读 member_field.attackstatus / attackdateline（cd_model->get_attack）；旧版 vip_model->cd_status() 恒为 1，
@@ -36,6 +36,9 @@ final class IslandHandler
 {
     /** 开放等级：主公等级不足 36 返回 -1 */
     private const int OPEN_LEVEL = 36;
+
+    /** 战报分享到聊天室的元宝花费（send_to_chat 的 $price） */
+    private const int SHARE_PRICE = 2;
 
     /** 旧版 cd_model->get_attack：状态 0（未锁）时 CD 超过 1800 秒不能战斗 */
     private const int MAX_CD = 1800;
@@ -428,18 +431,29 @@ final class IslandHandler
         // 战报id
         $reportId = (int)$ctx->input('report', 0);
         $id = (int)$ctx->input('id', 0);
-        $member = self::member(MemberHandler::resolveUid($ctx));
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = self::member($uid);
         if ($id === 0 || $reportId === 0 || $member === null) {
             return ['status' => -1];
         }
-        // 查询关卡名字
-        if (!isset(Island::ROWS[$id])) {
+        // 判断金币是否足够
+        if ((int)$member['gold'] < self::SHARE_PRICE) {
             return ['status' => -2];
         }
-        // 依赖未移植：chat_model->get_message_str(8, general / id) + send_message_to_all(…, 8, report) 聊天室战报广播。
-        // 旧版在这里先校验元宝(-2)、扣 2 元宝再广播；聊天室未移植前广播发不出去，
-        // 开发者要求暂不扣元宝，返回 0（失败），客户端提示「暂时无法分享战报」。聊天室移植后恢复旧版流程。
-        return ['status' => 0];
+        // 查询关卡名字
+        $info = Island::ROWS[$id] ?? null;
+        if ($info === null) {
+            return ['status' => -2];
+        }
+        // 扣除金币
+        $allGold = Chat::chargeShare($uid, self::SHARE_PRICE);
+        if ($allGold === null) {
+            return ['status' => -3];
+        }
+        $sender = Chat::sender($uid);
+        $message = Chat::getMessageStr(8, ['general' => $info['name'], 'id' => $reportId], $sender);
+        Chat::sendToAll($message, 8, $reportId, 0, $sender);
+        return ['status' => 1, 'all_gold' => $allGold];
     }
 
     /**

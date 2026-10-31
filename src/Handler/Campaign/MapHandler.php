@@ -11,6 +11,7 @@ use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\Map as MapTemplate;
 use Hanjiang\MasterData\Mission as MissionTemplate;
 use Hanjiang\MasterData\TalentScroll;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\OwnMount;
@@ -26,6 +27,9 @@ use Hanjiang\Enum\FactionStatus;
 
 final class MapHandler
 {
+    /** 战报分享到聊天室的元宝花费（send_to_chat 的 $price） */
+    private const int SHARE_PRICE = 2;
+
     /** 旧版语言包 base_chip */
     private const string LANG_BASE_CHIP = '碎片';
 
@@ -574,6 +578,8 @@ final class MapHandler
                 }
 
                 $drop = self::missionDrop($uid, $curLevel, $level, $stage, $missionId);
+                // 依赖未移植：旧版关卡招募武将（Mission.generalid / recruitrate：7 星以上小喇叭 general_get、势力 2 以上
+                // get_message_str(10) 系统消息）与本服首杀最终守将小喇叭 general_pass（map_model->get_mission_report）
             } else {
                 DB::table('member')->where('uid', $uid)->update([
                     'act' => max(0, (int)$member['act'] - 1),
@@ -928,6 +934,8 @@ final class MapHandler
         }
 
         // 发放奖励
+        // 依赖未移植：旧版 get_add_reward 的装备 / 武将 / 坐骑奖励及其小喇叭（chat_map_get_quality、map_general_get +
+        // get_message_str(43)、chat_map_mount_get）
         $reType = (int)$reward['re_type'];
         $reNum = (int)$reward['re_num'];
         $newGold = (int)$member['gold'];
@@ -1073,5 +1081,42 @@ final class MapHandler
 
         $result['message'] = '通关大礼领取成功';
         return $result;
+    }
+
+    /**
+     * 发送战报到聊天室: c=map&m=send_to_chat（l 势力，s 场景，id 关卡，report 战报id；旧版扣 2 元宝）
+     *
+     * status：-1 参数不完整；-2 元宝不足 / 关卡不存在；1 成功（all_gold）
+     */
+    public static function send_to_chat(Context $ctx): array
+    {
+        // 战报id
+        $reportId = (int)$ctx->input('report', 0);
+        $level = (int)$ctx->input('l', 0);
+        $stage = (int)$ctx->input('s', 0);
+        $id = (int)$ctx->input('id', 0);
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        if (!$level || !$stage || !$id || !$reportId || $member === null) {
+            return ['status' => -1];
+        }
+        // 判断金币是否足够
+        if ((int)$member['gold'] < self::SHARE_PRICE) {
+            return ['status' => -2];
+        }
+        // 查询关卡名字（依赖未移植：get_mission_by_id 的地图记录 / 场景开启 / 关卡开启校验，同 action）
+        $info = self::missionRow($level, $stage, $id);
+        if ($info === null) {
+            return ['status' => -2];
+        }
+        // 扣除金币
+        $allGold = Chat::chargeShare($uid, self::SHARE_PRICE);
+        if ($allGold === null) {
+            return ['status' => -2];
+        }
+        $sender = Chat::sender($uid);
+        $message = Chat::getMessageStr(4, ['general' => $info['name'], 'id' => $reportId], $sender);
+        Chat::sendToAll($message, 4, $reportId, 0, $sender);
+        return ['status' => 1, 'all_gold' => $allGold];
     }
 }

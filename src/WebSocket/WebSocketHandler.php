@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 namespace Hanjiang\WebSocket;
 
-use OmniPHP\Database\DB;
 use OmniPHP\Cache\Redis;
+use OmniPHP\Database\DB;
 use OmniPHP\WebSocket\Broadcaster;
 use OmniPHP\WebSocket\Context;
 use Workerman\Connection\TcpConnection;
@@ -75,6 +75,7 @@ final class WebSocketHandler
     {
         Broadcaster::unregister($connection);
         EliteRoom::onClose($connection);
+        ChatPush::onClose($connection);
     }
 
     public static function onMessage(TcpConnection $connection, string $data): void
@@ -113,8 +114,6 @@ final class WebSocketHandler
         match ($action) {
             'ping' => self::handlePing($ctx),
             'auth' => self::handleAuth($ctx),
-            'chat' => self::handleChat($ctx),
-            'marquee' => self::handleMarquee($ctx),
             default => $ctx->error("未知的事件类型: {$action}", 404),
         };
     }
@@ -149,59 +148,8 @@ final class WebSocketHandler
             'nickname' => $nickname,
             'message' => "欢迎上线，{$nickname}！",
         ]);
-    }
 
-    public static function handleChat(Context $ctx): void
-    {
-        $uid = (int)$ctx->uid();
-        $name = (string)$ctx->input('name', '');
-        if ($name === '' && $uid > 0) {
-            $member = DB::table('member')->where('uid', $uid)->first();
-            $name = (string)($member['nickname'] ?? ('主公' . $uid));
-        }
-        if ($name === '') {
-            $name = '无名主公';
-        }
-
-        $msg = trim((string)$ctx->input('message', ''));
-        if ($msg === '') {
-            $ctx->error('聊天内容不能为空');
-            return;
-        }
-
-        $chatMsg = [
-            'uid' => $uid,
-            'nickname' => $name,
-            'name' => $name,
-            'type' => 0,
-            'system' => 0,
-            'message' => htmlspecialchars($msg),
-            'time' => time(),
-        ];
-
-        $ctx->broadcast('chat_message', $chatMsg);
-    }
-
-    public static function handleMarquee(Context $ctx): void
-    {
-        $content = trim((string)$ctx->input('content', $ctx->input('message', '')));
-        if ($content !== '') {
-            Broadcaster::broadcast('marquee', [
-                'content' => $content,
-                'type' => 'system_broadcast',
-            ]);
-
-            // 存储历史
-            $history = Redis::getJson('broadcast_history') ?: [];
-            $history[] = [
-                'type' => 'marquee',
-                'data' => ['content' => $content],
-                'time' => time(),
-            ];
-            if (count($history) > 50) {
-                $history = array_slice($history, -50);
-            }
-            Redis::setJson('broadcast_history', $history, 86400);
-        }
+        // 聊天室：鉴权后由本进程推送该玩家的消息（客户端不再轮询 c=chat&m=read）
+        ChatPush::bind($ctx, $uid, (string)$nickname);
     }
 }

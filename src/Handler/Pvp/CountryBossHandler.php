@@ -8,6 +8,7 @@ use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\CountryBoss;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
@@ -97,15 +98,15 @@ final class CountryBossHandler
             $return['status'] = 3;
             $return['starttime'] = self::LANG_FRIDAY . ' ' . substr(CountryBoss::START_TIME, 0, 2) . ':' . substr(CountryBoss::START_TIME, 2, 2);
         } elseif ($countdown === 0) {
-            // 最后一击公告只发一次（final_horn）；依赖未移植：发送公告 chat_model->get_message_str(17, from 最后一击玩家) + send_message_to_country(…, 国家成员, 6, 1)
-            CountryBoss::finalUid($country);
+            // 最后一击公告只发一次（final_horn）
+            self::sendFinalNotice(CountryBoss::finalUid($country), $country, $uid);
             self::rewardStatus($return, $country, $uid, $played, $now);
         } else {
             // boss信息
             $bossInfo = CountryBoss::bossInfo($country, $now);
             if ((int)$bossInfo['blood'] <= 0) {
-                // 依赖未移植：最后一击聊天公告（同上，只发一次）
-                CountryBoss::finalUid($country);
+                // 最后一击聊天公告（同上，只发一次）
+                self::sendFinalNotice(CountryBoss::finalUid($country), $country, $uid);
                 // 活动未结束 boss已经死了
                 self::rewardStatus($return, $country, $uid, $played, $now);
             } else {
@@ -447,6 +448,27 @@ final class CountryBossHandler
     private static function powerUpPay(array $member): int
     {
         return (int)$member['level'] * 500 * 2;
+    }
+
+    /**
+     * 最后一击国家聊天公告（get_message_str(17, from 最后一击玩家) + send_message_to_country(…, 国家成员, 6, 1)）
+     */
+    private static function sendFinalNotice(int $finalUid, int $country, int $uid): void
+    {
+        if (!$finalUid) {
+            return;
+        }
+        // 获取国家成员
+        $uidarr = array_map(static fn(array $v): int => (int)$v['uid'], CountryHandler::memberList($country, 1, 0));
+        if ($uidarr === []) {
+            return;
+        }
+        $sender = Chat::sender($uid);
+        $final = self::member($finalUid);
+        $message = Chat::getMessageStr(17, [
+            'from' => ['uid' => $finalUid, 'nickname' => $final['nickname'] ?? null],
+        ], $sender);
+        Chat::sendToCountry($message, $uidarr, Chat::TYPE_COUNTRY, 1, 0, 0, $sender);
     }
 
     /**

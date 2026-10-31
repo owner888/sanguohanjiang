@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class BanquetHandler
 {
@@ -66,16 +65,9 @@ final class BanquetHandler
             ];
         }
 
-        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $pName = $member['nickname'] ?? ('主公' . $uid);
-
         // 发放军令与声望
         MemberHandler::addCurrency($uid, act: (int)$cfg['act'], reputation: (int)$cfg['rep']);
 
-        Broadcaster::broadcast('marquee', [
-            'content' => "琼浆玉液！主公【{$pName}】大摆【{$cfg['name']}】，广宴天下豪杰，全军将士豪饮获赠 {$cfg['act']} 点军令体力！",
-            'type' => 'system_broadcast',
-        ]);
 
         return [
             'status' => 1,

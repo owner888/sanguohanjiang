@@ -64,6 +64,8 @@ CREATE TABLE `zc_sanguo_member` (
     `missionlevel` INT NOT NULL DEFAULT 1,
     `missionstage` INT NOT NULL DEFAULT 1,
     `missionid` INT NOT NULL DEFAULT 1,
+    `status` TINYINT UNSIGNED NOT NULL DEFAULT 0 COMMENT '1、禁言 2、永久禁言 3、封号 4、永久封号（聊天室发言只认 1 / 2）',
+    `statustime` INT UNSIGNED NOT NULL DEFAULT 0 COMMENT '禁言或封号截止时间（到期后清除 status）',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     `deleted_at` DATETIME DEFAULT NULL

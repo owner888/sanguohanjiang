@@ -9,7 +9,6 @@ use Hanjiang\Handler\City\MemberHandler;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 final class BusinessHandler
 {
@@ -61,6 +60,7 @@ final class BusinessHandler
      */
     public static function go_business(Context $ctx): array
     {
+        // 依赖未移植：旧版通商达成幸运通商时 chat_model->send_message_to_horn(business_accomplish) 小喇叭（本玩法为新版自定，随旧版 business 移植）
         return self::buy($ctx);
     }
 

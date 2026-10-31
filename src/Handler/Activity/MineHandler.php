@@ -5,16 +5,21 @@ declare(strict_types=1);
 namespace Hanjiang\Handler\Activity;
 
 use Hanjiang\Handler\City\MemberHandler;
+use Hanjiang\Model\Chat;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
-use OmniPHP\WebSocket\Broadcaster;
 
 /**
  * 银矿争夺、矿区采矿与掠夺产出处理器 (DDD Activity Domain)
+ *
+ * send_to_chat 按旧版移植（矿区战报分享 27，扣 2 元宝）；其余玩法为新版自定。
  */
 final class MineHandler
 {
+    /** 战报分享到聊天室的元宝花费（旧版 send_to_chat 的 $price） */
+    private const int SHARE_PRICE = 2;
+
     /**
      * 矿山品质配置
      *
@@ -139,14 +144,6 @@ final class MineHandler
         ], 86400 * 7);
 
         $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
-        $name = (string)($member['nickname'] ?? ('主公' . $uid));
-
-        if ($mineId >= 3) {
-            Broadcaster::broadcast('marquee', [
-                'content' => "勘探奇迹！主公【{$name}】挥师入驻【{$mineConfig['name']}】，大举开采银两！",
-                'type' => 'system_broadcast',
-            ]);
-        }
 
         return [
             'status' => 1,
@@ -233,5 +230,45 @@ final class MineHandler
             'all_silver' => (int)($member['silver'] ?? 0),
             'message' => "成功收取开采银两 {$earnedSilver}！银两已全部充入国库！",
         ];
+    }
+
+    /**
+     * 分享矿区战报: c=mine&m=send_to_chat（touid 对方 uid，report 信件 id，win 战斗评级；移植旧版 controllers/mine.php，扣 2 元宝）
+     *
+     * status：-1 参数不完整；-2 元宝不足；-3 对方不存在；1 成功（all_gold）
+     */
+    public static function send_to_chat(Context $ctx): array
+    {
+        $uid = MemberHandler::resolveUid($ctx);
+        $touid = (int)$ctx->input('touid', 0);
+        $report = (int)$ctx->input('report', 0);
+        $win = (int)$ctx->input('win', 0);
+        $member = DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->first();
+        // 判断参数是否完整
+        if ($touid === 0 || $report === 0 || $member === null) {
+            return ['status' => -1];
+        }
+        // 判断金币是否足够
+        if ((int)$member['gold'] < self::SHARE_PRICE) {
+            return ['status' => -2];
+        }
+        // 取用户信息
+        $toUser = DB::table('member')->where('uid', $touid)->whereNull('deleted_at')->first();
+        if ($toUser === null) {
+            return ['status' => -3];
+        }
+        // 扣除金币
+        $allGold = Chat::chargeShare($uid, self::SHARE_PRICE);
+        if ($allGold === null) {
+            return ['status' => -2];
+        }
+        $sender = Chat::sender($uid);
+        $message = Chat::getMessageStr(27, [
+            'to' => ['uid' => $touid, 'nickname' => $toUser['nickname']],
+            'id' => $report,
+            'win' => Chat::winWord($win),
+        ], $sender);
+        Chat::sendToAll($message, Chat::TYPE_REPORT, $report, 0, $sender);
+        return ['status' => 1, 'all_gold' => $allGold];
     }
 }

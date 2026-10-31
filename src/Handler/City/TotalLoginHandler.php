@@ -51,6 +51,7 @@ final class TotalLoginHandler
      */
     public static function action(Context $ctx): array
     {
+        // 依赖未移植：旧版累计登录 7 星以上武将 chat_model->send_message_to_horn(general_get) 小喇叭（随旧版 totallogin 移植）
         $uid = MemberHandler::resolveUid($ctx);
         $day = (int)($ctx->input('day', $ctx->input('id', 1)));
 

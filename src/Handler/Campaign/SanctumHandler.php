@@ -12,6 +12,7 @@ use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\Gem;
 use Hanjiang\MasterData\SanctumMission;
 use Hanjiang\MasterData\SanctumReward;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
 use Hanjiang\Model\OwnGem;
@@ -35,7 +36,6 @@ use OmniPHP\Http\Context;
  * （OwnGem::addGem / addGemuse）；gem / all_chip / all_gem 为当前碎片数。
  *
  * 依赖未移植：
- * - 聊天室战报广播 chat_model->get_message_str(25, …) / send_message_to_all（send_to_chat 暂返回 0，不扣元宝）；
  * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数。
  */
 final class SanctumHandler
@@ -48,6 +48,9 @@ final class SanctumHandler
 
     /** 开启等级（旧版 $_level：等级小于 140 不开放） */
     private const int OPEN_LEVEL = 140;
+
+    /** 战报分享到聊天室的元宝花费（send_to_chat 的 $price） */
+    private const int SHARE_PRICE = 2;
 
     /** 最高关卡ID（旧版 $_max_id） */
     private const int MAX_ID = 250;
@@ -728,18 +731,29 @@ final class SanctumHandler
         // 战报id
         $reportId = (int)$ctx->input('report', 0);
         $id = (int)$ctx->input('id', 0);
-        $member = self::member(MemberHandler::resolveUid($ctx));
+        $uid = MemberHandler::resolveUid($ctx);
+        $member = self::member($uid);
         if ($id === 0 || $reportId === 0 || $member === null) {
             return ['status' => -1];
         }
-        // 查询关卡名字
-        if (self::getMissionInfo($id) === null) {
+        // 判断金币是否足够
+        if ((int)$member['gold'] < self::SHARE_PRICE) {
             return ['status' => -2];
         }
-        // 依赖未移植：chat_model->get_message_str(25, general / id「战报id|圣域id」) + send_message_to_all(…, 11, report)
-        // 聊天室战报广播。旧版在这里先校验元宝(-2)、扣 2 元宝再广播；聊天室未移植前广播发不出去，
-        // 开发者要求暂不扣元宝，返回 0（失败），客户端提示「暂时无法分享战报」。聊天室移植后恢复旧版流程。
-        return ['status' => 0];
+        // 查询关卡名字
+        $info = self::getMissionInfo($id);
+        if ($info === null) {
+            return ['status' => -2];
+        }
+        // 扣除金币
+        $allGold = Chat::chargeShare($uid, self::SHARE_PRICE);
+        if ($allGold === null) {
+            return ['status' => -2];
+        }
+        $sender = Chat::sender($uid);
+        $message = Chat::getMessageStr(25, ['general' => $info['name'], 'id' => $reportId . '|' . $info['city']], $sender);
+        Chat::sendToAll($message, 11, $reportId, 0, $sender);
+        return ['status' => 1, 'all_gold' => $allGold];
     }
 
     /**

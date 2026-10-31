@@ -625,6 +625,11 @@
             initRender, true);
             initRender = null;
 
+            // 聊天室实时推送：用当前登录 token 连接 / 鉴权 GameWS
+            if (window.GameWS && xGame.token) {
+                window.GameWS.connect(xGame.token);
+            }
+
         },
 
         /* 更新时调用 */
@@ -648,8 +653,8 @@
         },
 
         read: function() {
-            // 现代全双工架构 (对齐 smart-book): 当 WebSocket 长连接在线时，消息走 WebSocket 毫秒级下推，静默跳过无谓的 HTTP 短轮询
-            if (window.GameWS && window.GameWS.isConnected) {
+            // GameWS 鉴权成功后，服务端把 read 的结果实时推送过来（receive），不再轮询；断线后恢复轮询
+            if (window.GameWS && window.GameWS.isAuthed) {
                 return;
             }
 
@@ -675,63 +680,8 @@
                         }
                     } else if (res.list.length != 0) {
                         that.needS = 5;
-                        that.newData = [];
-                        that.hornList = [];
-                        for (var i = res.list.length - 1; i >= 0; i--) {
-                            if (res.list[i] != undefined && res.list[i].message != undefined && res.list[i].type > 2) {
-                                res.list[i].message = that.transferMsgFunc(res.list[i].message);
-                            }
-                            if (res.list[i] != undefined) {
-                                that.allChatData.unshift(res.list[i]);
-                            }
-                            if (res.list[i]['type'] == 2) {
-                                that.hornList.push(res.list[i])
-                            } else {
-                                that.newData.unshift(res.list[i]);
-                            }
-                            /*如果有私聊信息并且原来没有数据和class时,并且窗口没有打开时*/
-                            if (res.list[i]['type'] == 1 && !that.hasPrivate && !that.chatBtn.hasClass('tada') && (chatpop != undefined && !chatpop.isshow || chatpop == undefined)) {
-                                that.hasPrivate = true;
-                                that.chatBtn.addClass('tada').unbind('touchend').one('touchend',
-                                function() {
-                                    that.chatBtn.removeClass('tada');
-                                    that.hasPrivate = false;
-                                    /*直接切换到私聊,需要延时才行*/
-                                    setTimeout(function() {
-                                        chatpop.topDom.find('#public').removeClass('selected');
-                                        chatpop.topDom.find('#private').addClass('selected');
-                                        chatpop.tabType = 3;
-                                        chatpop.startNum = 0;
-                                        chatpop.endNum = 0;
-                                        chatpop.centerDom.html(chatpop.buildLi(CD['chat'].allChatData));
-                                        chatpop.setWidth();
-                                        chatpop.chatRefresh();
-                                    },
-                                    100);
-                                });
-                            }
-                        }
-                        /*这里只插入返回的文字，自己发的文字在chatpop插入*/
-                        if (chatpop != undefined && chatpop.isshow) {
-                            chatpop.centerDom.append(chatpop.buildLi(that.newData));
-                            //新加的，超过限制时删除10条数据
-                            chatpop.deleteTenLine();
-                            chatpop.setWidth();
-                            chatpop.chatRefresh();
-                        }
-                        that.createMain(that.newData);
-                        /*战斗中小窗口*/
-                        that.createCountryMain(that.newData);
-                        if (that.hornList.length != 0) {
-                            var msg = '';
-                            for (var i = 0; i < that.hornList.length; i++) {
-                                msg += '<li>' + that.hornList[i].message + '</li>';
-                            }
-                            /*这种情况下不发喇叭*/
-                            if (xGame.guide == true && player.info.level <= 26 && typeof teampop != 'undefined' && teampop.e != null) {
-                                return false;
-                            }
-                            xGame.horn(msg);
+                        if (that.receive(res.list) === false) {
+                            return false;
                         }
                     }
 
@@ -798,6 +748,69 @@
             },
             4500);
 
+        },
+
+        /* 渲染 read 取到的新消息（HTTP 轮询与 GameWS 推送共用） */
+        receive: function(list) {
+            var that = this;
+            that.newData = [];
+            that.hornList = [];
+            for (var i = list.length - 1; i >= 0; i--) {
+                if (list[i] != undefined && list[i].message != undefined && list[i].type > 2) {
+                    list[i].message = that.transferMsgFunc(list[i].message);
+                }
+                if (list[i] != undefined) {
+                    that.allChatData.unshift(list[i]);
+                }
+                if (list[i]['type'] == 2) {
+                    that.hornList.push(list[i])
+                } else {
+                    that.newData.unshift(list[i]);
+                }
+                /*如果有私聊信息并且原来没有数据和class时,并且窗口没有打开时*/
+                if (list[i]['type'] == 1 && !that.hasPrivate && !that.chatBtn.hasClass('tada') && (chatpop != undefined && !chatpop.isshow || chatpop == undefined)) {
+                    that.hasPrivate = true;
+                    that.chatBtn.addClass('tada').unbind('touchend').one('touchend',
+                    function() {
+                        that.chatBtn.removeClass('tada');
+                        that.hasPrivate = false;
+                        /*直接切换到私聊,需要延时才行*/
+                        setTimeout(function() {
+                            chatpop.topDom.find('#public').removeClass('selected');
+                            chatpop.topDom.find('#private').addClass('selected');
+                            chatpop.tabType = 3;
+                            chatpop.startNum = 0;
+                            chatpop.endNum = 0;
+                            chatpop.centerDom.html(chatpop.buildLi(CD['chat'].allChatData));
+                            chatpop.setWidth();
+                            chatpop.chatRefresh();
+                        },
+                        100);
+                    });
+                }
+            }
+            /*这里只插入返回的文字，自己发的文字在chatpop插入*/
+            if (chatpop != undefined && chatpop.isshow) {
+                chatpop.centerDom.append(chatpop.buildLi(that.newData));
+                //新加的，超过限制时删除10条数据
+                chatpop.deleteTenLine();
+                chatpop.setWidth();
+                chatpop.chatRefresh();
+            }
+            that.createMain(that.newData);
+            /*战斗中小窗口*/
+            that.createCountryMain(that.newData);
+            if (that.hornList.length != 0) {
+                var msg = '';
+                for (var i = 0; i < that.hornList.length; i++) {
+                    msg += '<li>' + that.hornList[i].message + '</li>';
+                }
+                /*这种情况下不发喇叭*/
+                if (xGame.guide == true && player.info.level <= 26 && typeof teampop != 'undefined' && teampop.e != null) {
+                    return false;
+                }
+                xGame.horn(msg);
+            }
         },
 
         createMain: function(list) {

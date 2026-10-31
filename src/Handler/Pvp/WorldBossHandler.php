@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\Pvp;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Model\BossClock;
+use Hanjiang\Model\Chat;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\WorldBoss;
 use OmniPHP\Database\DB;
@@ -86,8 +87,12 @@ final class WorldBossHandler
                 $return['status'] = 1;
                 [$return['top'], $return['reward']] = self::rewardView($phase, $uid);
             }
-            // 最后一击公告只发一次（final_horn）；依赖未移植：发送公告 chat_model->get_message_str(12, from 最后一击玩家) + send_message_to_all(…, 7)
-            WorldBoss::finalUid($phase);
+            // 最后一击公告只发一次（final_horn）
+            $finalUid = WorldBoss::finalUid($phase);
+            if ($finalUid) {
+                // 发送最后一击聊天公告
+                self::sendFinalNotice($finalUid, $uid);
+            }
         } else {
             // boss信息
             $bossInfo = WorldBoss::bossInfo();
@@ -392,6 +397,19 @@ final class WorldBossHandler
     private static function powerUpPay(array $member): int
     {
         return (int)$member['level'] * 500;
+    }
+
+    /**
+     * 最后一击聊天公告（get_message_str(12, from 最后一击玩家) + send_message_to_all(…, 7)）
+     */
+    private static function sendFinalNotice(int $finalUid, int $uid): void
+    {
+        $sender = Chat::sender($uid);
+        $final = self::member($finalUid);
+        $message = Chat::getMessageStr(12, [
+            'from' => ['uid' => $finalUid, 'nickname' => $final['nickname'] ?? null],
+        ], $sender);
+        Chat::sendToAll($message, Chat::TYPE_SYSTEM, 0, 0, $sender);
     }
 
     /**
