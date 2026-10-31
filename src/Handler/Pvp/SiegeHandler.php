@@ -12,6 +12,7 @@ use Hanjiang\MasterData\CountryMission;
 use Hanjiang\MasterData\Mission;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberJade;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -38,7 +39,7 @@ use OmniPHP\Http\Context;
  * 依赖未移植：
  * - 聊天室：至尊攻城小喇叭（chat_model->send_message_to_horn）、国战胜负全服公告（send_message_to_all 7）、
  *   国家聊天室战报（send_message_to_country 18 ~ 21 / 6）；
- * - 玉石 member.jade（get_reward 的 jade 只回报不发放）；通商免费次数 member_activity.freebusiness（都城效果 type 2）；
+ * - 通商免费次数 member_activity.freebusiness（都城效果 type 2）；
  * - 元宝流水。
  */
 final class SiegeHandler
@@ -641,7 +642,9 @@ final class SiegeHandler
                 return $return;
             }
             Member::addCurrency($uid, silver: max(0, $rule['silver']), act: max(0, $rule['act']), soul: max(0, $rule['soul']));
-            // 依赖未移植：member_model->add_jade 玉石（新服 member 表无 jade 字段）
+            if ($rule['jade'] > 0) {
+                MemberJade::add($uid, $rule['jade'], 'siege', 'get_reward');
+            }
             $after = self::member($uid) ?? $member;
             $return['all_silver'] = (int)$after['silver'];
             $return['all_act'] = (int)$after['act'];

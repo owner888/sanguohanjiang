@@ -33,8 +33,10 @@ use Random\Randomizer;
  *
  * 依赖未移植（旧版对应数组在新版恒为空，相关分支不移植）：
  * 将魂 _general_soul、名将成就 _addition_arr、美人 _beauty_arr、星魄 _star_arr、国家学院 _warcollege_arr、
- * 锻造套装 _suit_arr 与单位上的 suitbuff（吸血 / 回气 / 偷气 / 清气 / 反伤 / 最终增减伤 / 暴击伤害 / 血量伤害倍增）、
- * 名将进阶 _advanced_arr（天赋攻防系数加成）、神树 _tree_info、坐骑 _mount_info（buff 里的 tree / mount）。
+ * 锻造套装 _suit_arr 与单位上的 suitbuff（回气 / 偷气 / 清气 / 反伤 / 最终增伤 / 暴击伤害 / 血量伤害倍增）、
+ * 名将进阶 _advanced_arr（天赋攻防系数加成）、神树 _tree_info（buff 里的 tree）。
+ * 坐骑的特殊属性（血量% / 抗晕 / 最终免伤 / 吸血，旧版也记在 _suit_arr 与 suitbuff）与 buff 里的 mount 由 TeamBuilder 记在单位的
+ * suit / suitbuff / mountinfo 上，这里照旧版计算。
  *
  * 旧版没有分支的技能按旧版照搬：effect 30 / 31（技能 655、656、668、669）只按 ratio 计伤害，攻击类型 16（655）没有受击位。
  */
@@ -156,7 +158,7 @@ final class BattleEngine
     }
 
     /**
-     * battle() 开头的单位初始化（左右两侧同一套；旧版右侧的星魄 / 套装 / 将魂抗晕只对玩家生效，均依赖未移植）
+     * battle() 开头的单位初始化（左右两侧同一套；旧版右侧的星魄 / 套装 / 将魂抗晕只对玩家将领（有 tili）生效，星魄 / 将魂依赖未移植）
      *
      * @param array<int, array<string, mixed>> $team
      * @return array<int, array<string, mixed>>
@@ -182,10 +184,14 @@ final class BattleEngine
             if ((int)$value['type'] === 2 && $buff['jingzhun'] < $mingzhong) {
                 $buff['jingzhun'] = $mingzhong;
             }
-            // 依赖未移植：神树 buff tree、坐骑 buff mount
-            // 抗晕：单位附加值 + 天赋抗晕
-            // 依赖未移植：星魄 / 套装 / 将魂(12) 抗晕
-            $kangyun = ($value['kangyun'] ?? 0) + self::talent($value['talentid'], 'kangyun');
+            // 依赖未移植：神树 buff tree
+            // 坐骑（旧版 _mount_info[uuid]：玩家本队品级最高的坐骑，TeamBuilder 记在各单位的 mountinfo）
+            if (isset($value['mountinfo'])) {
+                $buff['mount'] = ['id' => $value['mountinfo']['mid'], 'name' => $value['mountinfo']['name'], 'quality' => $value['mountinfo']['quality']];
+            }
+            // 抗晕：单位附加值 + 天赋抗晕 + 套装 / 坐骑抗晕（旧版 _suit_arr[ugid]['kangyun']，记在单位的 suit 上）
+            // 依赖未移植：星魄 / 将魂(12) 抗晕
+            $kangyun = ($value['kangyun'] ?? 0) + self::talent($value['talentid'], 'kangyun') + ($value['suit']['kangyun'] ?? 0);
             if ($buff['kangyun'] < $kangyun) {
                 $buff['kangyun'] = $kangyun;
             }
@@ -206,6 +212,20 @@ final class BattleEngine
     }
 
     /**
+     * 套装 / 坐骑最终免伤：玩家将领（有 tili）带 suit.lastjianhurt 时伤害 × (100 - lastjianhurt) / 100 后取整
+     * （旧版 _suit_arr[ugid]['lastjianhurt']）
+     *
+     * @param array<string, mixed> $defender
+     */
+    private static function lastJianHurt(array $defender, int|float $hit): int|float
+    {
+        if (isset($defender['tili'], $defender['suit']['lastjianhurt'])) {
+            return (int)($hit * (100 - $defender['suit']['lastjianhurt']) / 100);
+        }
+        return $hit;
+    }
+
+    /**
      * 战斗总血量（移植 _get_general_all_blood）
      *
      * @param array<string, mixed> $general
@@ -214,8 +234,9 @@ final class BattleEngine
     {
         // 依赖未移植：名将进阶血量加成 skill4_value（主公 100 级）
         $advancedBlood = 0.0;
-        // 依赖未移植：ptblood = 将魂生命(4) + 神树 buff + 套装 / 坐骑血量%
-        $ptblood = 0.0;
+        // ptblood = 套装 / 坐骑血量%（旧版 _suit_arr[ugid]['ptblood']，记在单位的 suit 上）
+        // 依赖未移植：将魂生命(4)、神树 buff
+        $ptblood = (float)($general['suit']['ptblood'] ?? 0);
         return LegacyStats::battleAllBlood(
             (float)($general['all_blood'] ?? 0),
             (int)($general['tili'] ?? 0),
@@ -600,6 +621,9 @@ final class BattleEngine
         $secondHit = 0;
         $defensePower = 0;
         $defenseBefore = [];
+        // 套装 / 坐骑吸血：旧版 $defense_before = $this->_defense（本次攻击前的防御方），$xhit 累计吸血
+        $suitDefenseBefore = $this->team[$T];
+        $xhit = 0;
         if ($skillType !== 0 && (int)$skill['effect'] === 24) {
             $defenseBefore = $this->team[$T];
         }
@@ -680,7 +704,9 @@ final class BattleEngine
                         $hurtPosArr[] = $pos;
 
                         $hit = $this->processHurt($attack, $this->team[$T][$pos], $this->attackLog['hit']);
-                        // 依赖未移植：防御方套装反伤（suitbuff.fanshang）、套装最终免伤（lastjianhurt）
+                        // 依赖未移植：防御方套装反伤（suitbuff.fanshang）
+                        // 套装 / 坐骑最终免伤（lastjianhurt）
+                        $hit = self::lastJianHurt($this->team[$T][$pos], $hit);
 
                         $newBlood = $this->team[$T][$pos]['blood'] - $hit;
 
@@ -827,7 +853,32 @@ final class BattleEngine
                             }
                         }
 
-                        // 依赖未移植：套装吸血（suitbuff.xixue）、回气（retpower）、偷气（thipower）
+                        // 套装 / 坐骑吸血（suitbuff.xixue）：群攻各目标的吸血累加，打到最后一个目标时一次加给攻击方
+                        if (($this->team[$L][$attackPos]['suitbuff']['xixue'] ?? 0) > 0) {
+                            $xhit += $hit * $this->team[$L][$attackPos]['suitbuff']['xixue'] / 100;
+                            $defenseLastSite = 0;
+                            foreach ($suitDefenseBefore as $key => $val) {
+                                if ($key > $defenseLastSite && in_array($key, $defensePosArr)) {
+                                    $defenseLastSite = $key;
+                                }
+                            }
+                            if ($pos === $defenseLastSite) {
+                                if ($xhit + $this->team[$L][$attackPos]['blood'] >= $this->team[$L][$attackPos]['allblood']) {
+                                    // 加血不溢出处理
+                                    $xhit = $this->team[$L][$attackPos]['allblood'] - $this->team[$L][$attackPos]['blood'];
+                                }
+                                $this->team[$L][$attackPos]['blood'] += (int)$xhit;
+                                $this->attackLog['hurt'][] = [
+                                    'xixue' => 1,
+                                    'pos' => $attackPos,
+                                    'blood' => (int)$xhit,
+                                    'power' => 0,
+                                    'self' => 1,
+                                    'faint' => $faint,
+                                ];
+                            }
+                        }
+                        // 依赖未移植：套装回气（retpower）、偷气（thipower）
 
                         if ($skillType !== 0) {
                             $effect = (int)$skill['effect'];
@@ -1063,7 +1114,8 @@ final class BattleEngine
                     if ($hit) {
                         $hit = $hit * 0.25;
                     }
-                    // 依赖未移植：套装最终免伤（lastjianhurt）
+                    // 套装 / 坐骑最终免伤（lastjianhurt）
+                    $hit = self::lastJianHurt($this->team[$L][$pos], $hit);
                     $hit = (int)$hit;
 
                     $newBlood = $this->team[$L][$pos]['blood'] - $hit;

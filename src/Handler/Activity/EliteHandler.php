@@ -39,8 +39,6 @@ use Workerman\Protocols\Http\Response as WorkermanResponse;
  * 依赖未移植：
  * - 春节送福活动 actnewyear_model（_init 读活动状态；action 里 add_task_num(…, 24, uid) 计数）；
  * - 主线任务 mainquest_model->task_action(10, 1, uid)（参加一次多人副本）；
- * - 装备碎片 equipment_model->add_item($info, 1, 1, uid)（奖励类型 2；Equipment 尚无碎片分支）；
- * - 天赋卷轴及碎片 equipment_model->add_talent_scroll（奖励类型 3 / 4）；
  * - 聊天室邀请广播 chat_model->get_message_str(11, …) / send_message_to_all(…, 7)（sendinvite 返回 0）；
  * - 消费统计 stat_model->elite_times；member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、
  *   四方来朝元宝计数；
@@ -51,6 +49,10 @@ final class EliteHandler
     /** 旧版语言包 language/chinese_s/base_lang.php */
     private const string LANG_BASE_CHIP = '碎片';
     private const string LANG_BASE_SCROLL = '天赋卷轴';
+
+    /** 碎片 / 卷轴流水的执行类与方法（旧版开战接口 c=elite&m=action） */
+    private const string LOG_CLASS = 'elite';
+    private const string LOG_METHOD = 'action';
 
     /** 旧版语言包 language/chinese_s/equipment_lang.php（equipment_model->get_scroll_name：卷轴类型 → 名称） */
     public const array SCROLL_NAME = [1 => '物攻', 2 => '物防', 3 => '策攻', 4 => '策防', 5 => '生命'];
@@ -410,7 +412,8 @@ final class EliteHandler
                             $return['info'][$key]['firstquality'] = $item['quality'];
                             $return['info'][$key]['firstitemname'] = $item['name'];
                             if ($city['first_type'] == 2) {
-                                // 依赖未移植：添加碎片 equipment_model->add_item($item, 1, 1, uid)，不发放
+                                // 添加碎片
+                                Equipment::addChip($key, $item['id'], 1, self::LOG_CLASS, self::LOG_METHOD);
                                 $return['info'][$key]['firstitemname'] .= self::LANG_BASE_CHIP;
                             } else {
                                 // 添加道具
@@ -425,7 +428,7 @@ final class EliteHandler
                         $return['info'][$key]['firstitemid'] = $talent['type'] ?? null;
                         $return['info'][$key]['firstquality'] = $talent['quality'] ?? null;
                         $return['info'][$key]['firstitemname'] .= self::LANG_BASE_SCROLL;
-                        // 依赖未移植：equipment_model->add_talent_scroll(first_value, 0 卷轴 / 1 碎片, 1, uid)，不发放
+                        Equipment::addTalentScroll($key, (int)$city['first_value'], $city['first_type'] == 3 ? 0 : 1, 1, self::LOG_CLASS, self::LOG_METHOD);
                         if ($city['first_type'] == 4) {
                             $return['info'][$key]['firstitemname'] .= self::LANG_BASE_CHIP;
                         }
@@ -448,7 +451,8 @@ final class EliteHandler
                                 $return['info'][$key]['quality'] = $item['quality'];
                                 $return['info'][$key]['itemname'] = $item['name'];
                                 if ($city['type'] == 2) {
-                                    // 依赖未移植：添加碎片 equipment_model->add_item($item, 1, 1, uid)，不发放
+                                    // 添加碎片
+                                    Equipment::addChip($key, $item['id'], 1, self::LOG_CLASS, self::LOG_METHOD);
                                     $return['info'][$key]['itemname'] .= self::LANG_BASE_CHIP;
                                 } else {
                                     // 添加道具
@@ -463,7 +467,7 @@ final class EliteHandler
                                 $return['info'][$key]['itemid'] = $talent['type'];
                                 $return['info'][$key]['quality'] = $talent['quality'];
                                 $return['info'][$key]['itemname'] = self::scrollName($talent['type']) . self::LANG_BASE_SCROLL;
-                                // 依赖未移植：equipment_model->add_talent_scroll(get_value, 0 卷轴 / 1 碎片, 1, uid)，不发放
+                                Equipment::addTalentScroll($key, (int)$city['get_value'], $city['type'] == 3 ? 0 : 1, 1, self::LOG_CLASS, self::LOG_METHOD);
                                 if ($city['type'] == 4) {
                                     $return['info'][$key]['itemname'] .= self::LANG_BASE_CHIP;
                                 }

@@ -8,6 +8,7 @@ use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\OwnMatrix;
+use Hanjiang\Model\OwnMount;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -278,11 +279,8 @@ final class MusterHandler
             return $return;
         }
 
-        // 卸下所有坐骑（mount_model::take_down_all 的 own_general.mid0~mid4 部分）
-        DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->update([
-            'mid0' => 0, 'mid1' => 0, 'mid2' => 0, 'mid3' => 0, 'mid4' => 0,
-        ]);
-        // 依赖未移植：坐骑表 own_mount.gid 清零（新版坐骑存 Redis user_mounts，不是旧版 own_mount）
+        // 卸下所有坐骑（mount_model::take_down_all：将领 mid0~mid4 清零，own_mount.gid 清零）
+        OwnMount::takeDownAll($uid, $gid);
 
         // 休息（general_model::go_rest）
         $affected = DB::table('general')->where('uid', $uid)->where('id', $gid)->whereNull('deleted_at')->update(['goout' => 0]);

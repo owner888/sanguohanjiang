@@ -6,6 +6,7 @@ namespace Hanjiang\Handler\General;
 
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\Model\General;
+use Hanjiang\Model\TraderLog;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -118,7 +119,7 @@ final class TavernHandler
             $idx++;
         }
 
-        // 2. 商贾会客数据 (来自 Redis 缓存)
+        // 2. 商贾会客数据 (trader_log)
         $traderData = self::getUserTraderData($uid);
 
         $siteInfo = [];
@@ -365,7 +366,8 @@ final class TavernHandler
         // 产出宝石
         $gemType = (int)$traderCfg['gettype'];
         $gemVal = (int)$traderCfg['getvalue'];
-        $traderData['get' . $gemType] = (int)($traderData['get' . $gemType] ?? 0) + $gemVal;
+        $added = TraderLog::addJade($uid, $gemType, $gemVal, class: 'tavern', method: 'trade');
+        $traderData['get' . $gemType] = (int)$added['num'];
 
         // 计算下一席位 (概率晋级或重置回 1 号)
         $upRate = match ($site) {
@@ -386,9 +388,16 @@ final class TavernHandler
             }
         }
         $traderData['site'] = $nextSite;
-        $traderData['last_date'] = date('Ymd');
 
-        Redis::setJson("user_trader:{$uid}", $traderData, 86400 * 30);
+        // 会客位置与当日交易时间（新版自定的晋级 / 重置规则，不走旧版 add_jade 的 site / to_site / free 参数）
+        DB::table('trader_log')->where('uid', $uid)->whereNull('deleted_at')->update([
+            'site' => $nextSite,
+            'site2' => (int)($traderData['site2'] ?? 0),
+            'site3' => (int)($traderData['site3'] ?? 0),
+            'site4' => (int)($traderData['site4'] ?? 0),
+            'site5' => (int)($traderData['site5'] ?? 0),
+            'dateline' => time(),
+        ]);
         Redis::del('player:' . $uid);
 
         $freshMember = DB::table('member')->where('uid', $uid)->first();
@@ -427,48 +436,42 @@ final class TavernHandler
     }
 
     /**
-     * 增加宝石（移植旧版 models/tavern_model.php:add_jade 的 site = 0 用法：只累加 get{type}，不动会客位置）
+     * 增加宝石（旧版 models/tavern_model.php:add_jade 的 site = 0 用法：只累加 get{type}，不动会客位置）
      *
-     * 宝石与会客记录同存于 Redis user_trader:{uid}（新版现有存储，旧版为 trader_log 表）。
-     * 依赖未移植：宝石流水 _tavernjade_log。
+     * 存储与流水见 Model\TraderLog（trader_log / tavernjade_log；$class / $method 为流水的执行类与方法，旧版取当前请求）。
      *
      * @param int $type 1 蓝宝石、2 黄宝石、3 紫宝石
      * @return int 增加后的该类宝石数量
      */
-    public static function addJade(int $uid, int $type, int $num): int
+    public static function addJade(int $uid, int $type, int $num, string $class = '', string $method = ''): int
     {
-        $traderData = self::getUserTraderData($uid);
-        $traderData['get' . $type] = (int)($traderData['get' . $type] ?? 0) + $num;
-        Redis::setJson("user_trader:{$uid}", $traderData, 86400 * 30);
+        $result = TraderLog::addJade($uid, $type, $num, class: $class, method: $method);
         Redis::del('player:' . $uid);
-        return $traderData['get' . $type];
+        return $result['status'] === 1 ? (int)$result['num'] : TraderLog::jade($uid, $type);
     }
 
     /**
-     * 获取玩家商贾会客记录
+     * 获取玩家商贾会客记录（trader_log；没有记录时按旧版初始值：位置 1、仅 site1 开启、宝石 0）
+     *
+     * last_date 为最后交易日（Ymd，由 dateline 换算；从未交易为空串），当天交易过即不再免费。
      *
      * @return array<string, mixed>
      */
     private static function getUserTraderData(int $uid): array
     {
-        $key = "user_trader:{$uid}";
-        $data = Redis::getJson($key);
-
-        if (!is_array($data)) {
-            $data = [
-                'site' => 1,
-                'site1' => 1,
-                'site2' => 0,
-                'site3' => 0,
-                'site4' => 0,
-                'site5' => 0,
-                'get1' => 0,
-                'get2' => 0,
-                'get3' => 0,
-                'last_date' => '',
-            ];
-            Redis::setJson($key, $data, 86400 * 30);
-        }
+        $data = TraderLog::get($uid) ?? [
+            'site' => 1,
+            'site1' => 1,
+            'site2' => 0,
+            'site3' => 0,
+            'site4' => 0,
+            'site5' => 0,
+            'get1' => 0,
+            'get2' => 0,
+            'get3' => 0,
+            'dateline' => 0,
+        ];
+        $data['last_date'] = $data['dateline'] > 0 ? date('Ymd', $data['dateline']) : '';
 
         return $data;
     }

@@ -21,6 +21,10 @@ use OmniPHP\Database\DB;
  */
 final class PassGeneralCron
 {
+    /** 物品流水的执行类与方法（旧版计划任务入口 c=cron_acttask&m=pass_general） */
+    private const string LOG_CLASS = 'cron_acttask';
+    private const string LOG_METHOD = 'pass_general';
+
     /** 每日执行时间（时:分，Asia/Shanghai） */
     public const string RUN_AT = '00:00';
 
@@ -79,7 +83,7 @@ final class PassGeneralCron
                 continue;
             }
             $i++;
-            PassGeneral::autoBoxReward($val, $version, $now);
+            PassGeneral::autoBoxReward($val, $version, $now, self::LOG_CLASS, self::LOG_METHOD);
         }
         // 零点初始化全部玩家（旧版按读到的 uid 列表，即本版本全部玩家；不更新刷新时间）
         PassGeneral::resetVersion($version);
@@ -153,7 +157,7 @@ final class PassGeneralCron
         foreach ($reward as $uid => $val) {
             $message = PassGeneral::LANG_CRON_PASSGENERAL;
             foreach ($val as $type => $num) {
-                $message .= PassGeneral::getRewardItem($type, $num, $uid, $now);
+                $message .= PassGeneral::getRewardItem($type, $num, $uid, $now, self::LOG_CLASS, self::LOG_METHOD);
             }
             $message .= PassGeneral::LANG_CRON_CHECK;
             PassGeneral::sendSystemMessage($uid, $message);

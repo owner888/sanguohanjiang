@@ -14,6 +14,7 @@ use Hanjiang\MasterData\SanctumMission;
 use Hanjiang\MasterData\SanctumReward;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
+use Hanjiang\Model\OwnGem;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -30,16 +31,20 @@ use OmniPHP\Http\Context;
  * 客户端调用（sanctumworld.js / miscpop.js）：index、select_map、get_mission_info、action（num 为扫荡次数）、buy_times、
  * get_mission_report_list、get_report_info、send_to_chat、get_reward。旧版公开方法即这 9 个。
  *
+ * 宝石碎片存 member.gem（OwnGem::addChip，首杀 / 掉落 / 每日奖励），宝石存 own_gem 并按颗数加 member.gemuse
+ * （OwnGem::addGem / addGemuse）；gem / all_chip / all_gem 为当前碎片数。
+ *
  * 依赖未移植：
- * - 宝石碎片 member.gem（member_model->add_gem：首杀 / 掉落 / 每日奖励的碎片）：只回报不发放，all_chip / all_gem / gem 恒为 0；
- * - 宝石 own_gem（gem_model->add_gem）与宝石包裹占用 member.gemuse（add_gemuse）：掉落按旧版掷点并回报宝石信息，不发放；
  * - 聊天室战报广播 chat_model->get_message_str(25, …) / send_message_to_all（send_to_chat 暂返回 0，不扣元宝）；
- * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数；add_gem 的碎片流水。
+ * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数。
  */
 final class SanctumHandler
 {
     /** 次数购买价格（旧版 $_price） */
     private const int PRICE = 20;
+
+    /** 物品流水的执行类（旧版 $this->class） */
+    private const string LOG_CLASS = 'sanctum';
 
     /** 开启等级（旧版 $_level：等级小于 140 不开放） */
     private const int OPEN_LEVEL = 140;
@@ -190,8 +195,7 @@ final class SanctumHandler
         $return['status'] = 1;
         $return['list'] = $newList;
         $return['times'] = $log['times'] + $log['buy_times'];
-        // 依赖未移植：宝石碎片 member.gem
-        $return['gem'] = 0;
+        $return['gem'] = OwnGem::chip($uid);
         $return['stage'] = $stage;
         $return['all_stage'] = $logs['stage'];
         // 旧版 lang->line 取不到时为 FALSE，拼接后为空串
@@ -510,10 +514,9 @@ final class SanctumHandler
                     if ($double && $isFirst === 0) {
                         $gemNum *= 2;
                     }
-                    // 依赖未移植：gem_model->add_gem（own_gem 插入 $gemNum 颗）与 member_model->add_gemuse 宝石包裹占用，
-                    // 不发放；模板存在时（旧版 add_gem 成功）照旧版回报宝石信息
+                    // 添加宝石数量
                     $gem = Gem::ROWS[$mission['gem']] ?? null;
-                    if ($gem !== null) {
+                    if (OwnGem::addGem($uid, (int)$mission['gem'], (int)$mission['gem_level'], $gemNum, $now)['status'] === 1) {
                         $return['info']['gem'] = $mission['gem'];
                         $return['info']['gem_name'] = $gem['name'];
                         $return['info']['gem_type'] = $gem['type'];
@@ -521,6 +524,8 @@ final class SanctumHandler
                         $return['info']['gem_level'] = $mission['gem_level'];
                         $return['info']['gem_num'] = $gemNum;
                         $return['info']['gem_quality'] = self::gemQuality($mission['gem_level']);
+                        // 修改宝石格子占用数
+                        OwnGem::addGemuse($uid, $gemNum);
                     }
                 }
 
@@ -540,7 +545,7 @@ final class SanctumHandler
                 }
                 if ($isFirst === 1) {
                     // 首杀奖励宝石碎片
-                    // 依赖未移植：member_model->add_gem($mission['first_chip_num'])（member.gem），不发放
+                    OwnGem::addChip($uid, (int)$mission['first_chip_num'], self::LOG_CLASS, 'action', $now);
                     $return['info']['first_chip_num'] = $mission['first_chip_num'];
                     $return['info']['firstkill'] = 1;
                 } elseif ($mission['chip_num'] > 0) {
@@ -550,7 +555,7 @@ final class SanctumHandler
                     if ($double) {
                         $chipNum *= 2;
                     }
-                    // 依赖未移植：member_model->add_gem($chipNum)（member.gem），不发放
+                    OwnGem::addChip($uid, $chipNum, self::LOG_CLASS, 'action', $now);
                     $return['info']['chip'] = $chipNum;
                 }
             }
@@ -576,8 +581,7 @@ final class SanctumHandler
             }
             $return['info']['report'] = $reportid;
             $return['info']['times'] = $nowTimes;
-            // 依赖未移植：宝石碎片 member.gem
-            $return['info']['all_chip'] = 0;
+            $return['info']['all_chip'] = OwnGem::chip($uid);
             $return['info']['all_gold'] = self::memberValue($uid, 'gold');
             $return['mission']['firstkill'] = $isFirst;
             $return['info']['win'] = $assess;
@@ -855,15 +859,14 @@ final class SanctumHandler
                 // 修改领取状态
                 MemberActivity::update($uid, ['sanctumdate' => $now]);
                 // 领取奖励
-                // 依赖未移植：member_model->add_gem($reward)（宝石碎片 member.gem），不发放
+                OwnGem::addChip($uid, $reward, self::LOG_CLASS, 'get_reward', $now);
             }
 
             // 成功返回
             $return['status'] = 1;
             $return['gem'] = $reward;
             $return['all_gold'] = self::memberValue($uid, 'gold');
-            // 依赖未移植：宝石碎片 member.gem
-            $return['all_gem'] = 0;
+            $return['all_gem'] = OwnGem::chip($uid);
             $return['mission'] = [
                 'stage' => self::LANG_STAGE[$missionInfo['stage']] ?? false,
                 'id' => ($missionInfo['id'] - ($missionInfo['city'] - 1) * 50) - (($missionInfo['stage'] - 1) * 10),

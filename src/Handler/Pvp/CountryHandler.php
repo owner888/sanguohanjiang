@@ -14,6 +14,7 @@ use Hanjiang\MasterData\CountryJob;
 use Hanjiang\MasterData\CountryLearn;
 use Hanjiang\MasterData\CountryLevel;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberJade;
 use Hanjiang\Model\OwnMatrix;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -2015,13 +2016,17 @@ final class CountryHandler
             act: $salary['act'],
             soul: $salary['soul'] ?? 0
         );
-        // 依赖未移植：member_model->add_jade 玉石（新服 member 表无 jade 字段，91 级以上的玉石俸禄未发放）
+        // 91 级以上的玉石俸禄（add_salary：大于 0 才加）
+        if (($salary['jade'] ?? 0) > 0) {
+            MemberJade::add($uid, $salary['jade'], 'country', 'get_salary');
+        }
 
         $after = self::member($uid);
         $return['status'] = 1;
         $return['silver'] = (int)($after['silver'] ?? 0);
         $return['act'] = (int)($after['act'] ?? 0);
         $return['soul'] = (int)($after['soul'] ?? 0);
+        $return['jade'] = (int)($after['jade'] ?? 0);
         return $return;
     }
 

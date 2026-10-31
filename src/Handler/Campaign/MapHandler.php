@@ -10,8 +10,10 @@ use Hanjiang\Handler\Pvp\CompeteHandler;
 use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\Map as MapTemplate;
 use Hanjiang\MasterData\Mission as MissionTemplate;
+use Hanjiang\MasterData\TalentScroll;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\OwnMount;
 
 use Hanjiang\Battle\BattleEngine;
 use Hanjiang\Battle\TeamBuilder;
@@ -24,6 +26,9 @@ use Hanjiang\Enum\FactionStatus;
 
 final class MapHandler
 {
+    /** 旧版语言包 base_chip */
+    private const string LANG_BASE_CHIP = '碎片';
+
     /**
      * 世界十三州大地图主信息: c=map&m=index
      * 采用强类型 Faction / FactionStatus 领域枚举，依据玩家实际历史推图进度真实计算开启与通关状态
@@ -625,8 +630,8 @@ final class MapHandler
      *
      * 关卡取 MasterData Mission（missionlevel / missionstage / missionid，旧版 map_model::get_mission_by_id 同表）；
      * 每次攻击 mt_rand(1, 100) <= getrate 计 1 件，get_number > 0 时按 gettype 发放：
-     * 1 装备（Equipment::addFromTemplate，模板取 MasterData Equip），3 银币 getvalue * 主公等级 * 件数，4 元宝 getvalue * 件数。
-     * 依赖未移植：2 装备碎片（Equipment 碎片分支）、5 / 6 天赋卷轴及碎片（talent_scroll）；这三类不发放也不回报。
+     * 1 装备（Equipment::addFromTemplate，模板取 MasterData Equip）、2 装备碎片（Equipment::addChip，件数即片数），
+     * 3 银币 getvalue * 主公等级 * 件数，4 元宝 getvalue * 件数，5 天赋卷轴 / 6 卷轴碎片（Equipment::addTalentScroll，件数即数量）。
      * 旧版双倍掉落活动只在 first == 0 时翻倍，而 action 里 first 只会是 1 或 -1，从不生效，这里不移植。
      * 新版 action 只支持单次攻击（旧版 times 刷图未移植），攻击次数按 1。
      *
@@ -656,18 +661,39 @@ final class MapHandler
         $getvalue = (int)$mission['getvalue'];
         switch ($gettype) {
             case 1:
+            case 2:
                 $tpl = EquipTemplate::ROWS[$getvalue] ?? null;
                 if ($tpl === null) {
                     break;
                 }
-                Equipment::addFromTemplate($uid, $getvalue, $getNumber);
+                if ($gettype === 2) {
+                    // 添加碎片
+                    Equipment::addChip($uid, $getvalue, $getNumber, 'map', 'action');
+                } else {
+                    Equipment::addFromTemplate($uid, $getvalue, $getNumber);
+                }
                 $drop['get_number'] = $getNumber;
                 $drop['gettype'] = $gettype;
                 // itemtype：1 装备、2 卷轴
                 $drop['itemtype'] = 1;
                 $drop['itemid'] = (int)$tpl['id'];
                 $drop['quality'] = (int)$tpl['quality'];
-                $drop['itemname'] = (string)$tpl['name'];
+                $drop['itemname'] = (string)$tpl['name'] . ($gettype === 2 ? self::LANG_BASE_CHIP : '');
+                break;
+            case 5:
+            case 6:
+                // 增加天赋卷轴（5 卷轴、6 碎片）
+                $talent = TalentScroll::ROWS[$getvalue] ?? null;
+                if ($talent === null) {
+                    break;
+                }
+                Equipment::addTalentScroll($uid, $getvalue, $gettype === 5 ? 0 : 1, $getNumber, 'map', 'action');
+                $drop['get_number'] = $getNumber;
+                $drop['gettype'] = $gettype;
+                $drop['itemtype'] = 2;
+                $drop['itemid'] = (int)$talent['type'];
+                $drop['quality'] = (int)$talent['quality'];
+                $drop['itemname'] = Equipment::scrollName((int)$talent['type']) . ($gettype === 6 ? self::LANG_BASE_CHIP : '');
                 break;
             case 3:
                 $silver = $getvalue * $memberLevel * $getNumber;
@@ -1003,29 +1029,49 @@ final class MapHandler
         if ($mapRow === null || (int)$mapRow['rewardtype'] <= 0 || (int)$mapRow['reward'] <= 0) {
             return ['status' => -4, 'message' => '该势力没有通关奖励'];
         }
-        if ((int)$mapRow['rewardtype'] !== 1) {
-            // 依赖未移植：rewardtype 2 天赋卷轴 / 3 声望 / 4 坐骑
-            return ['status' => -4, 'message' => '该势力通关奖励尚未开放'];
+        $rewardType = (int)$mapRow['rewardtype'];
+        $rewardNum = (int)$mapRow['rewardnum'];
+        $result = ['status' => 1, 'gettype' => $rewardType];
+        switch ($rewardType) {
+            case 1:
+                // 添加装备
+                $itemTpl = EquipTemplate::ROWS[(int)$mapRow['reward']] ?? null;
+                if ($itemTpl !== null) {
+                    Equipment::addFromTemplate($uid, (int)$itemTpl['id']);
+                }
+                $result['item'] = $itemTpl;
+                $result['rewardnum'] = $rewardNum;
+                break;
+            case 2:
+                // 添加天赋卷轴（rewardnum 卷）
+                $item = Equipment::addTalentScroll($uid, (int)$mapRow['reward'], 0, $rewardNum, 'map', 'get_newresult');
+                if (($item['status'] ?? 0) !== 1) {
+                    return ['status' => 0];
+                }
+                $result['item'] = $item['info'];
+                $result['rewardnum'] = $rewardNum;
+                break;
+            case 3:
+                // 添加声望
+                MemberHandler::addCurrency($uid, reputation: $rewardNum);
+                $result['rewardnum'] = $rewardNum;
+                break;
+            case 4:
+                // 添加坐骑（rewardnum 匹）
+                $mount = OwnMount::addMount($uid, (int)$mapRow['reward'], 0, $rewardNum, 'map', 'get_newresult');
+                $result['info'] = $mount['info'] ?? null;
+                $result['rewardnum'] = $rewardNum;
+                break;
+            default:
+                return ['status' => -4, 'message' => '该势力没有通关奖励'];
         }
-        $itemTpl = EquipTemplate::ROWS[(int)$mapRow['reward']];
-        Equipment::addFromTemplate($uid, (int)$itemTpl['id']);
-        $targetReward = [
-            'gettype' => 1,
-            'rewardnum' => (int)$mapRow['rewardnum'],
-            'item' => $itemTpl,
-        ];
 
         // 标记已领取
         Redis::set($claimKey, '1', 86400 * 365);
         DB::table('member_field')->where('uid', $uid)->update(['newresult' => 0]);
         Redis::del('player:' . $uid);
 
-        return [
-            'status' => 1,
-            'gettype' => $targetReward['gettype'],
-            'item' => $targetReward['item'],
-            'rewardnum' => $targetReward['rewardnum'],
-            'message' => '通关大礼领取成功',
-        ];
+        $result['message'] = '通关大礼领取成功';
+        return $result;
     }
 }

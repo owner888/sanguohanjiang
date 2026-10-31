@@ -136,6 +136,12 @@ final class GameApiTest extends TestCase
         }
 
         $this->assertSame([], DB::table('equipment')->where('uid', self::$uid)->whereNull('deleted_at')->get(), '注册不送装备');
+        // 旧版 member_model->insert_member：将魂包裹 4 格，其余物品计数为 0
+        $member = DB::table('member')->where('uid', self::$uid)->first();
+        $this->assertSame([4, 0, 0, 0, 0, 0, 0, 0], array_map('intval', [
+            $member['soulpack'], $member['souluse'], $member['jade'], $member['gem'], $member['gemuse'],
+            $member['refinestone'], $member['colorstone'], $member['bloodstone'],
+        ]));
         $this->assertSame([], $this->request('pack', 'index')['list'], '背包为空时不自动补装备');
     }
 
@@ -240,6 +246,89 @@ final class GameApiTest extends TestCase
         // 旧版 MasterData Map 1（黄巾势力）通关奖励：装备 6 狮心锁环甲
         $this->assertSame(6, $shiliReward['item']['id']);
         $this->assertSame('狮心锁环甲', $shiliReward['item']['name']);
+    }
+
+    /**
+     * 物品存储类奖励的发放点（旧版调用 add_talent_scroll / add_item 碎片分支 / add_mount / add_jade 等处）
+     */
+    public function testItemRewardSitesGrantStorage(): void
+    {
+        $this->withFreshPlayer(function (int $uid): void {
+            // 势力通关奖励：Map 6 为天赋卷轴（add_talent_scroll(reward, 0, rewardnum)），Map 17 为坐骑（add_mount(reward, 0, 0, rewardnum)）
+            $map6 = \Hanjiang\MasterData\Map::ROWS[6];
+            $res = $this->request('map', 'get_newresult', ['id' => 6]);
+            $this->assertSame([1, 2, $map6['rewardnum']], [$res['status'], $res['gettype'], $res['rewardnum']]);
+            $scroll = \Hanjiang\MasterData\TalentScroll::ROWS[$map6['reward']];
+            $this->assertSame($scroll['type'], $res['item']['id'], '旧版 info.id 改成卷轴类型');
+            $this->assertSame($map6['rewardnum'], (int)\Hanjiang\Model\Equipment::talentScroll($uid, $scroll['type'], $scroll['quality'])['number']);
+            $this->assertSame(['map', 'get_newresult'], array_values(DB::table('talent_scroll_log')->select('class', 'method')->where('uid', $uid)->first()));
+            $map17 = \Hanjiang\MasterData\Map::ROWS[17];
+            $res = $this->request('map', 'get_newresult', ['id' => 17]);
+            $this->assertSame([1, 4, $map17['reward']], [$res['status'], $res['gettype'], $res['info']['mid']]);
+            $this->assertSame($map17['rewardnum'], DB::table('own_mount')->where('uid', $uid)->where('mid', $map17['reward'])->count());
+            $this->assertSame(-3, $this->request('map', 'get_newresult', ['id' => 17])['status'], '已领取');
+
+            // 关卡掉落：gettype 2 装备碎片（add_item 碎片分支）、5 天赋卷轴、6 卷轴碎片，件数即数量
+            $drop = new \ReflectionMethod(\Hanjiang\Handler\Campaign\MapHandler::class, 'missionDrop');
+            $m43 = \Hanjiang\MasterData\Mission::ROWS[43];
+            $this->assertSame(2, $m43['gettype']);
+            do {
+                $res = $drop->invoke(null, $uid, 10, $m43['missionlevel'], $m43['missionstage'], $m43['missionid']);
+            } while ($res['get_number'] === 0);
+            $equip = \Hanjiang\MasterData\Equip::ROWS[$m43['getvalue']];
+            $this->assertSame([2, $equip['name'] . '碎片'], [$res['gettype'], $res['itemname']]);
+            $this->assertSame(1, (int)DB::table('equipment')->where('uid', $uid)->where('equipid', $equip['id'])->where('chip', '>', 0)->value('chip'));
+            $m212 = \Hanjiang\MasterData\Mission::ROWS[212];
+            $this->assertSame([5, 100], [$m212['gettype'], $m212['getrate']]);
+            $scroll = \Hanjiang\MasterData\TalentScroll::ROWS[$m212['getvalue']];
+            $had = (int)(\Hanjiang\Model\Equipment::talentScroll($uid, $scroll['type'], $scroll['quality'])['number'] ?? 0);
+            $res = $drop->invoke(null, $uid, 10, $m212['missionlevel'], $m212['missionstage'], $m212['missionid']);
+            $this->assertSame([5, 2, $scroll['type'], \Hanjiang\Model\Equipment::scrollName($scroll['type'])], [$res['gettype'], $res['itemtype'], $res['itemid'], $res['itemname']]);
+            $this->assertSame($had + 1, (int)\Hanjiang\Model\Equipment::talentScroll($uid, $scroll['type'], $scroll['quality'])['number']);
+
+            // 平乱副本奖励类型 2 装备碎片（CopiesReward 里没有，直接调发奖分支）：add_item($info, 1, $num)
+            $copies = new \ReflectionMethod(\Hanjiang\Handler\Campaign\CopiesHandler::class, 'reward');
+            $res = $copies->invoke(null, $uid, ['type' => 2, 'value' => 19, 'num' => 3], 0, 0, time(), 'pk');
+            $this->assertSame(19, $res['id']);
+            $this->assertSame(3, (int)DB::table('equipment')->where('uid', $uid)->where('equipid', 19)->where('chip', '>', 0)->value('chip'));
+            $this->assertSame(['copies', 'pk'], array_values(DB::table('itemchip_log')->select('class', 'method')->where('uid', $uid)->where('itemid', 19)->first()));
+
+            // 国家俸禄：主公 91 级以上照旧版发玉石（add_salary 的 jade），返回当前玉石
+            DB::table('member')->where('uid', $uid)->update(['level' => 91]);
+            Redis::del('player:' . $uid);
+            $this->assertSame(1, $this->request('country', 'create', ['name' => '玉' . substr((string)hrtime(true), -5), 'confirm' => 1])['status']);
+            $salary = $this->request('country', 'get_salary');
+            $this->assertSame(1, $salary['status']);
+            $this->assertGreaterThan(0, $salary['jade']);
+            $this->assertSame($salary['jade'], \Hanjiang\Model\MemberJade::get($uid));
+            $this->assertSame(['country', 'get_salary'], array_values(DB::table('jade_log')->select('class', 'method')->where('uid', $uid)->first()));
+
+            // 将领界面血量：兵符上的宝石（get_gem_by_eid）与坐骑（主公 120 级起，主战 100%、备战 ceil(× 0.3)）
+            $gid = (int)$this->request('general', 'index')['list'][1]['id'];
+            DB::table('general')->where('id', $gid)->update(['level' => 10]);
+            [$fu] = Equipment::addFromTemplate($uid, 7);
+            $this->assertSame(1, $this->request('general', 'equip', ['gid' => $gid, 'eid' => $fu])['status']);
+            $hp = fn (): int => $this->request('general', 'get_info', ['gid' => $gid])['info']['hp'];
+            $before = $hp();
+            \Hanjiang\Model\OwnGem::addGem($uid, 5, 0, 1);
+            $gemId = (int)DB::table('own_gem')->where('uid', $uid)->value('id');
+            \Hanjiang\Model\OwnGem::adron($uid, $gemId, $fu, 1);
+            $row = DB::table('general')->where('id', $gid)->first();
+            $talentBlood = (float)\Hanjiang\MasterData\Talent::ROWS[(int)$row['talentid']]['blood'];
+            $coef = (1 + ((int)$row['tili'] + (int)$row['tiliup']) * 0.002) * $talentBlood;
+            $base = \Hanjiang\Battle\LegacyStats::baseHp((int)$row['level'], (int)$row['turn']) + \Hanjiang\MasterData\Equip::ROWS[7]['power'];
+            $this->assertSame((int)($base * $coef), $before);
+            $gemPower = \Hanjiang\MasterData\Gem::ROWS[5]['level0'];
+            $this->assertSame((int)(($base + $gemPower) * $coef), $hp());
+            \Hanjiang\Model\OwnMount::addMount($uid, 1);
+            \Hanjiang\Model\OwnMount::addMount($uid, 2);
+            $mounts = DB::table('own_mount')->where('uid', $uid)->whereIn('mid', [1, 2])->where('chip', 0)->orderBy('id')->get();
+            DB::table('general')->where('id', $gid)->update(['mid0' => (int)$mounts[0]['id'], 'mid1' => (int)$mounts[1]['id']]);
+            $this->assertSame((int)(($base + $gemPower) * $coef), $hp(), '主公 120 级以下不计坐骑');
+            DB::table('member')->where('uid', $uid)->update(['level' => 120]);
+            $mountHp = (int)$mounts[0]['hp'] + ceil((int)$mounts[1]['hp'] * 0.3);
+            $this->assertSame((int)(($base + $gemPower + $mountHp) * $coef), $hp());
+        });
     }
 
     public function testBattleSimulationAction(): void
@@ -901,6 +990,20 @@ final class GameApiTest extends TestCase
             Redis::set('equip_sale_' . date('ymd') . '_' . $uid, 9, 86400);
             $this->assertSame(1, $this->request('pack', 'sale', ['id' => $strong])['status']);
             $this->assertSame(10, Redis::get('equip_sale_' . date('ymd') . '_' . $uid));
+            $this->assertSame(0, (int)DB::table('member')->where('uid', $uid)->value('gemuse'), '140 级以下出售不卸宝石');
+
+            // 主公 140 级以上：出售前卸下装备上的宝石，卸下个数加到宝石格子占用（旧版 add_gemuse(0) 也加 1）
+            DB::table('member')->where('uid', $uid)->update(['level' => 140]);
+            [$gemmed, $plain] = Equipment::addFromTemplate($uid, 2, 2);
+            \Hanjiang\Model\OwnGem::addGem($uid, 1, 0, 2);
+            $gemIds = array_map('intval', array_column(DB::table('own_gem')->where('uid', $uid)->whereNull('deleted_at')->get(), 'id'));
+            \Hanjiang\Model\OwnGem::adron($uid, $gemIds[0], $gemmed, 1);
+            \Hanjiang\Model\OwnGem::adron($uid, $gemIds[1], $gemmed, 2);
+            $this->assertSame(1, $this->request('pack', 'sale', ['id' => $gemmed])['status']);
+            $this->assertSame([], \Hanjiang\Model\OwnGem::byEid($uid, $gemmed));
+            $this->assertSame(2, (int)DB::table('member')->where('uid', $uid)->value('gemuse'));
+            $this->assertSame(1, $this->request('pack', 'sale', ['id' => $plain])['status']);
+            $this->assertSame(3, (int)DB::table('member')->where('uid', $uid)->value('gemuse'), '没有宝石也加 1（旧版 add_gemuse 下限 1）');
         });
     }
 
@@ -1020,6 +1123,15 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $trade['status']);
         $this->assertArrayHasKey('site', $trade);
         $this->assertArrayHasKey('addtype', $trade);
+        // 会客记录与宝石在 trader_log，宝石获得记 tavernjade_log；当天已交易不再免费
+        $trader = \Hanjiang\Model\TraderLog::get(self::$uid);
+        $this->assertNotNull($trader);
+        $this->assertSame($trade['number'], $trader['get' . $trade['addtype']]);
+        $this->assertSame($trade['site'], $trader['site']);
+        $this->assertSame(date('Ymd'), date('Ymd', $trader['dateline']));
+        $this->assertSame(0, $this->request('tavern', 'index')['isfree']);
+        $log = DB::table('tavernjade_log')->where('uid', self::$uid)->orderBy('id', 'DESC')->first();
+        $this->assertSame([1, $trade['addtype'], $trade['addnum'], $trade['number'], 'tavern', 'trade'], [(int)$log['type'], (int)$log['jadetype'], (int)$log['jade'], (int)$log['balance'], $log['class'], $log['method']]);
 
         // 再次尝试招募张飞，触发唯一性拦截 (status = 4 已拥有该武将)
         $duplicateBuy = $this->request('tavern', 'buy', ['id' => 10]);
@@ -1477,15 +1589,32 @@ final class GameApiTest extends TestCase
         $this->assertSame(3, $this->towerRequest('mop_up', $p['auth'] + ['id' => 1, 'times' => 5])['status']);
         $this->assertSame(3, (int)DB::table('member_field')->where('uid', $uid)->value('soultimes'));
 
-        // 掉落将魂的关卡：掉落发放依赖未移植，hero_soul 为空
+        // 掉落将魂的关卡：掉落的将魂发进 own_soul（add_hero_soul），包裹占用加个数
         DB::table('member_activity')->where('uid', $uid)->update(['freetower' => 5]);
+        $mission = \Hanjiang\MasterData\SoulMission::ROWS[3];
+        $this->assertGreaterThan(0, $mission['soulid']);
         $res = $this->towerRequest('mop_up', $p['auth'] + ['id' => 3, 'times' => 5]);
         $this->assertSame(1, $res['status']);
-        $this->assertSame([], $res['info']['hero_soul']);
+        $soul = \Hanjiang\MasterData\Soul::ROWS[$mission['soulid']];
+        $num = $res['info']['hero_soul']['num'] ?? 0;
+        if ($num > 0) {
+            $this->assertSame(['name' => $soul['name'], 'quality' => $soul['quality'], 'level' => 0, 'num' => $num], $res['info']['hero_soul']);
+        } else {
+            $this->assertSame([], $res['info']['hero_soul']);
+        }
+        $this->assertSame($num, DB::table('own_soul')->where('uid', $uid)->whereNull('deleted_at')->count());
+        $this->assertSame($num, (int)DB::table('member')->where('uid', $uid)->value('souluse'));
 
         // 旧版老玩家未领首杀的关卡不能扫荡
         DB::table('soul_log')->where('uid', $uid)->where('missionid', 3)->update(['first_reward' => 0]);
         $this->assertSame(-13, $this->towerRequest('mop_up', $p['auth'] + ['id' => 3, 'times' => 5])['status']);
+        DB::table('soul_log')->where('uid', $uid)->where('missionid', 3)->update(['first_reward' => 1]);
+
+        // 将魂包裹满（soulpack <= souluse，旧版 _isfull）：掉落将魂的关卡返回 2，不掉将魂的关卡照常
+        DB::table('member')->where('uid', $uid)->update(['soulpack' => 4, 'souluse' => 4]);
+        DB::table('member_activity')->where('uid', $uid)->update(['freetower' => 5]);
+        $this->assertSame(2, $this->towerRequest('mop_up', $p['auth'] + ['id' => 3, 'times' => 5])['status']);
+        $this->assertSame(2, $this->towerRequest('pk', $p['auth'] + ['id' => 3])['status']);
     }
 
     public function testTowerBuyTimes(): void
@@ -1926,8 +2055,8 @@ final class GameApiTest extends TestCase
         // 参数 / 商品校验
         $this->assertSame(-2, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 0])['status']);
         $this->assertSame(-3, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 9999])['status']);
-        // 依赖未移植：将魂（re_type 27）无法发放，不扣积分
-        $this->assertSame(-3, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 19])['status']);
+        // 积分不足（将魂 re_type 27 要 1200 积分）不扣积分
+        $this->assertSame(3, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => 19])['status']);
         $this->assertSame(1000, (int)DB::table('member_integral')->where('uid', $uid)->value('act_arena_int'));
         // 防刷锁
         Redis::set('arena_exchange_' . $uid, 1, 30);
@@ -1965,6 +2094,27 @@ final class GameApiTest extends TestCase
         $this->assertSame(1, $res['reward']['info']['is_exist']);
         $this->assertSame(1, DB::table('general')->where('uid', $uid)->where('generalid', $general['id'])->whereNull('deleted_at')->count());
         $this->assertSame(100000 - $rows[32]['use_int'], $res['act_arena_int']);
+
+        // 旧版 get_add_reward 的玩家存储类奖励：照旧版发放并记流水（类 arena、方法 shop_exchange）
+        $before = DB::table('member')->where('uid', $uid)->first();
+        foreach ([5, 6, 19, 27, 31] as $id) {
+            $this->assertSame(1, $this->request('arena', 'shop_exchange', $a['auth'] + ['id' => $id])['status'], "商品 {$id}");
+        }
+        $after = DB::table('member')->where('uid', $uid)->first();
+        // 5 玉石、6 宝石碎片
+        $this->assertSame((int)$before['jade'] + $rows[5]['re_value1'], (int)$after['jade']);
+        $this->assertSame((int)$before['gem'] + $rows[6]['re_value1'], (int)$after['gem']);
+        $this->assertSame(['arena', 'shop_exchange'], array_values(DB::table('jade_log')->select('class', 'method')->where('uid', $uid)->first()));
+        // 19 将魂（re_value1 模板、re_value2 等级）：own_soul + 包裹占用
+        $soulRow = DB::table('own_soul')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $this->assertSame([$soul['name'], $rows[19]['re_value2']], [$soulRow['name'], (int)$soulRow['level']]);
+        $this->assertSame((int)$before['souluse'] + 1, (int)$after['souluse']);
+        // 27 宝石（re_value2 等级）：own_gem + 宝石格子占用
+        $gemRow = DB::table('own_gem')->where('uid', $uid)->whereNull('deleted_at')->first();
+        $this->assertSame([$rows[27]['re_value1'], $rows[27]['re_value2'], \Hanjiang\MasterData\Gem::ROWS[1]['level5']], [(int)$gemRow['gemid'], (int)$gemRow['level'], (int)$gemRow['power']]);
+        $this->assertSame((int)$before['gemuse'] + 1, (int)$after['gemuse']);
+        // 31 坐骑
+        $this->assertSame(1, DB::table('own_mount')->where('uid', $uid)->where('mid', $rows[31]['re_value1'])->where('chip', 0)->count());
     }
 
     public function testArenaSendToChat(): void
@@ -2503,53 +2653,275 @@ final class GameApiTest extends TestCase
 
     public function testMountSystem(): void
     {
-        // 1. 获取主公 ID
-        $generals = $this->request('general', 'index');
-        $mainGid = (int)$generals['list'][1]['id'];
+        // 旧版 controllers/mount.php：主公 120 级开启，坐骑写 own_mount，将领身上的坐骑写 general.mid0 ~ mid4
+        $this->withFreshPlayer(function (int $uid): void {
+            $this->assertSame(2, $this->request('mount', 'index')['status'], '120 级以下未开启');
+            DB::table('member')->where('uid', $uid)->update(['level' => 120]);
+            $gid = (int)DB::table('general')->where('uid', $uid)->value('id');
 
-        // 2. 查看战马马厩
-        $res = $this->request('mount', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
+            // 没有坐骑：ginfo 五个位置都是 0，mlist 为空
+            $index = $this->request('mount', 'index');
+            $this->assertSame(1, $index['status']);
+            $this->assertSame([1, 1], [$index['page'], $index['allpage']]);
+            $this->assertSame($gid, $index['general'][1]['id'], 'general 键从 1 起');
+            $this->assertSame([0, 0, 0, 0, 0, $gid, 0], [$index['ginfo']['mid0'], $index['ginfo']['mid1'], $index['ginfo']['mid2'],
+                $index['ginfo']['mid3'], $index['ginfo']['mid4'], $index['ginfo']['id'], $index['ginfo']['attack']]);
+            $this->assertSame([], $index['mlist']);
 
-        // 3. 乘骑赤兔马 (id: 1)
-        $fit = $this->request('mount', 'fit_on', ['id' => 1, 'gid' => $mainGid]);
-        $this->assertSame(1, $fit['status']);
-        $this->assertSame(1, $fit['mount_id']);
+            $add = static function (int $mid) use ($uid): int {
+                \Hanjiang\Model\OwnMount::addMount($uid, $mid);
+                return (int)DB::table('own_mount')->where('uid', $uid)->where('mid', $mid)->where('chip', 0)->orderBy('id', 'DESC')->value('id');
+            };
+            $yueying = $add(1);     // 越影：攻击 750 + intval(150 × 1.0) = 900
+            $yuhui = $add(2);       // 逾辉：攻击 800 + 150 = 950
+            $juedi = $add(3);       // 绝地
+            $biyi = $add(103);      // 比翼鸟：特殊类型 1（value 5 + level 1 × 坐骑等级）
+            $longque = $add(105);   // 龙雀：特殊类型 1
+            $silver = $add(101);    // 经验银马：toexp 1000
+            \Hanjiang\Model\OwnMount::addMount($uid, 4, 1, 3);
+            $chipRow = (int)DB::table('own_mount')->where('uid', $uid)->where('mid', 4)->value('id');
 
-        // 4. 驯化进阶战马
-        $up = $this->request('mount', 'levelup', ['id' => 1]);
-        $this->assertSame(1, $up['status']);
-        $this->assertSame(2, $up['level']);
+            // 未装配列表：每页 8 个，按 mid DESC… 排序后经验马（type 1）排最前；碎片行带 full_num
+            $page = $this->request('mount', 'get_mount_by_page', ['page' => 1]);
+            $this->assertSame(1, $page['status']);
+            $this->assertSame([$silver, $longque, $biyi, $chipRow, $juedi, $yuhui, $yueying], array_column($page['list'], 'id'));
+            $this->assertSame([1, 0, 0, 0, 0, 0, 0], array_column($page['list'], 'type'));
+            $this->assertSame('3/10', $page['list'][3]['full_num']);
+            $this->assertSame([1, 5], [$page['list'][2]['special_type'], $page['list'][2]['special_value']]);
+            $this->assertSame(1000, $page['list'][0]['toexp']);
+            $this->assertSame($longque, $page['info']['id'], 'info 为排序前（mid DESC）的第一匹');
+            $this->assertNotContains($yueying, array_column($this->request('mount', 'get_mount_by_page', ['page' => 1, 'mid' => $yueying])['list'], 'id'));
 
-        // 5. 卸下战马
-        $down = $this->request('mount', 'take_down', ['id' => 1]);
-        $this->assertSame(1, $down['status']);
+            // 装上：参数 / 将领 / 坐骑 / 碎片
+            $this->assertSame(-1, $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => $yueying, 'site' => 5])['status']);
+            $this->assertSame(-2, $this->request('mount', 'fit_on', ['gid' => 999999999, 'mid' => $yueying, 'site' => 0])['status']);
+            $this->assertSame(-3, $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => 999999999, 'site' => 0])['status']);
+            $this->assertSame(-7, $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => $chipRow, 'site' => 0])['status']);
+
+            $attackOf = static fn (): int => (int)array_values(\Hanjiang\Battle\TeamBuilder::forMember($uid)['team'])[0]['attack'];
+            $base = $attackOf();
+            $fit = $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => $yueying, 'site' => 0, 'page' => 1]);
+            $this->assertSame(1, $fit['status']);
+            $this->assertSame($yueying, $fit['info']['mid0']['id']);
+            $this->assertSame($yueying, $fit['minfo']['id']);
+            $this->assertSame(900, $fit['info']['attack']);
+            $this->assertNotContains($yueying, array_column($fit['mlist'], 'id'));
+            $this->assertSame($gid, (int)DB::table('own_mount')->where('id', $yueying)->value('gid'));
+            $this->assertSame($yueying, (int)DB::table('general')->where('id', $gid)->value('mid0'));
+            $this->assertSame($base + 900, $attackOf(), 'TeamBuilder 按 mid0 全额计入');
+
+            // 备战位：ceil(× 0.3)
+            $fit = $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => $yuhui, 'site' => 1, 'page' => 1]);
+            $this->assertSame(900 + 285, $fit['info']['attack']);
+            $this->assertSame($base + 900 + 285, $attackOf(), 'TeamBuilder 按 mid1 计入 ceil(950 × 0.3)');
+
+            // 换下：mid1 换成未装配的绝地，逾辉卸回
+            $this->assertSame(1, $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => $juedi, 'site' => 1])['status']);
+            $this->assertSame(0, (int)DB::table('own_mount')->where('id', $yuhui)->value('gid'));
+            // 互换：越影（mid0）放到 mid1，绝地换到 mid0
+            $this->assertSame(1, $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => $yueying, 'site' => 1])['status']);
+            $row = DB::table('general')->where('id', $gid)->first();
+            $this->assertSame([$juedi, $yueying, 0, 0, 0], [(int)$row['mid0'], (int)$row['mid1'], (int)$row['mid2'], (int)$row['mid3'], (int)$row['mid4']]);
+
+            // 同种特殊类型（1）不能同时佩戴
+            $this->assertSame(1, $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => $biyi, 'site' => 2])['status']);
+            $this->assertSame(-8, $this->request('mount', 'fit_on', ['gid' => $gid, 'mid' => $longque, 'site' => 3])['status']);
+            // 已被其他将领佩戴
+            $copy = DB::table('general')->where('id', $gid)->first();
+            unset($copy['id'], $copy['created_at'], $copy['updated_at'], $copy['deleted_at']);
+            $other = (int)DB::table('general')->insert(array_merge($copy, ['goout' => 0, 'mid0' => 0, 'mid1' => 0, 'mid2' => 0, 'mid3' => 0, 'mid4' => 0]));
+            $this->assertSame(-6, $this->request('mount', 'fit_on', ['gid' => $other, 'mid' => $biyi, 'site' => 0])['status']);
+
+            // 查询将领坐骑：mid 为 0 取第一匹；mid 不为 0 时才给 mlist
+            $info = $this->request('mount', 'get_info_by_id', ['gid' => $gid, 'page' => 1]);
+            $this->assertSame([1, $juedi, [], 1], [$info['status'], $info['minfo']['id'], $info['mlist'], $info['allpage']]);
+            $info = $this->request('mount', 'get_info_by_id', ['gid' => $gid, 'mid' => $yueying, 'page' => 1]);
+            $this->assertSame($yueying, $info['minfo']['id']);
+            $this->assertNotEmpty($info['mlist']);
+            $this->assertSame(-1, $this->request('mount', 'get_info_by_id', ['gid' => 999999999])['status']);
+            // 将领身上没有坐骑时取第 page 页第一匹未装配的整行（按 quality DESC…）
+            $info = $this->request('mount', 'get_info_by_id', ['gid' => $other, 'page' => 1]);
+            $this->assertSame($longque, $info['minfo']['id']);
+            $this->assertArrayHasKey('toexp', $info['minfo']);
+
+            // 卸下：将领该位置清零，坐骑 gid 清零
+            $down = $this->request('mount', 'take_down', ['mid' => $biyi, 'page' => 1]);
+            $this->assertSame(1, $down['status']);
+            $this->assertSame(0, $down['info']['mid2']);
+            $this->assertSame(0, (int)DB::table('general')->where('id', $gid)->value('mid2'));
+            $this->assertSame(0, (int)DB::table('own_mount')->where('id', $biyi)->value('gid'));
+            $this->assertSame(-1, $this->request('mount', 'take_down', ['mid' => 999999999])['status']);
+
+            // 升级界面：经验马 -6；列表不含自己
+            $this->assertSame(-6, $this->request('mount', 'get_level_info', ['id' => $silver])['status']);
+            $this->assertSame(-1, $this->request('mount', 'get_level_info', ['id' => 999999999])['status']);
+            $lv = $this->request('mount', 'get_level_info', ['id' => $yuhui]);
+            $this->assertSame(1, $lv['status']);
+            $this->assertNotContains($yuhui, array_column($lv['list'], 'id'));
+            $this->assertSame([$yuhui, 0, 100], [$lv['info']['id'], $lv['info']['level'], $lv['info']['levelup_exp']]);
+
+            // 升级：碎片 -7、已佩戴 -2、经验马 -6、满级 -4
+            $this->assertSame(-7, $this->request('mount', 'levelup', ['id' => $yuhui, 'list' => (string)$chipRow])['status']);
+            $this->assertSame(-2, $this->request('mount', 'levelup', ['id' => $yuhui, 'list' => (string)$juedi])['status']);
+            $this->assertSame(-6, $this->request('mount', 'levelup', ['id' => $silver, 'list' => (string)$longque])['status']);
+            $this->assertSame(-3, $this->request('mount', 'levelup', ['id' => 999999999, 'list' => (string)$longque])['status']);
+
+            // 逾辉吃经验银马（toexp 1000）：0 级 100 → 1 级 180 → 2 级 324 → 3 级，剩 396；系数 2.462
+            $up = $this->request('mount', 'levelup', ['id' => $yuhui, 'list' => (string)$silver]);
+            $this->assertSame(1, $up['status']);
+            $this->assertSame([3, 396, 584, 75 + 1000], [$up['info']['level'], $up['info']['exp'], $up['info']['levelup_exp'], $up['info']['toexp']]);
+            $this->assertSame(800 + (int)(150 * 2.462), $up['info']['attack']);
+            $this->assertSame(['level' => 3, 'exp' => 396, 'attack' => 1169, 'deleted' => true], [
+                'level' => (int)DB::table('own_mount')->where('id', $yuhui)->value('level'),
+                'exp' => (int)DB::table('own_mount')->where('id', $yuhui)->value('exp'),
+                'attack' => (int)DB::table('own_mount')->where('id', $yuhui)->value('attack'),
+                'deleted' => DB::table('own_mount')->where('id', $silver)->value('deleted_at') !== null,
+            ]);
+            $log = DB::table('mount_exp_log')->where('uid', $uid)->first();
+            $this->assertSame([$yuhui, (string)$silver, 1000, 396, 3], [(int)$log['mid'], $log['exp_mid'], (int)$log['add_exp'], (int)$log['now_exp'], (int)$log['now_level']]);
+            $info = DB::table('mount_info_log')->where('uid', $uid)->first();
+            $this->assertSame([2, 101, 'mount', 'levelup'], [(int)$info['type'], (int)$info['mid'], $info['class'], $info['method']]);
+
+            // 到 20 级封顶：溢出的经验不计入 toexp，exp 停在 19 级经验槽
+            DB::table('own_mount')->where('id', $yuhui)->update(['level' => 19, 'exp' => 0, 'toexp' => 100]);
+            $gold = $add(102);
+            $need = \Hanjiang\MasterData\MountLevel::ROWS[19]['exp'];
+            DB::table('own_mount')->where('id', $gold)->update(['toexp' => $need + 500]);
+            $up = $this->request('mount', 'levelup', ['id' => $yuhui, 'list' => (string)$gold]);
+            $this->assertSame([20, $need, 0, 100 + $need, 1], [$up['info']['level'], $up['info']['exp'], $up['info']['levelup_exp'], $up['info']['toexp'], $up['info']['is_full']]);
+            $this->assertSame(-4, $this->request('mount', 'levelup', ['id' => $yuhui, 'list' => (string)$longque])['status']);
+        });
     }
 
     public function testGemSystem(): void
     {
-        // 1. 查看宝石背包
-        $res = $this->request('gem', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
+        // 旧版 controllers/gem.php：主公 140 级开启，宝石在 own_gem，碎片 member.gem，格子占用 member.gemuse
+        $this->withFreshPlayer(function (int $uid): void {
+            $this->assertSame(2, $this->request('gem', 'index')['status'], '140 级以下未开启');
+            $this->assertSame(-1, $this->request('gem', 'mergegem_index')['status']);
+            $this->assertSame(1, $this->request('gem', 'get_gem_by_page')['status'], '翻页不检查开启');
+            DB::table('member')->where('uid', $uid)->update(['level' => 140]);
 
-        // 获取一件装备 ID
-        $pack = $this->request('pack', 'index');
-        $eid = (int)$pack['list'][1]['id'];
+            // 阵上将领穿赤铜刀（类型 1 → 镶 1 类宝石）、赤铜甲（类型 3 → 镶 2 类宝石）
+            $gid = (int)DB::table('general')->where('uid', $uid)->value('id');
+            $weapon = Equipment::addFromTemplate($uid, 1)[0];
+            $armor = Equipment::addFromTemplate($uid, 2)[0];
+            DB::table('equipment')->whereIn('id', [$weapon, $armor])->update(['generalid' => $gid]);
+            \Hanjiang\Model\OwnGem::addGem($uid, 1, 0, 2);   // 青龙石（类型 1）× 2
+            \Hanjiang\Model\OwnGem::addGem($uid, 2, 1);      // 玄武石（类型 2）1 级
+            DB::table('member')->where('uid', $uid)->update(['gemuse' => 3, 'gem' => 0]);
+            $gems = array_map('intval', DB::table('own_gem')->where('uid', $uid)->orderBy('id')->pluck('id'));
+            [$qing1, $qing2, $xuan] = $gems;
 
-        // 2. 镶嵌红宝石 (id: 1)
-        $adron = $this->request('gem', 'adron', ['gem_id' => 1, 'equip_id' => $eid]);
-        $this->assertSame(1, $adron['status']);
+            // 背包按 level DESC, type ASC：玄武 1 级在前；gem 为第一颗并带下一级信息（2 类系数 0.75：ceil(170 × 0.75) = 128）
+            $index = $this->request('gem', 'index');
+            $this->assertSame(1, $index['status']);
+            $this->assertSame([0, 1, 3, 1], [$index['pack']['chip'], $index['pack']['page'], $index['pack']['num'], $index['pack']['allpage']]);
+            $this->assertSame([$xuan, $qing1, $qing2], array_column($index['pack']['list'], 'id'));
+            $this->assertSame(['id', 'name', 'type', 'level', 'power', 'quality'], array_keys($index['pack']['list'][0]));
+            $this->assertSame([$xuan, 112, 128, 0], [$index['gem']['id'], $index['gem']['next_power'], $index['gem']['need_chip'], $index['gem']['ismax']]);
+            $this->assertSame([$weapon, $armor], array_column($index['eid_list'], 'id'));
+            $this->assertSame((string)DB::table('general')->where('id', $gid)->value('name'), $index['eid_list'][0]['generalname']);
+            $this->assertSame(0, $index['eid_list'][0][1], '第一件装备带 1 ~ 8 号位');
 
-        // 3. 拆卸宝石
-        $pickOff = $this->request('gem', 'pick_off', ['equip_id' => $eid]);
-        $this->assertSame(1, $pickOff['status']);
+            // 镶嵌：位置 / 装备 / 宝石 / 类型
+            $this->assertSame(-1, $this->request('gem', 'adron', ['id' => $qing1, 'eid' => $weapon, 'site' => 9])['status']);
+            $this->assertSame(-2, $this->request('gem', 'adron', ['id' => $qing1, 'eid' => 999999999, 'site' => 1])['status']);
+            $this->assertSame(-3, $this->request('gem', 'adron', ['id' => 999999999, 'eid' => $weapon, 'site' => 1])['status']);
+            $this->assertSame(-7, $this->request('gem', 'adron', ['id' => $xuan, 'eid' => $weapon, 'site' => 1])['status']);
+            $adron = $this->request('gem', 'adron', ['id' => $qing1, 'eid' => $weapon, 'site' => 1]);
+            $this->assertSame([1, 2, [$xuan, $qing2]], [$adron['status'], $adron['num'], array_column($adron['list'], 'id')]);
+            $this->assertSame(-5, $this->request('gem', 'adron', ['id' => $qing1, 'eid' => $weapon, 'site' => 1])['status']);
+            $this->assertSame(-4, $this->request('gem', 'adron', ['id' => $qing1, 'eid' => $armor, 'site' => 1])['status']);
+            // 位置已有宝石、当前宝石未镶嵌：原来那颗卸回背包，占用不变
+            $this->assertSame(2, $this->request('gem', 'adron', ['id' => $qing2, 'eid' => $weapon, 'site' => 1])['num']);
+            $this->assertSame([0, $weapon], [(int)DB::table('own_gem')->where('id', $qing1)->value('eid'), (int)DB::table('own_gem')->where('id', $qing2)->value('eid')]);
+            // 镶到 2 号位，再把 2 号位那颗挪到 1 号位：互换
+            $this->assertSame(1, $this->request('gem', 'adron', ['id' => $qing1, 'eid' => $weapon, 'site' => 2])['num']);
+            $this->assertSame(1, $this->request('gem', 'adron', ['id' => $qing1, 'eid' => $weapon, 'site' => 1])['status']);
+            $this->assertSame([1, 2], [(int)DB::table('own_gem')->where('id', $qing1)->value('site'), (int)DB::table('own_gem')->where('id', $qing2)->value('site')]);
 
-        // 4. 4合1宝石熔炼升级
-        $merge = $this->request('gem', 'merge_gem', ['gem_id' => 1]);
-        $this->assertSame(1, $merge['status']);
-        $this->assertSame(2, $merge['level']);
+            // 装备详情：1 ~ 8 号位与第一颗宝石；装备上没有宝石时取 gemid
+            $byId = $this->request('gem', 'get_gem_by_id', ['id' => $weapon]);
+            $this->assertSame([1, $qing1, $qing2, 0, $qing1], [$byId['status'], $byId['equip'][1]['id'], $byId['equip'][2]['id'], $byId['equip'][3], $byId['gem']['id']]);
+            $byId = $this->request('gem', 'get_gem_by_id', ['id' => $armor, 'gemid' => $xuan]);
+            $this->assertSame($xuan, $byId['gem']['id']);
+            $this->assertSame(-2, $this->request('gem', 'get_gem_by_id', ['id' => $armor, 'gemid' => 999999999])['status']);
+            $this->assertSame(-1, $this->request('gem', 'get_gem_by_id', ['id' => 0])['status']);
+
+            // TeamBuilder 按装备上的宝石 power 计入（青龙石 0 级 100 × 2）
+            $attack = (int)array_values(\Hanjiang\Battle\TeamBuilder::forMember($uid)['team'])[0]['attack'];
+
+            // 卸下：占用 +1
+            $this->assertSame(-2, $this->request('gem', 'pick_off', ['id' => $xuan])['status']);
+            $this->assertSame(-1, $this->request('gem', 'pick_off', ['id' => 0])['status']);
+            $off = $this->request('gem', 'pick_off', ['id' => $qing2]);
+            $this->assertSame([1, 2], [$off['status'], $off['num']]);
+            $this->assertSame($attack - 100, (int)array_values(\Hanjiang\Battle\TeamBuilder::forMember($uid)['team'])[0]['attack']);
+
+            // 升级：碎片不足 -5；够了扣 ceil(100 × 1) 碎片，power 取 level1
+            $this->assertSame(-5, $this->request('gem', 'level_up', ['id' => $qing1])['status']);
+            DB::table('member')->where('uid', $uid)->update(['gem' => 1000]);
+            $up = $this->request('gem', 'level_up', ['id' => $qing1]);
+            $this->assertSame([1, 122, 1, 1, 170, 149, 0, 900], [$up['status'], $up['power'], $up['quality'], $up['level'], $up['need_chip'], $up['next_power'], $up['ismax'], $up['all_chip']]);
+            $this->assertSame([1, 122], [(int)DB::table('own_gem')->where('id', $qing1)->value('level'), (int)DB::table('own_gem')->where('id', $qing1)->value('power')]);
+            $log = DB::table('gem_log')->where('uid', $uid)->orderBy('id', 'DESC')->first();
+            $this->assertSame([2, 100, 900, 'gem', 'level_up'], [(int)$log['type'], (int)$log['gem'], (int)$log['balance'], $log['class'], $log['method']]);
+            DB::table('own_gem')->where('id', $qing2)->update(['level' => 20]);
+            $this->assertSame(-2, $this->request('gem', 'level_up', ['id' => $qing2])['status'], '20 级不能再升');
+            $info = $this->request('gem', 'get_gem_info', ['id' => $qing2]);
+            $this->assertSame([1, 1, 5], [$info['status'], $info['gem']['ismax'], $info['gem']['quality']]);
+            $this->assertSame(-1, $this->request('gem', 'get_gem_info', ['id' => 999999999])['status']);
+
+            // 转碎片：1 级 2 类 = ceil(100 × 0.75) + 50 = 125；不确认只报价
+            $turn = $this->request('gem', 'gem_turn', ['id' => $xuan]);
+            $this->assertSame([1, 125, 900, 2], [$turn['status'], $turn['chip'], $turn['all_chip'], $turn['num']]);
+            $turn = $this->request('gem', 'gem_turn', ['id' => $xuan, 'confirm' => 1]);
+            $this->assertSame([1, 125, 1025, 1], [$turn['status'], $turn['chip'], $turn['all_chip'], $turn['num']]);
+            $this->assertNotNull(DB::table('own_gem')->where('id', $xuan)->value('deleted_at'));
+            $this->assertSame(-1, $this->request('gem', 'gem_turn', ['id' => $xuan])['status']);
+
+            // 翻页
+            $this->assertSame(-1, $this->request('gem', 'get_gem_by_page', ['p' => 2])['status']);
+            $this->assertSame([$qing2], array_column($this->request('gem', 'get_gem_by_page', ['p' => 1])['list'], 'id'));
+
+            // 合成：两颗同类型 20 级 → 一颗 21 级新宝石（Gem 6 ~ 10），记 own_gem_mergelog，不改 gemuse
+            \Hanjiang\Model\OwnGem::addGem($uid, 1, 20);
+            \Hanjiang\Model\OwnGem::addGem($uid, 2, 20);
+            \Hanjiang\Model\OwnGem::addGem($uid, 1, 19);
+            DB::table('member')->where('uid', $uid)->update(['gemuse' => 4]);
+            [$qing3, $xuan20, $qing19] = array_map('intval', DB::table('own_gem')->where('uid', $uid)->where('id', '>', $xuan)->orderBy('id')->pluck('id'));
+
+            $merge = $this->request('gem', 'mergegem_index');
+            $this->assertSame([1, '成功', [6, 7, 8, 9, 10], 1, 1], [$merge['status'], $merge['msg'], array_column($merge['temp'], 'id'), $merge['allpage'], $merge['page']]);
+            $this->assertSame([6], array_values(array_unique(array_column($merge['temp'], 'quality'))));
+            $this->assertSame([$qing2, $qing3, $xuan20, $qing19], array_column($merge['list'], 'id'));
+            $this->assertSame(1, $merge['gem']['ismax']);
+            $this->assertSame(-1, $this->request('gem', 'get_20gem_by_page', ['page' => 2])['status']);
+            $this->assertSame(1, $this->request('gem', 'get_20gem_by_page', ['page' => 1])['status']);
+
+            $this->assertSame(-3, $this->request('gem', 'merge_gem', ['gemid1' => $qing2, 'gemid2' => $qing2])['status']);
+            $this->assertSame(-4, $this->request('gem', 'merge_gem', ['gemid1' => $qing2, 'gemid2' => $qing19])['status']);
+            $this->assertSame(-5, $this->request('gem', 'merge_gem', ['gemid1' => $qing2, 'gemid2' => $xuan20])['status']);
+            // 锁还在：返回 -2 并删掉锁
+            Redis::set('gem_merge_gem_' . $uid, 1, 30);
+            $this->assertSame(-2, $this->request('gem', 'merge_gem', ['gemid1' => $qing2, 'gemid2' => $qing3])['status']);
+            $this->assertNull(Redis::get('gem_merge_gem_' . $uid));
+
+            $done = $this->request('gem', 'merge_gem', ['gemid1' => $qing2, 'gemid2' => $qing3]);
+            $this->assertSame(1, $done['status']);
+            $newId = $done['new_gem']['id'];
+            $this->assertSame(['status' => 1, 'id' => $newId, 'name' => '苍龙石', 'type' => 1, 'quality' => 6,
+                'power' => \Hanjiang\MasterData\Gem::ROWS[6]['level21'], 'level' => 21], $done['new_gem']);
+            $this->assertSame(4, $done['num'], '旧版合成不改 gemuse');
+            $this->assertSame([$newId, $xuan20, $qing19], array_column($done['list'], 'id'));
+            $log = DB::table('own_gem_mergelog')->where('uid', $uid)->first();
+            $this->assertSame([$qing2, $qing3, $newId], [(int)$log['gemid1'], (int)$log['gemid2'], (int)$log['new_gemid']]);
+            $this->assertSame(2, DB::table('own_gem')->whereIn('id', [$qing2, $qing3])->whereNotNull('deleted_at')->count());
+            $this->assertNull(Redis::get('gem_merge_gem_' . $uid));
+            // 21 级可继续升到 25 级
+            $this->assertSame(0, $this->request('gem', 'get_gem_info', ['id' => $newId])['gem']['ismax']);
+        });
     }
 
     /**
@@ -3044,7 +3416,7 @@ final class GameApiTest extends TestCase
             // 档位 5：元宝 300、银币 800000、突飞卡 100、黄宝石 100（MasterData FirstRecharge 5）
             $member = DB::table('member')->where('uid', $uid)->first();
             $field = DB::table('member_field')->where('uid', $uid)->first();
-            $jade = Redis::getJson('user_trader:' . $uid);
+            $jade = \Hanjiang\Model\TraderLog::get($uid);
             $reward = $this->request('first_recharge', 'get_reward', ['id' => 5]);
             $this->assertSame(1, $reward['status']);
             $this->assertSame([
@@ -3059,7 +3431,7 @@ final class GameApiTest extends TestCase
             $this->assertSame((int)$member['gold'] + 300, (int)$after['gold']);
             $this->assertSame((int)$member['silver'] + 800000, (int)$after['silver']);
             $this->assertSame((int)$field['freeleap'] + 100, (int)DB::table('member_field')->where('uid', $uid)->first()['freeleap']);
-            $this->assertSame((int)($jade['get2'] ?? 0) + 100, Redis::getJson('user_trader:' . $uid)['get2']);
+            $this->assertSame((int)($jade['get2'] ?? 0) + 100, \Hanjiang\Model\TraderLog::jade($uid, 2));
             $this->assertSame([0, 0, 0, 0, 2, 0], array_column($reward['list'], 'status'));
             $this->assertSame(5, (int)DB::table('first_recharge_log')->where('uid', $uid)->first()['status']);
             // 不是最高档：图标不再显示
@@ -3094,14 +3466,14 @@ final class GameApiTest extends TestCase
 
             // 抽到已拥有的武将：按酒馆紫宝石价格 * 0.8 返还紫宝石
             DB::table('first_recharge_log')->where('uid', $uid)->update(['lottery' => 0]);
-            $purple = (int)(Redis::getJson('user_trader:' . $uid)['get3'] ?? 0);
+            $purple = \Hanjiang\Model\TraderLog::jade($uid, 3);
             mt_srand(20261031);
             $again = $this->request('first_recharge', 'action');
             $this->assertSame(1, $again['status']);
             $refund = (int)(\Hanjiang\MasterData\Pub::ROWS[$expected['getvalue']]['price'] * 0.8);
             $this->assertSame(3, $again['info']['jadetype']);
             $this->assertEquals($refund, $again['info']['jadenum']);
-            $this->assertSame($purple + $refund, Redis::getJson('user_trader:' . $uid)['get3']);
+            $this->assertSame($purple + $refund, \Hanjiang\Model\TraderLog::jade($uid, 3));
         });
     }
 
@@ -3137,15 +3509,50 @@ final class GameApiTest extends TestCase
 
     public function testStudfarmSystem(): void
     {
-        // 1. 查看伯乐马场
-        $res = $this->request('studfarm', 'index');
-        $this->assertSame(1, $res['status']);
-        $this->assertNotEmpty($res['list']);
+        // 旧版 controllers/studfarm.php：三档取 MountRatio，花黄 / 紫宝石（trader_log.get2 / get3），首次必得最高品级
+        $this->withFreshPlayer(function (int $uid): void {
+            $this->assertSame(2, $this->request('studfarm', 'index')['status'], '120 级以下未开启');
+            DB::table('member')->where('uid', $uid)->update(['level' => 120]);
 
-        // 2. 执行相马
-        $horse = $this->request('studfarm', 'action', ['id' => 1]);
-        $this->assertSame(1, $horse['status']);
-        $this->assertArrayHasKey('mount_name', $horse);
+            $index = $this->request('studfarm', 'index');
+            $this->assertSame([1, 0, 0, 0], [$index['status'], $index['jade1'], $index['jade2'], $index['jade3']]);
+            $this->assertSame([1, 2, 3], array_column($index['list'], 'id'));
+            $this->assertSame([1, 1, 1, 1, 0, 0, 0], array_map(static fn (int $i): int => $index['list'][0]['rate' . $i], range(1, 7)), '权重大于 0 显示为 1');
+            $this->assertSame(500, $index['list'][0]['price']);
+
+            $this->assertSame(-1, $this->request('studfarm', 'action', ['id' => 9, 'new' => 1])['status']);
+            $this->assertSame(-3, $this->request('studfarm', 'action', ['id' => 1])['status']);
+            $this->assertSame(-2, $this->request('studfarm', 'action', ['id' => 1, 'new' => 1])['status'], '黄宝石不足');
+
+            \Hanjiang\Model\TraderLog::addJade($uid, 2, 1200);
+            \Hanjiang\Model\TraderLog::addJade($uid, 3, 100);
+            $this->assertSame(-2, $this->request('studfarm', 'action', ['id' => 3, 'new' => 1])['status'], '紫宝石不足');
+
+            // 首次十里挑一：必得 4 品（金）坐骑（模板 7 ~ 10），记 mount_log.first1
+            $first = $this->request('studfarm', 'action', ['id' => 1, 'new' => 1]);
+            $this->assertSame([1, 1, 700, 100], [$first['status'], $first['first'], $first['jade2'], $first['jade3']]);
+            $this->assertSame(4, $first['info']['quality']);
+            $this->assertContains($first['info']['mid'], [7, 8, 9, 10]);
+            $this->assertSame(1, DB::table('own_mount')->where('uid', $uid)->where('mid', $first['info']['mid'])->whereNull('deleted_at')->count());
+            $log = DB::table('mount_log')->where('uid', $uid)->first();
+            $this->assertGreaterThan(0, (int)$log['first1']);
+            $this->assertSame([0, 0], [(int)$log['first2'], (int)$log['first3']]);
+            $jadeLog = DB::table('tavernjade_log')->where('uid', $uid)->where('type', 2)->first();
+            $this->assertSame([2, 500, 700, 'studfarm', 'action'], [(int)$jadeLog['jadetype'], (int)$jadeLog['jade'], (int)$jadeLog['balance'], $jadeLog['class'], $jadeLog['method']]);
+
+            // 之后按 rate1 ~ rate7 权重抽品级，再在该品级模板（id < 100）里等概率抽
+            mt_srand(20261030);
+            $rate = mt_rand(1, 100);
+            $quality = $rate <= 20 ? 1 : ($rate <= 50 ? 2 : ($rate <= 80 ? 3 : 4));
+            $pool = array_values(array_filter(\Hanjiang\MasterData\MountTemp::ROWS, static fn (array $t): bool => $t['quality'] === $quality && $t['id'] < 100));
+            $expect = $pool[mt_rand(1, count($pool)) - 1]['id'];
+            mt_srand(20261030);
+            $again = $this->request('studfarm', 'action', ['id' => 1, 'new' => 1]);
+            mt_srand();
+            $this->assertSame([1, 0, 200], [$again['status'], $again['first'], $again['jade2']]);
+            $this->assertSame([$expect, $quality], [$again['info']['mid'], $again['info']['quality']]);
+            $this->assertSame(-2, $this->request('studfarm', 'action', ['id' => 1, 'new' => 1])['status']);
+        });
     }
 
     public function testJadegambleSystem(): void
@@ -3820,7 +4227,7 @@ final class GameApiTest extends TestCase
         $this->assertGreaterThan(255, strlen($reward));
         $this->assertSame(substr($reward, 0, 255), $log['reward']);
 
-        // 再打：普通经验 + 每人按掉率掷点（mt_rand(1, 100) <= get_rate），军团 1 掉装备碎片（依赖未移植，只回报不发放）
+        // 再打：普通经验 + 每人按掉率掷点（mt_rand(1, 100) <= get_rate），军团 1 掉装备碎片（add_item 碎片分支，1 片）
         DB::table('elite_log')->where('leader', $a['uid'])->update(['dateline' => time() - 11]);
         mt_srand(20261031);
         $rolls = [mt_rand(1, 100), mt_rand(1, 100), mt_rand(1, 100)];
@@ -3836,7 +4243,12 @@ final class GameApiTest extends TestCase
                 $expected = ['exp' => $city['exp'], 'first_exp' => $city['first_exp'], 'itemid' => $chip['id'], 'itemtype' => 1, 'quality' => $chip['quality'], 'itemname' => $chip['name'] . '碎片'];
             }
             $this->assertSame($expected + ['number' => 8], $res['info'][(string)$uid], "roll {$rolls[$i]}");
-            $this->assertSame(1, DB::table('equipment')->where('uid', $uid)->where('equipid', $item['id'])->count(), '碎片不发放');
+            $this->assertSame(1, DB::table('equipment')->where('uid', $uid)->where('equipid', $item['id'])->where('chip', 0)->count());
+            if ($rolls[$i] <= $city['get_rate']) {
+                $chipRow = DB::table('equipment')->where('uid', $uid)->where('equipid', $city['get_value'])->where('chip', '>', 0)->first();
+                $this->assertSame(1, (int)$chipRow['chip'], '碎片 1 片');
+                $this->assertSame(['elite', 'action'], array_values(DB::table('itemchip_log')->select('class', 'method')->where('uid', $uid)->first()));
+            }
             $generals = DB::table('general')->where('uid', $uid)->count();
             $this->assertSame($expBefore[$uid] + $generals * $city['exp'], $exp($uid));
         }
@@ -5176,7 +5588,7 @@ final class GameApiTest extends TestCase
             $rankA = \Hanjiang\Model\CountryBoss::myRank($country, $a['uid']);
             $rankB = \Hanjiang\Model\CountryBoss::myRank($country, $b['uid']);
             $this->assertSame([1, 2], [min($rankA, $rankB), max($rankA, $rankB)]);
-            $jade = static fn (int $uid): int => (int)(Redis::getJson('user_trader:' . $uid)['get3'] ?? 0);
+            $jade = static fn (int $uid): int => \Hanjiang\Model\TraderLog::jade($uid, 3);
             $jadeB = $jade($b['uid']);
             $res = $this->bossRequest('countryboss', 'reward', $b['auth']);
             $row = \Hanjiang\MasterData\CountryBossReward::ROWS[$rankB];
@@ -5198,6 +5610,11 @@ final class GameApiTest extends TestCase
                 ],
             ], $res);
             $this->assertSame($jadeB + (int)ceil($row['win_jade_num'] * 1.5), $jade($b['uid']));
+            // 装备碎片照旧版 add_item 碎片分支发放（满 chipNum(品质) 片合成整件），记 itemchip_log
+            $full = \Hanjiang\Battle\LegacyStats::chipNum($item['quality']);
+            $chips = DB::table('equipment')->where('uid', $b['uid'])->where('equipid', $item['id'])->whereNull('deleted_at')->get();
+            $this->assertSame($row['win_item_num'], array_sum(array_map(static fn (array $r): int => (int)$r['chip'] === 0 ? $full : (int)$r['chip'], $chips)));
+            $this->assertSame([$row['win_item_num'], 'countryboss', 'reward'], [(int)($l = DB::table('itemchip_log')->where('uid', $b['uid'])->first())['num'], $l['class'], $l['method']]);
             $this->assertSame(2, $this->bossRequest('countryboss', 'reward', $b['auth'])['status']);
             $res = $this->bossRequest('countryboss', 'reward', $a['auth']);
             $this->assertSame([1, 0, $rankA, \Hanjiang\MasterData\CountryBossReward::ROWS[$rankA]['win_jade_num']], [$res['status'], $res['reward']['lasthit'], $res['reward']['rank'], $res['reward']['jadenum']]);
@@ -5956,7 +6373,7 @@ final class GameApiTest extends TestCase
 
     private function passJade(int $uid, int $type): int
     {
-        return (int)((Redis::getJson('user_trader:' . $uid) ?: [])['get' . $type] ?? 0);
+        return \Hanjiang\Model\TraderLog::jade($uid, $type);
     }
 
     /**
@@ -6088,6 +6505,7 @@ final class GameApiTest extends TestCase
                     'yellow' => $this->passJade($p['uid'], 2),
                     'soul' => (int)DB::table('member')->where('uid', $p['uid'])->value('soul'),
                     'freeleap' => (int)DB::table('member_field')->where('uid', $p['uid'])->value('freeleap'),
+                    'gem' => \Hanjiang\Model\OwnGem::chip($p['uid']),
                 ];
                 $res = $this->passRequest($p, 'action', ['id' => 1, 'type' => 2]);
                 $this->assertSame(1, $res['status']);
@@ -6098,11 +6516,7 @@ final class GameApiTest extends TestCase
                     3 => $this->assertSame($before['yellow'] + $value, $this->passJade($p['uid'], 2)),
                     5 => $this->assertSame($before['soul'] + $value, (int)DB::table('member')->where('uid', $p['uid'])->value('soul')),
                     10 => $this->assertSame($before['freeleap'] + $value, (int)DB::table('member_field')->where('uid', $p['uid'])->value('freeleap')),
-                    9 => $this->assertSame($before, [
-                        'lottery' => $this->passLottery($p['uid']), 'yellow' => $this->passJade($p['uid'], 2),
-                        'soul' => (int)DB::table('member')->where('uid', $p['uid'])->value('soul'),
-                        'freeleap' => (int)DB::table('member_field')->where('uid', $p['uid'])->value('freeleap'),
-                    ], '宝石碎片依赖未移植，不发放'),
+                    9 => $this->assertSame([$before['gem'] + $value, 'pass_general', 'action'], [\Hanjiang\Model\OwnGem::chip($p['uid']), ($g = DB::table('gem_log')->where('uid', $p['uid'])->orderBy('id', 'DESC')->first())['class'], $g['method']], '宝石碎片 member.gem'),
                     26 => $this->assertSame($value, $reward['general']['generalid']),
                 };
                 if ($reward['type'] === 27) {
@@ -6568,7 +6982,7 @@ final class GameApiTest extends TestCase
         $this->b2Overpower($uid);
         $m1 = self::sanctumMission(1);
 
-        // 真实战斗：首通，记战报，首杀碎片（宝石碎片依赖未移植，只回报）
+        // 真实战斗：首通，记战报，首杀碎片发进 member.gem（add_gem）
         $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1]);
         $this->assertSame(1, $res['status']);
         $battle = $res['battle'];
@@ -6579,6 +6993,9 @@ final class GameApiTest extends TestCase
         $info = $res['info'];
         $this->assertSame([$battle['assess'], 1, 80, 0, 1, 0, 9], [$info['win'], $info['firstkill'], $info['first_chip_num'], $info['chip'], $info['stage'], $info['complete'], $info['times']]);
         $this->assertSame(['firstkill' => 1], $res['mission']);
+        $this->assertSame([80, 80], [$info['all_chip'], \Hanjiang\Model\OwnGem::chip($uid)]);
+        $this->assertSame(['sanctum', 'action', 80], [($g = DB::table('gem_log')->where('uid', $uid)->first())['class'], $g['method'], (int)$g['gem']]);
+        $this->assertSame(80, $this->b2Request('sanctum', 'select_map', $p['auth'] + ['l' => 1])['gem']);
         $this->assertSame(['stage' => 1, 'missionid' => 1], $this->b2Row('sanctum_open_map', $uid, ['stage', 'missionid']));
         $log = DB::table('sanctum_mission_log')->where('uid', $uid)->first();
         $this->assertSame($info['report'], (int)$log['id'], '战报 id 即通过记录 id');
@@ -6600,7 +7017,7 @@ final class GameApiTest extends TestCase
 
         // 再打一次：普通碎片，不再记战报
         $res = $this->b2Request('sanctum', 'action', $p['auth'] + ['id' => 1]);
-        $this->assertSame([0, 4, 0], [$res['info']['firstkill'], $res['info']['chip'], $res['info']['report']]);
+        $this->assertSame([0, 4, 0, 84], [$res['info']['firstkill'], $res['info']['chip'], $res['info']['report'], $res['info']['all_chip']]);
         $this->assertSame(['firstkill' => 0], $res['mission']);
         $this->assertSame(1, DB::table('sanctum_mission_log')->where('uid', $uid)->count());
         $this->assertSame(1, $this->b2Request('sanctum', 'get_mission_info', $p['auth'] + ['id' => 1])['mop_up']);
@@ -6611,8 +7028,12 @@ final class GameApiTest extends TestCase
         $this->assertSame([2, 0], [$res['info']['stage'], $res['info']['complete']]);
         $this->assertSame(['stage' => 2, 'missionid' => 10], $this->b2Row('sanctum_open_map', $uid, ['stage', 'missionid']));
         if ($res['info']['gem'] > 0) {
-            // 宝石掉落按掷点回报（own_gem 依赖未移植，不发放）
+            // 宝石掉落按掷点发进 own_gem（add_gem），宝石格子占用加颗数（add_gemuse）
             $this->assertSame([1, \Hanjiang\MasterData\Gem::ROWS[1]['name'], 1, 1], [$res['info']['gem'], $res['info']['gem_name'], $res['info']['gem_num'], $res['info']['gem_quality']]);
+            $this->assertSame(1, DB::table('own_gem')->where('uid', $uid)->where('gemid', 1)->whereNull('deleted_at')->count());
+            $this->assertSame(1, (int)DB::table('member')->where('uid', $uid)->value('gemuse'));
+        } else {
+            $this->assertSame(0, DB::table('own_gem')->where('uid', $uid)->count());
         }
 
         // 打过圣域最后一关：complete，index 显示通关
@@ -6712,6 +7133,10 @@ final class GameApiTest extends TestCase
         DB::table('member_activity')->where('uid', $uid)->update(['sanctumdate' => strtotime('yesterday')]);
         $res = $this->b2Request('sanctum', 'get_reward', $p['auth'] + ['type' => 1]);
         $this->assertSame([1, 300, 1000 - $ratio[2]['sub']], [$res['status'], $res['gem'], $res['all_gold']]);
+        // 每日奖励的碎片发进 member.gem，all_gem 为当前碎片数
+        $doubled = (int)(300 * $ratio[2]['ratio'] / 100);
+        $this->assertSame([$doubled + 300, $doubled + 300], [$res['all_gem'], \Hanjiang\Model\OwnGem::chip($uid)]);
+        $this->assertSame([[$doubled, 'get_reward'], [300, 'get_reward']], array_map(static fn (array $r): array => [(int)$r['gem'], $r['method']], DB::table('gem_log')->where('uid', $uid)->orderBy('id')->get()));
 
         // 战报分享：聊天室未移植，返回失败且不扣元宝
         $this->assertSame(['status' => -1], $this->b2Request('sanctum', 'send_to_chat', $p['auth'] + ['id' => 1]));
@@ -6846,6 +7271,10 @@ final class GameApiTest extends TestCase
         $this->assertSame([0, 100, 900, 1900, 60, 0, 0], [$res['info']['five_sub'], $res['info']['ten_sub'], $res['info']['fifty_sub'], $res['info']['hundred_sub'], $res['info']['refinestone'], $res['info']['colorstone'], $res['info']['bloodstone']]);
         $this->assertSame([5, $gold], [$res['times'], $res['gold']]);
         $this->assertSame(['freeheaven' => 0, 'heaventimes' => 5], $this->b2Row('member_activity', $uid, ['freeheaven', 'heaventimes']));
+        // 精炼石发进 member.refinestone（add_stone 类型 1），resource 为当前三种石头
+        $this->assertSame(\Hanjiang\Model\MemberStone::all($uid), $res['resource']);
+        $this->assertGreaterThanOrEqual(60, $res['resource']['refinestone']);
+        $this->assertSame(['heaven', 'mop_up', 60], [($l = DB::table('stone_log')->where('uid', $uid)->where('method', 'mop_up')->first())['class'], $l['method'], (int)$l['stone']]);
 
         // 次数不足：差额每次 20 元宝，补买的次数累加到 member_field.heaventimes
         $res = $this->b2Request('heaven', 'mop_up', $p['auth'] + ['id' => 1, 'times' => 10]);
@@ -6883,8 +7312,9 @@ final class GameApiTest extends TestCase
         DB::table('member')->where('uid', $q['uid'])->update(['gold' => 500]);
         $this->assertSame([
             'status' => 1, 'effect' => 0, 'reward' => ['refinestone' => 330, 'colorstone' => 0, 'bloodstone' => 15], 'gold' => 300,
-            'resource' => ['refinestone' => 0, 'colorstone' => 0, 'bloodstone' => 0],
+            'resource' => ['refinestone' => 330, 'colorstone' => 0, 'bloodstone' => 15],
         ], $this->b2Request('heaven', 'get_reward', $q['auth'] + ['type' => 2]));
+        $this->assertSame([[1, 330], [3, 15]], array_map(static fn (array $r): array => [(int)$r['stone_type'], (int)$r['stone']], DB::table('stone_log')->where('uid', $q['uid'])->where('method', 'get_reward')->orderBy('id')->get()));
         $this->assertSame(['status' => 2, 'msg' => '今日已领取过奖励'], $this->b2Request('heaven', 'reward_info', $q['auth']));
         $this->assertSame(['status' => 2, 'msg' => '今日已领取过奖励'], $this->b2Request('heaven', 'get_reward', $q['auth']));
         DB::table('member_activity')->where('uid', $q['uid'])->update(['heavendate' => strtotime('yesterday')]);
@@ -7015,7 +7445,7 @@ final class GameApiTest extends TestCase
         $this->assertSame(['status' => 1], $this->b2Request('herothrone', 'end_battle', $p['auth']));
         $this->assertSame(['stage' => 0, 'status' => 0], $this->b2Row('herothrone_log', $uid, ['stage', 'status']));
 
-        // 真实战斗胜利：进度 + 1，刷新历史最高；第 10 关奖励银币（玉石依赖未移植，只回报）
+        // 真实战斗胜利：进度 + 1，刷新历史最高；第 10 关奖励玉石（add_jade）与银币
         $q = $this->b2Player(101);
         $quid = $q['uid'];
         $this->b2Overpower($quid);
@@ -7031,6 +7461,8 @@ final class GameApiTest extends TestCase
         $res = $this->b2Request('herothrone', 'action', $q['auth']);
         $this->assertSame([['gettype' => 2, 'getvalue' => 20000], ['gettype' => 1, 'getvalue' => 50000]], $res['info']['reward']);
         $this->assertSame([$silver + 50000, $silver + 50000], [$res['info']['all_silver'], $this->b2Member($quid, 'silver')]);
+        $this->assertSame(20000, \Hanjiang\Model\MemberJade::get($quid));
+        $this->assertSame(['herothrone', 'action'], array_values(DB::table('jade_log')->select('class', 'method')->where('uid', $quid)->first()));
         $this->assertSame(['stage' => 10, 'laststage' => 10], $this->b2Row('herothrone_log', $quid, ['stage', 'laststage']));
         // 打过最高层：本局结束
         DB::table('herothrone_log')->where('uid', $quid)->update(['stage' => 299]);
@@ -7356,11 +7788,14 @@ final class GameApiTest extends TestCase
             $reward = $this->b2Request('compete', 'get_reward', $d['auth']);
             $row1 = \Hanjiang\MasterData\CompeteReward::ROWS[1];
             $this->assertSame(1, $reward['status']);
-            $this->assertSame(\Hanjiang\MasterData\MountTemp::ROWS[$row1['value1']], $reward['reward']['value1'], '坐骑只回报不发放');
+            // 坐骑照旧版 add_mount 发进 own_mount，value 换成 add_mount 返回的坐骑数据
+            $mountRow = DB::table('own_mount')->where('uid', $d['uid'])->where('mid', $row1['value1'])->whereNull('deleted_at')->first();
+            $this->assertNotNull($mountRow);
+            $this->assertSame([$d['uid'], (int)$row1['value1'], \Hanjiang\MasterData\MountTemp::ROWS[$row1['value1']]['name'], (int)$mountRow['attack']], [$reward['reward']['value1']['uid'], $reward['reward']['value1']['mid'], $reward['reward']['value1']['name'], $reward['reward']['value1']['attack']]);
             $this->assertSame($silver + $row1['value4'], $this->b2Member($d['uid'], 'silver'));
             $this->assertSame($soul + $row1['value3'], $this->b2Member($d['uid'], 'soul'));
             $this->assertSame($silver + $row1['value4'], $reward['all_silver']);
-            $this->assertSame($row1['value2'], (int)(Redis::getJson('user_trader:' . $d['uid'])['get3'] ?? 0), '紫宝石');
+            $this->assertSame($row1['value2'], \Hanjiang\Model\TraderLog::jade($d['uid'], 3), '紫宝石');
             $this->assertSame(1, (int)DB::table('compete')->where('uid', $d['uid'])->value('get_rank'));
             $this->assertSame(-5, $this->b2Request('compete', 'get_reward', $d['auth'])['status']);
             $this->assertSame(1, $this->b2Request('compete', 'index', $d['auth'])['is_get']);
@@ -7458,7 +7893,10 @@ final class GameApiTest extends TestCase
             // 未到收获时间不能收获；放弃得到已累积的玉石（5 分钟 × 每分钟 4368）
             $this->assertSame(-3, $this->b2Request('countrymine', 'get_reward', $a['auth'])['status']);
             $give = $this->b2Request('countrymine', 'give_up', $a['auth']);
-            $this->assertSame(['status' => 1, 'jade' => 21840, 'all_jade' => 0], $give);
+            // 玉石发进 member.jade（add_jade），all_jade 为加后的余额
+            $this->assertSame(['status' => 1, 'jade' => 21840, 'all_jade' => 21840], $give);
+            $this->assertSame(21840, \Hanjiang\Model\MemberJade::get($a['uid']));
+            $this->assertSame(['countrymine', 'give_up', 21840, 21840], [($l = DB::table('jade_log')->where('uid', $a['uid'])->first())['class'], $l['method'], (int)$l['jade'], (int)$l['balance']]);
             $this->assertSame(0, (int)DB::table('member_field')->where('uid', $a['uid'])->value('oncountrymine'));
             $this->assertSame(-2, $this->b2Request('countrymine', 'give_up', $a['auth'])['status']);
             $this->assertSame(-2, $this->b2Request('countrymine', 'get_reward', $a['auth'])['status']);
@@ -7515,7 +7953,7 @@ final class GameApiTest extends TestCase
             mt_srand($this->mineSeed([[1, 100, 51, 100]]));
             $gold = $this->b2Member($a['uid'], 'gold');
             $harvest = $this->b2Request('countrymine', 'get_reward', $a['auth']);
-            $this->assertSame(['status' => 1, 'event_status' => 0, 'event_name' => '', 'event_type' => 0, 'event_value' => 0, 'event_add' => 0, 'jade' => 65520, 'all_jade' => 0, 'all_gold' => $gold], $harvest);
+            $this->assertSame(['status' => 1, 'event_status' => 0, 'event_name' => '', 'event_type' => 0, 'event_value' => 0, 'event_add' => 0, 'jade' => 65520, 'all_jade' => 65520, 'all_gold' => $gold], $harvest);
             $this->assertSame([0, 0], array_map('intval', array_values(DB::table('country_mine')->select('page', 'site')->where('uid', $a['uid'])->first())));
             $this->assertSame(0, $this->b2Request('member', 'index', $a['auth'])['oncountrymine']);
 
@@ -7544,7 +7982,8 @@ final class GameApiTest extends TestCase
             $rob = $this->b2Request('countrymine', 'rob', $b['auth'] + ['p' => 2, 'id' => 1, 't' => 3]);
             $this->assertSame(1, $rob['status']);
             $perMinute = intdiv(91 * 120 * 25 / 10, 15);
-            $this->assertSame([3, 2, $perMinute * 10, 0, 0, 'p' . $a['uid']], [$rob['info']['win'], $rob['info']['robtimes'], $rob['info']['jade'], $rob['info']['all_jade'], $rob['info']['event_status'], $rob['info']['name']]);
+            $this->assertSame([3, 2, $perMinute * 10, \Hanjiang\Model\MemberJade::get($b['uid']), 0, 'p' . $a['uid']], [$rob['info']['win'], $rob['info']['robtimes'], $rob['info']['jade'], $rob['info']['all_jade'], $rob['info']['event_status'], $rob['info']['name']]);
+            $this->assertSame($perMinute * 10, (int)DB::table('jade_log')->where('uid', $b['uid'])->where('method', 'rob')->value('jade'));
             $this->assertSame(['id' => $rob['info']['report'], 'type' => 'countrymine'], $rob['share']);
             $this->assertSame(['name', 'level', 'gender'], array_keys($rob['battle']['right_role']));
             $this->assertSame([0, 0], array_map('intval', array_values(DB::table('country_mine')->select('page', 'site')->where('uid', $a['uid'])->first())));
@@ -7836,6 +8275,14 @@ final class GameApiTest extends TestCase
             $this->assertSame($silver + $view['rule']['silver'], $get['all_silver']);
             $this->assertSame([0, 0], array_map('intval', array_values(DB::table('member_country')->select('city', 'warstatus')->where('uid', $king['uid'])->first())));
             $this->assertSame(['status' => -2], $this->b2Request('siege', 'get_reward', $king['auth'] + ['type' => 1]));
+            // 91 级以上俸禄含玉石（add_jade，大于 0 才加）
+            DB::table('member_country')->where('uid', $king['uid'])->update(['warstatus' => 1]);
+            DB::table('member')->where('uid', $king['uid'])->update(['level' => 91]);
+            $jade = (int)round(91 * $rule['jade'] * $ratio) * 3;
+            $this->assertGreaterThan(0, $jade);
+            $this->assertSame(1, $this->b2Request('siege', 'get_reward', $king['auth'] + ['type' => 1])['status']);
+            $this->assertSame($jade, \Hanjiang\Model\MemberJade::get($king['uid']));
+            $this->assertSame(['siege', 'get_reward'], array_values(DB::table('jade_log')->select('class', 'method')->where('uid', $king['uid'])->first()));
 
             // 国战日志：周六 21:00 以后显示本周
             $this->assertSame([], $this->b2Request('siege', 'siege_notice', $king['auth'])['log']);

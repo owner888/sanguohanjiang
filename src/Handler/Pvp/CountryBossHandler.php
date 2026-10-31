@@ -9,6 +9,7 @@ use Hanjiang\Handler\General\TavernHandler;
 use Hanjiang\MasterData\Equip;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\CountryBoss;
+use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\WorldBoss;
 use OmniPHP\Database\DB;
@@ -380,7 +381,7 @@ final class CountryBossHandler
                     $return['reward']['quality'] = (int)$item['quality'];
                     $return['reward']['itemnum'] = $reward['itemnum'];
                     $return['reward']['itemname'] = $item['name'] . self::LANG_CHIP;
-                    // 依赖未移植：添加碎片 equipment_model->add_item($item, 1, itemnum)（Equipment 碎片分支、itemchip_log）
+                    Equipment::addChip($uid, (int)$item['id'], $reward['itemnum'], 'countryboss', 'reward', $now);
                 }
             }
             // 添加宝石
@@ -388,7 +389,7 @@ final class CountryBossHandler
                 $return['reward']['jadetype'] = $reward['jadetype'];
                 $return['reward']['jadenum'] = $reward['jadenum'];
                 $return['reward']['jadename'] = $reward['jadetype'] === 2 ? '金宝石' : '紫宝石';
-                TavernHandler::addJade($uid, $reward['jadetype'], $reward['jadenum']);
+                TavernHandler::addJade($uid, $reward['jadetype'], $reward['jadenum'], 'countryboss', 'reward');
             }
             // 最后一击
             $return['reward']['lasthit'] = $reward['lasthit'];

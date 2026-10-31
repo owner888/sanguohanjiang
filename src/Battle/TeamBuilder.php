@@ -12,12 +12,15 @@ use Hanjiang\MasterData\HeavenMonster;
 use Hanjiang\MasterData\HerothroneMonster;
 use Hanjiang\MasterData\IslandMonster;
 use Hanjiang\MasterData\Monster;
+use Hanjiang\MasterData\MountTemp;
 use Hanjiang\MasterData\RefineAchieve;
 use Hanjiang\MasterData\SanctumMonster;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\SoulMonster;
 use Hanjiang\MasterData\Talent;
+use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnMatrix;
+use Hanjiang\Model\OwnMount;
 use OmniPHP\Database\DB;
 use RuntimeException;
 
@@ -130,9 +133,23 @@ final class TeamBuilder
         // 装备：旧版 own_general.eid1~eid4，新版由 equipment.generalid + 装配位置派生
         $equipBySite = self::equipmentBySite($uid, array_keys($generalArr));
 
-        // 依赖未移植：坐骑 mount_model->get_info_by_id（own_general.mid0~mid4）
+        // 坐骑：mount_model->get_info_by_id（own_general.mid0~mid4 → own_mount.id）
+        $mountIds = [];
+        foreach ($generalArr as $row) {
+            for ($i = 0; $i <= 4; $i++) {
+                if ((int)$row['mid' . $i] > 0) {
+                    $mountIds[(int)$row['mid' . $i]] = (int)$row['mid' . $i];
+                }
+            }
+        }
+        $mountArr = $mountIds === [] ? [] : OwnMount::infoById($uid, array_values($mountIds));
+        // 本队品级最高的坐骑（旧版 _mount_info[uuid]：按站位顺序，品级更高才替换），用于战斗 buff 的 mount
+        $mountInfo = [];
+
+        // 宝石：gem_model->get_gem_by_eid，按装备累加 gem_power
+        $gemPowerByEid = self::gemPowerByEid($uid, $equipBySite);
+
         // 依赖未移植：锻造套装 equip_forge_model->get_suit_attr（newquality > 0 的装备）
-        // 依赖未移植：宝石 gem_model->get_gem_by_eid，各装备 gem_power 按 0
         // 依赖未移植：将魂 soul_model->get_general_soul / get_soul_by_id（转生 > 0 的将领）
         // 依赖未移植：主公天赋 talent_model->get_talent_list（主公 91 级开启）
         // 依赖未移植：名将进阶 advanced_model->get_advanced_by_gid（主公 100 级开启）
@@ -159,19 +176,36 @@ final class TeamBuilder
 
             $level = (int)$generalInfo['level'];
             $turn = (int)$generalInfo['turn'];
-            // 依赖未移植：宝石加成 gem_power（_get_general_attack 等的第三项）
-            $gemPower = 0;
-            // 攻击 / 物防 / 策防 / 血量 = 武将成长值 + 对应装配位置装备 powerup + gem_power（_get_general_attack / _defense_1 / _defense_2 / _blood）
-            $general['attack'] = (int)(LegacyStats::baseAttack($level, $turn) + self::slotPowerup($eids, 1) + $gemPower);
-            $general['defense1'] = (int)(LegacyStats::baseDefense($level, $turn) + self::slotPowerup($eids, 2) + $gemPower);
-            $general['defense2'] = (int)(LegacyStats::basePdefense($level, $turn) + self::slotPowerup($eids, 3) + $gemPower);
-            $general['all_blood'] = (int)(LegacyStats::baseHp($level, $turn) + self::slotPowerup($eids, 4) + $gemPower);
+            // 攻击 / 物防 / 策防 / 血量 = 武将成长值 + 对应装配位置装备 powerup + 该装备的宝石 gem_power
+            // （_get_general_attack / _defense_1 / _defense_2 / _blood）
+            $general['attack'] = (int)(LegacyStats::baseAttack($level, $turn) + self::slotPowerup($eids, 1) + self::slotGemPower($eids, 1, $gemPowerByEid));
+            $general['defense1'] = (int)(LegacyStats::baseDefense($level, $turn) + self::slotPowerup($eids, 2) + self::slotGemPower($eids, 2, $gemPowerByEid));
+            $general['defense2'] = (int)(LegacyStats::basePdefense($level, $turn) + self::slotPowerup($eids, 3) + self::slotGemPower($eids, 3, $gemPowerByEid));
+            $general['all_blood'] = (int)(LegacyStats::baseHp($level, $turn) + self::slotPowerup($eids, 4) + self::slotGemPower($eids, 4, $gemPowerByEid));
 
-            // 依赖未移植：坐骑攻防血（mid0 主战 100%、mid1~mid4 备战 ceil(× 0.3)；坐骑系统 120 级开启）
-            $general['attack'] += 0;
-            $general['defense1'] += 0;
-            $general['defense2'] += 0;
-            $general['all_blood'] += 0;
+            // 坐骑攻防血：mid0 主战 100%，mid1~mid4 备战 ceil(× 0.3)
+            $ownMountTemp = [];
+            for ($i = 0; $i <= 4; $i++) {
+                $mount = $mountArr[(int)$generalInfo['mid' . $i]] ?? null;
+                if ($mount === null) {
+                    continue;
+                }
+                $ownMountTemp[(int)$mount['id']] = ['mid' => (int)$mount['mid'], 'level' => (int)$mount['level']];
+                if ($i === 0) {
+                    $general['attack'] += (int)$mount['attack'];
+                    $general['defense1'] += (int)$mount['wufang'];
+                    $general['defense2'] += (int)$mount['cefang'];
+                    $general['all_blood'] += (int)$mount['hp'];
+                } else {
+                    $general['attack'] += (int)ceil((int)$mount['attack'] * 0.3);
+                    $general['defense1'] += (int)ceil((int)$mount['wufang'] * 0.3);
+                    $general['defense2'] += (int)ceil((int)$mount['cefang'] * 0.3);
+                    $general['all_blood'] += (int)ceil((int)$mount['hp'] * 0.3);
+                }
+                if ($mountInfo === [] || (int)$mount['quality'] > (int)$mountInfo['quality']) {
+                    $mountInfo = $mount;
+                }
+            }
             // 依赖未移植：名将进阶初始血量 _advanced_arr[ugid][hp]（主公 100 级）
             $general['all_blood'] += 0;
             // 依赖未移植：主公天赋 hero_talent（主公 91 级；type 1 猛将攻击 / 3 谋士攻击 / 2 物防 / 4 策防 / 5 血量）
@@ -214,10 +248,48 @@ final class TeamBuilder
             $general['defense2'] = $refineInfo['defense2'];
             $general['all_blood'] = $refineInfo['all_blood'];
 
-            // 依赖未移植：坐骑模板特殊属性（攻击% / 双防% / 抗暴 / 血量% / 抗晕 / 减伤 / 吸血）
-            $general['attack'] += 0;
+            // 坐骑模板特殊属性（type 1 攻击% / 2 双防% / 3 抗暴 / 4 血量% / 5 抗晕 / 6 减伤 / 7 吸血），
+            // 加成值 = value + level × 坐骑等级；4 ~ 6 旧版记在 _suit_arr[ugid]，这里记在单位的 suit 上（BattleEngine 读取）
+            foreach ($ownMountTemp as $own) {
+                $temp = MountTemp::ROWS[$own['mid']] ?? null;
+                if ($temp === null || $temp['type'] <= 0) {
+                    continue;
+                }
+                $mountRatio = $temp['value'] + $temp['level'] * $own['level'];
+                switch ($temp['type']) {
+                    case 1:
+                        $general['attack'] += (int)($general['attack'] * ($mountRatio / 100));
+                        break;
+                    case 2:
+                        $general['defense1'] += (int)($general['defense1'] * ($mountRatio / 100));
+                        $general['defense2'] += (int)($general['defense2'] * ($mountRatio / 100));
+                        break;
+                    case 3:
+                        $general['kcrit'] += $mountRatio;
+                        break;
+                    case 4:
+                        $general['suit']['ptblood'] = ($general['suit']['ptblood'] ?? 0) + $mountRatio;
+                        break;
+                    case 5:
+                        $general['suit']['kangyun'] = ($general['suit']['kangyun'] ?? 0) + $mountRatio;
+                        break;
+                    case 6:
+                        $general['suit']['lastjianhurt'] = ($general['suit']['lastjianhurt'] ?? 0) + $mountRatio;
+                        break;
+                    case 7:
+                        $general['suitbuff']['xixue'] += $mountRatio;
+                        break;
+                }
+            }
 
             $team[$pos] = $general;
+        }
+
+        // 战斗 buff 的坐骑（旧版 battle() 按单位 uuid 取 _mount_info；同一玩家各单位相同）
+        if ($mountInfo !== []) {
+            foreach ($team as $pos => $general) {
+                $team[$pos]['mountinfo'] = ['mid' => (int)$mountInfo['mid'], 'name' => (string)$mountInfo['name'], 'quality' => (int)$mountInfo['quality']];
+            }
         }
 
         $return['status'] = 1;
@@ -492,6 +564,38 @@ final class TeamBuilder
     private static function slotPowerup(array $eids, int $site): int
     {
         return isset($eids[$site]) ? (int)$eids[$site]['powerup'] : 0;
+    }
+
+    /**
+     * 某装配位置装备上镶嵌的宝石属性和（equipment_arr[eid]['gem_power']；没有装备为 0）
+     *
+     * @param array<int, array<string, mixed>> $eids
+     * @param array<int, int> $gemPowerByEid
+     */
+    private static function slotGemPower(array $eids, int $site, array $gemPowerByEid): int
+    {
+        return isset($eids[$site]) ? ($gemPowerByEid[(int)$eids[$site]['id']] ?? 0) : 0;
+    }
+
+    /**
+     * 上阵将领装备上的宝石属性（gem_model->get_gem_by_eid(装备 id 数组)：按 eid 累加 power）
+     *
+     * @param array<int, array<int, array<string, mixed>>> $equipBySite
+     * @return array<int, int> 装备 id => 宝石属性和
+     */
+    private static function gemPowerByEid(int $uid, array $equipBySite): array
+    {
+        $eids = [];
+        foreach ($equipBySite as $sites) {
+            foreach ($sites as $item) {
+                $eids[] = (int)$item['id'];
+            }
+        }
+        $return = [];
+        foreach ($eids === [] ? [] : OwnGem::byEid($uid, $eids) as $gem) {
+            $return[(int)$gem['eid']] = ($return[(int)$gem['eid']] ?? 0) + (int)$gem['power'];
+        }
+        return $return;
     }
 
     /**

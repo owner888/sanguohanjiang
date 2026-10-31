@@ -34,6 +34,14 @@ class Member extends Model
         'gold' => 'int',
         'reputation' => 'int',
         'soul' => 'int',
+        'souluse' => 'int',
+        'soulpack' => 'int',
+        'jade' => 'int',
+        'gem' => 'int',
+        'gemuse' => 'int',
+        'refinestone' => 'int',
+        'colorstone' => 'int',
+        'bloodstone' => 'int',
         'act' => 'int',
         'maxact' => 'int',
         'vip' => 'int',
@@ -190,5 +198,112 @@ class Member extends Model
         ]);
 
         Redis::del('player:' . $uid);
+    }
+
+    /**
+     * 以玩家行锁串行化同一玩家的物品读改写（多 Worker 安全）
+     *
+     * 在事务里先对 member 行加 FOR UPDATE，再执行 $callback；调用方已在事务中时沿用调用方的事务
+     * （行锁持有到调用方提交），否则自开事务。用于没有唯一键可做 upsert 的多行物品存储
+     * （装备碎片 / 天赋卷轴 / 装备精华、坐骑碎片、酒馆宝石首行）。
+     *
+     * @template T
+     * @param callable(): T $callback
+     * @return T
+     */
+    public static function locked(int $uid, callable $callback): mixed
+    {
+        $run = static function () use ($uid, $callback): mixed {
+            DB::query('SELECT `uid` FROM `zc_sanguo_member` WHERE `uid` = :uid FOR UPDATE', ['uid' => $uid]);
+            return $callback();
+        };
+        return DB::inTransaction() ? $run() : DB::transaction($run);
+    }
+
+    /**
+     * 流水表需要的玩家等级与 VIP（旧版各 _xxx_log 记 $this->member 的 level / vip）；玩家不存在返回 null
+     *
+     * @return array{level: int, vip: int}|null
+     */
+    public static function logInfo(int $uid): ?array
+    {
+        $row = DB::table('member')->select('level', 'vip')->where('uid', $uid)->whereNull('deleted_at')->first();
+        return $row === null ? null : ['level' => (int)$row['level'], 'vip' => (int)$row['vip']];
+    }
+
+    /**
+     * member 上的计数列原子增加，返回增加后的值；玩家不存在返回 null
+     *
+     * 用 LAST_INSERT_ID(expr) 在同一条 UPDATE 里取回新值，余额与并发写入无竞争。$column 只接受本类调用方的列名常量。
+     */
+    public static function incrementColumn(int $uid, string $column, int $num): ?int
+    {
+        $col = self::counterColumn($column);
+        $affected = DB::execute(
+            "UPDATE `zc_sanguo_member` SET `{$col}` = LAST_INSERT_ID(`{$col}` + :num) WHERE `uid` = :uid AND `deleted_at` IS NULL",
+            ['num' => $num, 'uid' => $uid]
+        );
+        if ($affected === 0) {
+            return null;
+        }
+        Redis::del('player:' . $uid);
+        return (int)DB::query('SELECT LAST_INSERT_ID() AS `v`')[0]['v'];
+    }
+
+    /**
+     * member 上的计数列原子减少（余额不足不扣），返回减少后的值；余额不足或玩家不存在返回 null
+     *
+     * 条件 UPDATE（列 >= 数量）防并发超扣。
+     */
+    public static function decrementColumn(int $uid, string $column, int $num): ?int
+    {
+        $col = self::counterColumn($column);
+        $affected = DB::execute(
+            "UPDATE `zc_sanguo_member` SET `{$col}` = LAST_INSERT_ID(`{$col}` - :num)
+             WHERE `uid` = :uid AND `deleted_at` IS NULL AND `{$col}` >= :need",
+            ['num' => $num, 'uid' => $uid, 'need' => $num]
+        );
+        if ($affected === 0) {
+            return null;
+        }
+        Redis::del('player:' . $uid);
+        return (int)DB::query('SELECT LAST_INSERT_ID() AS `v`')[0]['v'];
+    }
+
+    /**
+     * member 上的计数列原子减少，不足时减到 0（旧版无下限检查的减法写进无符号列，MySQL 非严格模式截到 0），返回减少后的值；
+     * 玩家不存在返回 null
+     */
+    public static function decrementColumnFloor(int $uid, string $column, int $num): ?int
+    {
+        $col = self::counterColumn($column);
+        $affected = DB::execute(
+            "UPDATE `zc_sanguo_member` SET `{$col}` = LAST_INSERT_ID(IF(`{$col}` > :num, `{$col}` - :num2, 0))
+             WHERE `uid` = :uid AND `deleted_at` IS NULL",
+            ['num' => $num, 'num2' => $num, 'uid' => $uid]
+        );
+        if ($affected === 0 && self::logInfo($uid) === null) {
+            return null;
+        }
+        Redis::del('player:' . $uid);
+        return $affected === 0
+            ? (int)DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value($col)
+            : (int)DB::query('SELECT LAST_INSERT_ID() AS `v`')[0]['v'];
+    }
+
+    /**
+     * 流水表的 class / method 列值：旧版列宽较窄（多为 VARCHAR(20)），旧版库非严格模式写入时截断，这里照样截到列宽
+     */
+    public static function logText(string $value, int $length): string
+    {
+        return mb_substr($value, 0, $length);
+    }
+
+    private static function counterColumn(string $column): string
+    {
+        return match ($column) {
+            'jade', 'gem', 'gemuse', 'refinestone', 'colorstone', 'bloodstone', 'souluse', 'soulpack' => $column,
+            default => throw new \InvalidArgumentException("member 计数列不支持：{$column}"),
+        };
     }
 }

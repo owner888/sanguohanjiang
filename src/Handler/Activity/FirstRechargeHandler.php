@@ -133,12 +133,12 @@ final class FirstRechargeHandler
                     $return['info']['equip'] = self::equipInfo($tpl);
                     break;
                 case 3: // 黄宝石
-                    TavernHandler::addJade($uid, 2, $value);
+                    TavernHandler::addJade($uid, 2, $value, 'first_recharge', 'get_reward');
                     $return['info']['jadetype'] = 2;
                     $return['info']['jadenum'] = $value;
                     break;
                 case 4: // 紫宝石
-                    TavernHandler::addJade($uid, 3, $value);
+                    TavernHandler::addJade($uid, 3, $value, 'first_recharge', 'get_reward');
                     $return['info']['jadetype'] = 3;
                     $return['info']['jadenum'] = $value;
                     break;
@@ -271,7 +271,7 @@ final class FirstRechargeHandler
                     }
                     $return['info']['jadetype'] = 3;
                     $return['info']['jadenum'] = (int)$pub['price'] * self::REBATE;
-                    TavernHandler::addJade($uid, 3, (int)$return['info']['jadenum']);
+                    TavernHandler::addJade($uid, 3, (int)$return['info']['jadenum'], 'first_recharge', 'action');
                 } else {
                     General::createFromTemplate($uid, $generalid);
                     // 依赖未移植：7 星以上武将的小喇叭 / 聊天室广播、酒馆日志 add_pub_log(generalid, 1, 11)

@@ -70,6 +70,8 @@ final class MemberHandler
                 'silver' => 88888,
                 'gold' => 9999,
                 'reputation' => 100,
+                // 旧版 member_model->insert_member：将魂包裹 4 格
+                'soulpack' => 4,
                 'act' => 100,
                 'maxact' => 100,
                 'vip' => 1,

@@ -16,6 +16,9 @@ use Hanjiang\MasterData\MountTemp;
 use Hanjiang\MasterData\TalentScroll;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\MemberStone;
+use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\PassGeneral;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -38,14 +41,15 @@ use OmniPHP\Http\Context;
  * 依赖未移植：
  * - 跨服排行 uc_model->get_top_rank / update_top_rank（uc 服务器 herothrone 排行，旧版缓存在 Redis herothrone 键 1800 秒）：
  *   index / go_back 的 list 恒为空数组，过关刷新历史最高时不上报；
- * - 奖励 2 玉石 member.jade（add_jade）、4 装备碎片（equipment_model->add_item 碎片分支）、5 / 6 天赋卷轴
- *   （add_talent_scroll）、11 ~ 13 精炼石 / 五彩石 / 上古血玉（add_stone）、14 / 15 坐骑（mount_model->add_mount）：只回报不发放；
- * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数；各奖励的流水。
+ * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数；银币 / 声望 / 原魂的流水。
  */
 final class HerothroneHandler
 {
     /** 开启功能需要等级 */
     private const int OPEN_LEVEL = 101;
+
+    /** 物品流水的执行类（旧版 $this->class） */
+    private const string LOG_CLASS = 'herothrone';
 
     /** 失败后，用元宝继续攻击需要元宝 */
     private const int PRICE = 50;
@@ -293,7 +297,7 @@ final class HerothroneHandler
                 }
                 // 发放前面关卡的奖励
                 foreach ($getReward as $val) {
-                    $item = self::grantReward($uid, $val['gettype'], $val['gettype'] >= 3 && $val['gettype'] <= 6 || $val['gettype'] >= 14 ? self::valueId($val['getvalue']) : (int)$val['getvalue'], (int)($val['getnum'] ?? 0));
+                    $item = self::grantReward($uid, $val['gettype'], $val['gettype'] >= 3 && $val['gettype'] <= 6 || $val['gettype'] >= 14 ? self::valueId($val['getvalue']) : (int)$val['getvalue'], (int)($val['getnum'] ?? 0), 'start');
                     if ($item === null) {
                         continue;
                     }
@@ -436,7 +440,7 @@ final class HerothroneHandler
                     if ($type <= 0 || $value <= 0) {
                         continue;
                     }
-                    $item = self::grantReward($uid, $type, $value, $mission['getnum' . $i]);
+                    $item = self::grantReward($uid, $type, $value, $mission['getnum' . $i], 'action');
                     if ($item === null) {
                         continue;
                     }
@@ -631,11 +635,11 @@ final class HerothroneHandler
     /**
      * 发放一项奖励并返回回报给客户端的 getvalue（旧版 start / action 里按 gettype 分支的发放逻辑）
      *
-     * 道具 / 卷轴 / 坐骑模板查不到时旧版不回报，返回 null。
+     * 道具 / 卷轴 / 坐骑模板查不到时旧版不回报，返回 null。$method 为当前接口（start / action），记物品流水用。
      *
      * @return int|array<string, mixed>|null
      */
-    private static function grantReward(int $uid, int $type, int $value, int $num): int|array|null
+    private static function grantReward(int $uid, int $type, int $value, int $num, string $method): int|array|null
     {
         switch ($type) {
             case 1:
@@ -644,7 +648,7 @@ final class HerothroneHandler
                 return $value;
             case 2:
                 // 奖励玉石
-                // 依赖未移植：member_model->add_jade（新版 member 表无 jade 字段），不发放
+                MemberJade::add($uid, $value, self::LOG_CLASS, $method);
                 return $value;
             case 3:
             case 4:
@@ -661,7 +665,7 @@ final class HerothroneHandler
                 ];
                 if ($type === 4) {
                     // 添加碎片
-                    // 依赖未移植：equipment_model->add_item($item, 1) 碎片分支，不发放
+                    Equipment::addChip($uid, $value, 1, self::LOG_CLASS, $method);
                     $itemInfo['itemname'] .= self::LANG_BASE_CHIP;
                 } else {
                     // 添加道具
@@ -682,7 +686,8 @@ final class HerothroneHandler
                     'quality' => $talent['quality'],
                     'itemname' => (EliteHandler::SCROLL_NAME[$talent['type']] ?? '') . self::LANG_BASE_SCROLL,
                 ];
-                // 依赖未移植：equipment_model->add_talent_scroll（6 卷轴、5 碎片），不发放
+                // 6 卷轴、5 碎片
+                Equipment::addTalentScroll($uid, $value, $type === 6 ? 0 : 1, 1, self::LOG_CLASS, $method);
                 if ($type === 5) {
                     $itemInfo['itemname'] .= self::LANG_BASE_CHIP;
                 }
@@ -701,13 +706,13 @@ final class HerothroneHandler
                 return $value;
             case 10:
                 // 紫宝石
-                TavernHandler::addJade($uid, 3, $value);
+                TavernHandler::addJade($uid, 3, $value, self::LOG_CLASS, $method);
                 return $value;
             case 11:
             case 12:
             case 13:
-                // 精炼石 / 五彩石 / 上古血玉
-                // 依赖未移植：member_model->add_stone($value, 1 / 2 / 3)（新版 member 表无石头字段），不发放
+                // 精炼石 / 五彩石 / 上古血玉（add_stone 类型 1 / 2 / 3）
+                MemberStone::add($uid, $value, $type - 10, self::LOG_CLASS, $method);
                 return $value;
             case 14:
             case 15:
@@ -717,9 +722,11 @@ final class HerothroneHandler
                 }
                 // 14 坐骑碎片；15 坐骑
                 $mountInfo = ['id' => $value, 'itemname' => $mount['name'], 'quality' => $mount['quality']];
-                // 依赖未移植：mount_model->add_mount（15 坐骑、14 碎片 $num 个），不发放
                 if ($type === 14) {
+                    OwnMount::addMount($uid, $value, 1, $num, self::LOG_CLASS, $method);
                     $mountInfo['itemname'] .= self::LANG_BASE_CHIP;
+                } else {
+                    OwnMount::addMount($uid, $value, class: self::LOG_CLASS, method: $method);
                 }
                 return $mountInfo;
         }

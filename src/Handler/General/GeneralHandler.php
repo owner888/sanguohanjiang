@@ -10,6 +10,8 @@ use Hanjiang\MasterData\RefineAchieve;
 use Hanjiang\MasterData\Skill;
 use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\General;
+use Hanjiang\Model\OwnGem;
+use Hanjiang\Model\OwnMount;
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
 
@@ -19,14 +21,18 @@ use OmniPHP\Database\DB;
  * 旧版 own_general.eid1~eid4 新版不存储，由 equipment.generalid + LegacyStats::itemSite 派生；
  * 出征名单为 general.goout（同旧版 own_general.goout，由 c=muster 的 go_battle / go_rest 维护）。
  *
+ * 界面血量含兵符宝石（gem_model->get_gem_by_eid，OwnGem）与坐骑血量（_get_mount_info，主公 120 级起，OwnMount）。
+ *
  * 依赖未移植（界面血量 / 三围加成，均按 0 计入 LegacyStats::infoHp 与 wuliup/zhiliup/tiliup）：
- * 兵符宝石 gem_model->get_gem_by_eid、主公天赋 _hero_talent_hp（主公 91 级以上）、名将进阶 _get_advanced_info（100 级）、
- * 坐骑 _get_mount_info（120 级）、名将成就 _get_achievement_info（81 级）、美人 _get_beauty_info（60 级）、
+ * 主公天赋 _hero_talent_hp（主公 91 级以上）、名将进阶 _get_advanced_info（100 级）、名将成就 _get_achievement_info（81 级）、美人 _get_beauty_info（60 级）、
  * 主公星魄 _get_star_info（80 级）、国家学院 _get_war_college_info（国家 30 级）、套装 _get_siut_info、
  * 将魂 _get_soul_info、神树活动 _get_sacredtree_info（index 的 tree 恒为 0）。
  */
 final class GeneralHandler
 {
+    /** 坐骑加成开启的主公等级（旧版 _get_mount_info） */
+    private const int MOUNT_OPEN_LEVEL = 120;
+
     /**
      * 旧版 get_info / _get_info 输出的将领字段（info_field），之后再追加 hp
      */
@@ -310,19 +316,57 @@ final class GeneralHandler
             return null;
         }
 
-        // 兵符加血：eid4 powerup（已含精炼 / 强化成就）；兵符宝石依赖未移植
-        $eid4Powerup = is_array($general['eid4']) ? (int)$general['eid4']['powerup'] : 0;
+        // 兵符加血：eid4 powerup（已含精炼 / 强化成就）+ 兵符上镶嵌的宝石属性（gem_model->get_gem_by_eid）
+        $eid4Powerup = 0;
+        $gemHp = 0;
+        if (is_array($general['eid4'])) {
+            $eid4Powerup = (int)$general['eid4']['powerup'];
+            foreach (OwnGem::byEid($uid, (int)$general['eid4']['id']) as $gem) {
+                $gemHp += (int)$gem['power'];
+            }
+        }
 
         $general['hp'] = LegacyStats::infoHp(
             $baseHp,
             $eid4Powerup,
-            0,
+            $gemHp,
             0,
             (int)$general['tili'],
             (int)$general['tiliup'],
             $talentBlood,
+            flatAdd: self::mountHp($uid, $general),
         );
         return $general;
+    }
+
+    /**
+     * 坐骑血量（移植 _get_mount_info：主公 120 级起，mid0 主战坐骑 100%、mid1 ~ mid4 备战 ceil(× 0.3)）
+     *
+     * @param array<string, mixed> $general
+     */
+    private static function mountHp(int $uid, array $general): float
+    {
+        $level = (int)(DB::table('member')->where('uid', $uid)->whereNull('deleted_at')->value('level') ?? 0);
+        if ($level < self::MOUNT_OPEN_LEVEL) {
+            return 0.0;
+        }
+        $midArr = [];
+        for ($i = 0; $i <= 4; $i++) {
+            if ((int)$general['mid' . $i] > 0) {
+                $midArr[$i] = (int)$general['mid' . $i];
+            }
+        }
+        if ($midArr === []) {
+            return 0.0;
+        }
+        $mlist = OwnMount::infoById($uid, array_values($midArr));
+        $hp = 0.0;
+        foreach ($midArr as $i => $mid) {
+            if (isset($mlist[$mid])) {
+                $hp += $i === 0 ? (int)$mlist[$mid]['hp'] : ceil((int)$mlist[$mid]['hp'] * 0.3);
+            }
+        }
+        return $hp;
     }
 
     /**
@@ -500,6 +544,28 @@ final class GeneralHandler
         }
         $info['hp'] = $general['hp'];
         return $info;
+    }
+
+    /**
+     * 旧版 general_model->get_own_by_id(数组)：本人、未删除的将领（旧版 own_general 字段，eid1~eid4 由装备派生）；
+     * 一个都查不到返回空数组。$gid 为单个 id 时同样返回列表（调用方取第一个）
+     *
+     * @param int|list<int> $gid
+     * @return list<array<string, mixed>>
+     */
+    public static function ownLegacyList(int $uid, int|array $gid): array
+    {
+        $ids = is_array($gid) ? $gid : [$gid];
+        if ($ids === []) {
+            return [];
+        }
+        $rows = DB::table('general')->where('uid', $uid)->whereIn('id', $ids)->whereNull('deleted_at')->orderBy('id', 'ASC')->get();
+        $eidsByGeneral = $rows === [] ? [] : self::equippedIdsByGeneral($uid);
+        $list = [];
+        foreach ($rows as $row) {
+            $list[] = self::legacyRow($row, $eidsByGeneral[(int)$row['id']] ?? [1 => 0, 2 => 0, 3 => 0, 4 => 0]);
+        }
+        return $list;
     }
 
     /**

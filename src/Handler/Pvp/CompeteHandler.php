@@ -15,6 +15,8 @@ use Hanjiang\MasterData\NewcompeteReward;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\OwnMount;
 use Hanjiang\Model\PassGeneral;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
@@ -34,7 +36,6 @@ use OmniPHP\Http\Context;
  *
  * 依赖未移植：
  * - 神树活动（activity_model->activity_status('sacredtree') / sacredtree_model->get_tree_by_uid），top_list 的 tree 恒为 0；
- * - 奖励 6 玉石（member.jade）、8 坐骑（mount_model->add_mount / own_mount）只回报不发放（CompeteReward 每档都有坐骑）；
  * - message_model->record_pk_report 信件战报（pm_report，供信件回放）；
  * - 聊天室战报分享（send_to_chat，见该方法）；元宝流水。
  */
@@ -196,7 +197,7 @@ final class CompeteHandler
         }
 
         // 添加奖励
-        $reward = self::grantReward($uid, $reward);
+        $reward = self::grantReward($uid, $reward, 'compete', 'get_reward');
 
         $after = self::member($uid) ?? $member;
         $return['status'] = 1;
@@ -444,7 +445,7 @@ final class CompeteHandler
             }
             // 修改领取状态（与玩家手动领取互斥）
             if (self::rewardLog((int)$val['rank'], $uid) === 1) {
-                self::grantReward($uid, $reward);
+                self::grantReward($uid, $reward, 'cron', 'get_compete_reward');
                 // 旧版 message_model->send_message 补发信件已注释，不发信
             }
         }
@@ -906,9 +907,10 @@ final class CompeteHandler
      * 类型：1 元宝、2 银币、3 紫宝石、4 突飞卡、5 原魂、6 玉石、7 装备（1 件）、8 坐骑（1 匹）
      *
      * @param array<string, mixed> $reward
-     * @return array<string, mixed> 7 装备 / 8 坐骑的 value 换成模板信息
+     * @param string $class / $method 物品流水的执行类与方法（旧版取当前请求：get_reward 或计划任务 cron::get_compete_reward）
+     * @return array<string, mixed> 7 装备的 value 换成模板信息，8 坐骑换成 add_mount 返回的坐骑数据（失败为 null）
      */
-    private static function grantReward(int $uid, array $reward): array
+    private static function grantReward(int $uid, array $reward, string $class, string $method): array
     {
         for ($i = 1; $i <= 4; $i++) {
             $value = $reward['value' . $i];
@@ -920,7 +922,7 @@ final class CompeteHandler
                     Member::addCurrency($uid, silver: (int)$value);
                     break;
                 case 3:
-                    TavernHandler::addJade($uid, 3, (int)$value);
+                    TavernHandler::addJade($uid, 3, (int)$value, $class, $method);
                     break;
                 case 4:
                     PassGeneral::addFreeleap($uid, (int)$value);
@@ -929,7 +931,7 @@ final class CompeteHandler
                     Member::addCurrency($uid, soul: (int)$value);
                     break;
                 case 6:
-                    // 依赖未移植：member_model->add_jade 玉石（新服 member 表无 jade 字段）
+                    MemberJade::add($uid, (int)$value, $class, $method);
                     break;
                 case 7:
                     if (isset(Equip::ROWS[$value])) {
@@ -939,8 +941,7 @@ final class CompeteHandler
                     }
                     break;
                 case 8:
-                    // 依赖未移植：mount_model->add_mount 坐骑（own_mount），只回报坐骑模板不发放
-                    $reward['value' . $i] = MountTemp::ROWS[$value] ?? [];
+                    $reward['value' . $i] = OwnMount::addMount($uid, (int)$value, class: $class, method: $method)['info'] ?? null;
                     break;
             }
         }

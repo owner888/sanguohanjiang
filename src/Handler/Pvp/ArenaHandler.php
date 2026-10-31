@@ -24,6 +24,11 @@ use Hanjiang\MasterData\Talent;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\General;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\MemberStone;
+use Hanjiang\Model\OwnGem;
+use Hanjiang\Model\OwnMount;
+use Hanjiang\Model\OwnSoul;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -100,12 +105,9 @@ final class ArenaHandler
     /** 装备精华奖励类型 → 精华模板 id（旧版 get_add_reward case 17 ~ 25） */
     private const array ESSENCE_ID = [17 => 1, 18 => 7, 19 => 13, 20 => 2, 21 => 8, 22 => 14, 23 => 3, 24 => 9, 25 => 15];
 
-    /**
-     * 兑换时无法发放的奖励类型（旧版 get_add_reward 发放所依赖的玩家存储新版没有）：
-     * 6 玉石（member.jade）、9 宝石碎片（member.gem）、14 ~ 16 精炼石 / 五彩石 / 上古血玉（own_stone）、
-     * 17 ~ 25 装备精华（equipment_model->add_tower_item）、26 坐骑（own_mount）、27 将魂（own_soul）、28 宝石（own_gem）
-     */
-    private const array UNPORTED_GRANT_TYPES = [6, 9, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28];
+    /** 兑换发放物品的流水执行类与方法（旧版 c=arena&m=shop_exchange） */
+    private const string LOG_CLASS = 'arena';
+    private const string LOG_METHOD_EXCHANGE = 'shop_exchange';
 
     /** 将魂品质 → 最高等级（旧版 soul_model->get_levelup_rule） */
     private const array SOUL_LEVEL_RULE = [1 => 7, 2 => 9, 3 => 11, 4 => 13, 5 => 15, 6 => 20];
@@ -1036,10 +1038,6 @@ final class ArenaHandler
         if ($shopList === null) {
             return ['status' => -3, 'msg' => self::LANG_SHOP_LIST_ERROR];
         }
-        // 依赖未移植：发放所需的玩家存储新版没有（见 UNPORTED_GRANT_TYPES），旧版会扣积分再发放；这里不扣积分、不兑换
-        if (in_array($shopList['re_type'], self::UNPORTED_GRANT_TYPES, true)) {
-            return ['status' => -3, 'msg' => self::LANG_SHOP_LIST_ERROR];
-        }
         // 获取产品剩余兑换次数（为 0 时，无限兑换）
         if ($shopList['num'] > 0) {
             $exchNum = self::getExchlogNum($uid, $shopList['type'], $now, $id);
@@ -1130,7 +1128,24 @@ final class ArenaHandler
                         3 => 2,
                         4 => 3,
                         default => 1,
-                    }, $num);
+                    }, $num, self::LOG_CLASS, self::LOG_METHOD_EXCHANGE);
+                }
+                break;
+            case 6: // 玉石
+                if ($isCheck) {
+                    MemberJade::add($uid, $num, self::LOG_CLASS, self::LOG_METHOD_EXCHANGE);
+                }
+                break;
+            case 9: // 宝石碎片
+                if ($isCheck) {
+                    OwnGem::addChip($uid, $num, self::LOG_CLASS, self::LOG_METHOD_EXCHANGE);
+                }
+                break;
+            case 14: // 精炼石
+            case 15: // 五彩石
+            case 16: // 上古血石
+                if ($isCheck) {
+                    MemberStone::add($uid, $num, $type - 13, self::LOG_CLASS, self::LOG_METHOD_EXCHANGE);
                 }
                 break;
             case 5: // 原魂
@@ -1197,20 +1212,27 @@ final class ArenaHandler
                 }
                 break;
             case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24: case 25: // 装备精华
-                // 依赖未移植：发放 equipment_model->add_tower_item
+                if ($isCheck && isset(EquipEssence::ROWS[self::ESSENCE_ID[$type]])) {
+                    Equipment::addTowerItem($uid, self::ESSENCE_ID[$type], $num);
+                }
                 $return['info'] = EquipEssence::ROWS[self::ESSENCE_ID[$type]] ?? [];
                 $return['info']['type'] = $type;
                 $return['info']['num'] = $num;
                 break;
             case 26: // 坐骑
-                // 依赖未移植：发放 mount_model->add_mount（own_mount）
+                if ($isCheck) {
+                    // 添加坐骑
+                    OwnMount::addMount($uid, $id, class: self::LOG_CLASS, method: self::LOG_METHOD_EXCHANGE);
+                }
                 if (isset(MountTemp::ROWS[$id])) {
                     $return['info'] = MountTemp::ROWS[$id];
                 }
                 break;
             case 27: // 将魂
-                // 依赖未移植：发放 soul_model->add_hero_soul（own_soul）
                 $soul = Soul::ROWS[$id] ?? null;
+                if ($isCheck) {
+                    OwnSoul::addHeroSoul($uid, $id, $level);
+                }
                 if ($soul !== null) {
                     $return['info'] = $soul;
                     $return['info']['image'] = $soul['type'] . $soul['quality'];
@@ -1219,8 +1241,11 @@ final class ArenaHandler
                 }
                 break;
             case 28: // 宝石
-                // 依赖未移植：发放 gem_model->add_gem（own_gem）与 member_model->add_gemuse
                 $gemInfo = Gem::ROWS[$id] ?? null;
+                if ($isCheck && OwnGem::addGem($uid, $id, $level, 1)['status'] === 1) {
+                    // 修改宝石格子占用数
+                    OwnGem::addGemuse($uid, 1);
+                }
                 if ($gemInfo !== null) {
                     $return['info'] = [
                         'gem' => $id,
@@ -1233,7 +1258,6 @@ final class ArenaHandler
                     ];
                 }
                 break;
-            // 依赖未移植：6 玉石 member_model->add_jade、9 宝石碎片 add_gem、14 ~ 16 add_stone（只用于发放，兑换前已拦下）
         }
         return $return;
     }

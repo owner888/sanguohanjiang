@@ -16,6 +16,7 @@ use Hanjiang\MasterData\SoulReward;
 use Hanjiang\MasterData\SoulScene;
 use Hanjiang\MasterData\SoulType;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\OwnSoul;
 use Hanjiang\Model\MemberActivity;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -34,9 +35,11 @@ use OmniPHP\Http\Context;
  * get_report_info、get_price、buy、reward_info、get_reward、send_to_chat（战报分享）。
  * 旧版 index（按 member_activity 记录的位置转发到上面三个列表接口）前端没有调用，不移植。
  *
+ * 将魂背包满（member.soulpack <= souluse，OwnSoul::isPackFull）时掉落将魂的关卡返回 2；将魂掉落发进 own_soul
+ * （OwnSoul::addHeroSoul，失败时扫荡返回 -10、挑战返回 -9）。
+ *
  * 依赖未移植：
- * - 将魂背包 member.soulpack / souluse（旧版 _isfull：背包满时掉落将魂的关卡返回 2），新版按未满处理；
- * - 将魂掉落 soul_model->add_hero_soul（own_soul），掉落判定照旧版掷点，但不发放，hero_soul 为空；
+ * - 主线任务 mainquest_model->task_action(15, 1)（获得任意将魂）；
  * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、四方来朝元宝计数；
  *   add_soul 的原魂流水 _soul_log；stat_model 消费统计（tower_buy / tower_jiabei）。
  */
@@ -519,7 +522,7 @@ final class TowerHandler
             return $return;
         }
 
-        if (self::isFull() && $info['soulid'] > 0) {
+        if (self::isFull($uid) && $info['soulid'] > 0) {
             // 包裹已满
             $return['status'] = 2;
             return $return;
@@ -608,8 +611,16 @@ final class TowerHandler
                 if (self::isDouble($now)) {
                     $num *= 2;
                 }
-                // 依赖未移植：soul_model->add_hero_soul($soulid, 0, $num)（own_soul + member.souluse，失败返回 -10），
-                // 发放后 hero_soul 为 name / quality / level / num；主线任务 mainquest_model->task_action(15, 1)
+                $add = OwnSoul::addHeroSoul($uid, $soulid, 0, $num);
+                if ($add === []) {
+                    // 获得将魂失败
+                    $return['status'] = -10;
+                    return $return;
+                }
+                // 依赖未移植：主线任务 mainquest_model->task_action(15, 1)（获得任意将魂）
+                foreach (['name', 'quality', 'level', 'num'] as $value) {
+                    $heroSoulArr[$value] = $add[$value];
+                }
             }
         }
 
@@ -702,7 +713,7 @@ final class TowerHandler
             return $return;
         }
 
-        if (self::isFull() && $info['soulid'] > 0) {
+        if (self::isFull($uid) && $info['soulid'] > 0) {
             // 包裹已满
             $return['status'] = 2;
             return $return;
@@ -769,8 +780,17 @@ final class TowerHandler
             if ($soulid > 0) {
                 $heroSoul = self::roll($info['soulid'], $info['getrate']);
                 if ($heroSoul > 0) {
-                    // 依赖未移植：soul_model->add_hero_soul($soulid)（own_soul + member.souluse，失败返回 -9），
-                    // 发放后 hero_soul 为 id / image / name / quality / power；主线任务 mainquest_model->task_action(15, 1)
+                    $add = OwnSoul::addHeroSoul($uid, $soulid);
+                    if ($add === []) {
+                        // 获得将魂失败
+                        $return['status'] = -9;
+                        return $return;
+                    }
+                    // 依赖未移植：主线任务 mainquest_model->task_action(15, 1)（获得任意将魂）
+                    $heroSoulArr = [];
+                    foreach (['id', 'image', 'name', 'quality', 'power'] as $value) {
+                        $heroSoulArr[$value] = $add[$value];
+                    }
                 }
             }
 
@@ -1334,11 +1354,10 @@ final class TowerHandler
     /**
      * 将魂包裹是否已满（构造函数 _isfull：member.soulpack <= member.souluse）
      *
-     * 依赖未移植：将魂背包（member.soulpack / souluse、own_soul），按未满处理。
      */
-    private static function isFull(): bool
+    private static function isFull(int $uid): bool
     {
-        return false;
+        return OwnSoul::isPackFull($uid);
     }
 
     /**

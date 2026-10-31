@@ -10,8 +10,10 @@ use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\ActivityTime;
 use Hanjiang\MasterData\EquipEssence;
 use Hanjiang\MasterData\HeavenMission;
+use Hanjiang\Model\Equipment;
 use Hanjiang\Model\Member;
 use Hanjiang\Model\MemberActivity;
+use Hanjiang\Model\MemberStone;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
 
@@ -27,17 +29,20 @@ use OmniPHP\Http\Context;
  * 客户端调用（heavenworld.js / miscpop.js）：index、get_mopup_price、mop_up、pk、get_report_list、get_report_info、buy、
  * reward_info、get_reward、send_to_chat、get_price。旧版公开方法另有 get_lastreward（内部计算用，前端不调用，不移植）。
  *
+ * 精炼石 / 五彩石 / 上古血玉存 member 三列（MemberStone），装备精华存 equipment type 100（Equipment::addTowerItem），
+ * 首杀、掉落、扫荡、每日奖励照旧版发放并记流水；resource 为当前三种石头数量。
+ *
  * 依赖未移植：
- * - 精炼石 / 五彩石 / 上古血玉 member.refinestone / colorstone / bloodstone（member_model->add_stone）：首杀、掉落、扫荡、
- *   每日奖励按旧版计算并回报，不发放；resource 里三种石头恒为 0；
- * - 装备精华 equipment_model->add_tower_item（own_equip type 100）：掉落按旧版掷点并回报精华信息，不发放；
  * - 聊天室战报广播 chat_model->get_message_str(38, …) / send_message_to_all（send_to_chat 暂返回 0，不扣元宝）；
- * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数；add_stone 的石头流水。
+ * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数。
  */
 final class HeavenHandler
 {
     /** 主公等级 160 起开放 */
     private const int OPEN_LEVEL = 160;
+
+    /** 物品流水的执行类（旧版 $this->class） */
+    private const string LOG_CLASS = 'heaven';
 
     /** 购买次数 / 扫荡补次数每次元宝（旧版 $_price，不累加） */
     private const int PRICE = 20;
@@ -64,6 +69,10 @@ final class HeavenHandler
         9 => '传递参数失败',
         10 => '元宝不足',
         11 => '扣除元宝失败',
+        12 => '获得五彩石失败',
+        13 => '获得上古血玉失败',
+        14 => '添加装备精华失败',
+        15 => '获得精炼石失败',
         16 => '次数不足',
         17 => '关卡未开启',
         18 => '获取战斗信息失败',
@@ -195,7 +204,7 @@ final class HeavenHandler
         // 剩余次数
         $return['times'] = $times;
         $return['get_reward'] = $getReward;
-        $return['resource'] = self::resource();
+        $return['resource'] = self::resource($uid);
         return $return;
     }
 
@@ -281,7 +290,7 @@ final class HeavenHandler
          * -11 加原魂失败
          * -12 获取扫荡价格失败
          * （旧版注释与代码不一致，以代码为准：-5 未击败该关卡，-8 元宝不足，-9 扣除失败，-24 首杀阶段不能扫荡；
-         *   -10 ~ -14 为加石头 / 精华 / 取价失败，依赖未移植或走不到）
+         *   -10 / -11 加五彩石 / 上古血玉失败（旧版判空，走不到），-12 加装备精华失败，-13 加精炼石失败，-14 取价失败（走不到））
          */
         $now = time();
         $return = [
@@ -406,12 +415,24 @@ final class HeavenHandler
                         ++$numb;
                     }
                 }
-                // 依赖未移植：member_model->add_stone($colorstone * $num, 2) / add_stone($bloodstone * $number, 3)，不发放
+                // 旧版以 empty(add_stone 返回值) 判 -10 / -11，返回值恒为非空数组，走不到
+                if ($num > 0) {
+                    // 添加五彩石
+                    MemberStone::add($uid, $colorstone * $num, MemberStone::COLOR, self::LOG_CLASS, 'mop_up', $now);
+                }
+                if ($number > 0) {
+                    // 添加上古血玉
+                    MemberStone::add($uid, $bloodstone * $number, MemberStone::BLOOD, self::LOG_CLASS, 'mop_up', $now);
+                }
             }
             $essenceValue = 0;
             if ($numb > 0) {
-                // 依赖未移植：equipment_model->add_tower_item（精华 equip_value × 掉落次数），不发放
+                // 添加装备精华
                 $essenceValue = $equipValue * $numb;
+                if (Equipment::addTowerItem($uid, (int)$equipid, $essenceValue) === 0) {
+                    // 添加装备失败
+                    return self::fail($return, -12, 14);
+                }
             }
 
             // 精炼石100%掉落
@@ -422,7 +443,10 @@ final class HeavenHandler
                     $refinestone *= 2;
                 }
                 $refinestone *= $times;
-                // 依赖未移植：member_model->add_stone($refinestone)，不发放
+                if (MemberStone::add($uid, $refinestone, MemberStone::REFINE, self::LOG_CLASS, 'mop_up', $now)['status'] !== 1) {
+                    // 加精炼石失败
+                    return self::fail($return, -13, 15);
+                }
             }
 
             $activity = self::lockActivity($uid);
@@ -447,7 +471,7 @@ final class HeavenHandler
             }
             $return['times'] = $leavetimes;
             $return['gold'] = self::memberValue($uid, 'gold');
-            $return['resource'] = self::resource();
+            $return['resource'] = self::resource($uid);
             return $return;
         });
     }
@@ -472,7 +496,7 @@ final class HeavenHandler
          *  2 包裹已满
          *  3 次数不足
          * （旧版注释与代码不一致，以代码为准：-3 次数不足，-4 获取关卡信息失败，-5 获取地图信息失败，-8 扣次数失败；
-         *   -9 ~ -12 为加石头 / 精华失败，依赖未移植走不到）
+         *   -9 / -10 加五彩石 / 上古血玉失败（旧版判空，走不到），-11 加装备精华失败，-12 加精炼石失败）
          */
         $now = time();
         $return = ['status' => 0];
@@ -588,7 +612,8 @@ final class HeavenHandler
                         $return['info']['first_type'] = $info['first_type'];
                         $return['info']['first_value'] = $info['first_value'];
                         $return['info']['firstkill'] = 1;
-                        // 依赖未移植：member_model->add_stone(first_value, first_type)（1 精炼石 / 2 五彩石 / 3 上古血玉），不发放
+                        // 添加各种石头（1 精炼石 / 2 五彩石 / 3 上古血玉）
+                        MemberStone::add($uid, (int)$info['first_value'], (int)$info['first_type'], self::LOG_CLASS, 'pk', $now);
                     }
                 } else {
                     $double = self::isDouble($now);
@@ -605,7 +630,13 @@ final class HeavenHandler
                             $colorstone *= 2;
                             $bloodstone *= 2;
                         }
-                        // 依赖未移植：member_model->add_stone($colorstone, 2) / add_stone($bloodstone, 3)，不发放
+                        // 旧版以 empty(add_stone 返回值) 判 -9 / -10，返回值恒为非空数组，走不到
+                        if ($colorStone > 0) {
+                            MemberStone::add($uid, $colorstone, MemberStone::COLOR, self::LOG_CLASS, 'pk', $now);
+                        }
+                        if ($bloodStone > 0) {
+                            MemberStone::add($uid, $bloodstone, MemberStone::BLOOD, self::LOG_CLASS, 'pk', $now);
+                        }
                     }
 
                     $equipid = $info['equip'];             // 装备id
@@ -620,7 +651,10 @@ final class HeavenHandler
                         $equip = self::roll($info['equip_getrate']);
                         if ($equip > 0) {
                             $essence = EquipEssence::ROWS[$equipid] ?? null;
-                            // 依赖未移植：equipment_model->add_tower_item（精华 $equipValue 个），不发放
+                            if (Equipment::addTowerItem($uid, (int)$equipid, $equipValue) === 0) {
+                                // 添加装备失败
+                                return self::fail($return, -11, 14);
+                            }
                         }
                     }
 
@@ -629,7 +663,11 @@ final class HeavenHandler
                     if ($refinestone > 0 && $double) {
                         $refinestone *= 2;
                     }
-                    // 依赖未移植：member_model->add_stone($refinestone)，不发放
+                    if ($refinestone > 0
+                        && MemberStone::add($uid, $refinestone, MemberStone::REFINE, self::LOG_CLASS, 'pk', $now)['status'] !== 1) {
+                        // 添加精炼石失败
+                        return self::fail($return, -12, 15);
+                    }
                 }
             }
 
@@ -953,7 +991,7 @@ final class HeavenHandler
                 // 金币不足
                 return self::fail($return, -6, 10);
             }
-            // 依赖未移植：member_model->add_stone（精炼石 / 五彩石 2 / 上古血玉 3），以下奖励只回报不发放
+            // 精炼石 / 五彩石 2 / 上古血玉 3（add_stone）
             $return['reward'] = match ($type) {
                 // 精炼石(免费)
                 0 => ['refinestone' => $mission['refinestone'] * 3, 'colorstone' => 0, 'bloodstone' => 0],
@@ -964,12 +1002,15 @@ final class HeavenHandler
                 // 精炼石(八倍)、五彩石、上古血玉
                 3 => ['refinestone' => $mission['refinestone'] * 19, 'colorstone' => $colorValue * 12, 'bloodstone' => $bloodValue * 6],
             };
+            MemberStone::add($uid, (int)$return['reward']['refinestone'], MemberStone::REFINE, self::LOG_CLASS, 'get_reward', $now);
+            MemberStone::add($uid, (int)$return['reward']['colorstone'], MemberStone::COLOR, self::LOG_CLASS, 'get_reward', $now);
+            MemberStone::add($uid, (int)$return['reward']['bloodstone'], MemberStone::BLOOD, self::LOG_CLASS, 'get_reward', $now);
 
             MemberActivity::update($uid, ['heavendate' => $now]);
 
             $return['status'] = 1;
             $return['gold'] = self::memberValue($uid, 'gold');
-            $return['resource'] = self::resource();
+            $return['resource'] = self::resource($uid);
             return $return;
         });
     }
@@ -1093,13 +1134,11 @@ final class HeavenHandler
     /**
      * 三种石头的当前数量（旧版 $this->member 的 refinestone / colorstone / bloodstone）
      *
-     * 依赖未移植：member 表没有这三个字段，恒为 0。
-     *
      * @return array{refinestone: int, colorstone: int, bloodstone: int}
      */
-    private static function resource(): array
+    private static function resource(int $uid): array
     {
-        return ['refinestone' => 0, 'colorstone' => 0, 'bloodstone' => 0];
+        return MemberStone::all($uid);
     }
 
     /**

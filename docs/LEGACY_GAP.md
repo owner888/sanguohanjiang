@@ -2,7 +2,7 @@
 
 对比基线：前端 `public/static/js` 中写死的 `c`/`m` 调用（含单行对象、多行对象、`?c=…&m=…` URL、`x.c = …; x.m = …` 赋值四种写法）vs 新版 `src/Handler` 的 `public static` 方法 vs 旧版 CodeIgniter `wwwroot/{s1,uc,battle,war}/application/controllers/` 下全部控制器（含 `newequip/`、`lc/` 等子目录）。完全动态拼接的调用未覆盖。
 
-- 前端调用：665；已实现：375；缺失：290（旧版有 284，旧版也无 6）
+- 前端调用：665；已实现：385；缺失：280（旧版有 274，旧版也无 6）
 - 「旧版位置」为相对旧服务端 `HJServer/wwwroot/` 的路径；「—」表示四个旧服务里都没有对应方法（多为渠道 SDK 登录），需按前端字段反推。
 - 标记 🆕 的控制器在新版中整个 Handler 都不存在。
 - 本节由 `tools/scan_legacy_gap.php` 生成，勿手改；其余章节手工维护。
@@ -155,18 +155,6 @@
 | `c=expostulation&m=put_expostulation` | `s1/application/controllers/expostulation.php:557` | `static/js/view/expostulationpop.js:655` |
 | `c=expostulation&m=refresh` | `s1/application/controllers/expostulation.php:745` | `static/js/view/expostulationpop.js:606` |
 | `c=expostulation&m=support` | `s1/application/controllers/expostulation.php:665` | `static/js/view/expostulationpop.js:374` |
-
-### gem（7）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=gem&m=gem_turn` | `s1/application/controllers/gem.php:552` | `static/js/view/gemworld.js:1610`<br>`static/js/view/gemworld.js:1617`<br>`static/js/view/gemworld.js:637`<br>…共 4 处 |
-| `c=gem&m=get_20gem_by_page` | `s1/application/controllers/gem.php:822` | `static/js/view/gemworld.js:445` |
-| `c=gem&m=get_gem_by_id` | `s1/application/controllers/gem.php:183` | `static/js/view/gemworld.js:1768` |
-| `c=gem&m=get_gem_by_page` | `s1/application/controllers/gem.php:723` | `static/js/view/gemworld.js:1980` |
-| `c=gem&m=get_gem_info` | `s1/application/controllers/gem.php:680` | `static/js/view/gemworld.js:1855`<br>`static/js/view/gemworld.js:476` |
-| `c=gem&m=level_up` | `s1/application/controllers/gem.php:452` | `static/js/view/gemworld.js:1930`<br>`static/js/view/gemworld.js:550` |
-| `c=gem&m=mergegem_index` | `s1/application/controllers/gem.php:752` | `static/js/view/gemworld.js:277` |
 
 ### information（7）
 
@@ -365,14 +353,6 @@
 | `c=act_thirty&m=action_chip_reward` | `s1/application/controllers/act_thirty.php:422` | `static/js/view/chargegiftpop.js:160` |
 | `c=act_thirty&m=action_reward` | `s1/application/controllers/act_thirty.php:225` | `static/js/view/chargegiftpop.js:125` |
 | `c=act_thirty&m=index` | `s1/application/controllers/act_thirty.php:86` | `static/js/view/chargegiftpop.js:35` |
-
-### mount（3）
-
-| 接口 | 旧版位置 | 前端调用 |
-|---|---|---|
-| `c=mount&m=get_info_by_id` | `s1/application/controllers/mount.php:195` | `static/js/view/mountpop.js:1036`<br>`static/js/view/mountpop.js:455` |
-| `c=mount&m=get_level_info` | `s1/application/controllers/mount.php:362` | `static/js/view/mountpop.js:926` |
-| `c=mount&m=get_mount_by_page` | `s1/application/controllers/mount.php:1074` | `static/js/view/mountpop.js:611`<br>`static/js/view/mountpop.js:618` |
 
 ### newyeardailysign 🆕（3）
 
@@ -719,7 +699,6 @@
 | `c=ios&m=verify`、`c=ios&m=savetoken` | 直接返回成功 |
 | `c=shop&m=get_info` | 商品取旧版 `Shop` + `Equip` 模板；`nowmaxtimes`、`cd` 为固定值（不读当日购买次数） |
 | `c=overseastrade&m=get_trade_log`、`c=overseastrade&m=item_list` | 固定内容 |
-| `c=studfarm&m=index` | 固定内容 |
 | `c=practice&m=get_unlock_price` | 固定内容 |
 | `c=user&m=get_info_by_temptoken` | 固定内容 |
 | `c=activationcode&m=index` | 固定文案（兑换走 `get_reward`，激活码表为代码内常量） |
@@ -734,34 +713,32 @@
 | `c=star`（`StarHandler`） | 待按旧版重写。旧版武将没有逐将升星；星级存 Redis `general_star:{uid}:{gid}`。已不再给 `wuliup`/`tiliup` 加值（培养字段只属于 `cultivate`） |
 | `c=talent`（`TalentHandler`） | 待按旧版重写。天赋等级存 Redis `general_talents:{uid}:{gid}`，不是旧版 `talentid` 天赋体系 |
 | `c=refine`（`RefineHandler`） | 待按旧版重写。精炼词条存 Redis `equip_refine:{uid}:{eid}`；旧版写 `equipment.hammer`，加成见 `LegacyStats::refineAdd` |
-| `c=gem`（`GemHandler`） | 待按旧版重写。宝石存 Redis `user_gems:{uid}`，不是旧版按装备镶嵌 |
-| `c=tavern`（`TavernHandler::HERO_POOL`） | 依赖未移植：名将池、价格、展示数值不是旧版 Pub 数据；入库武将按名称+形象对上的模板（52 张飞、33 关羽、51 诸葛亮、6 赵云） |
+| `c=studfarm&m=action`（`StudfarmHandler`） | 依赖未移植：选中 5 品以上坐骑时的聊天室 / 小喇叭广播（`chat_model->get_message_str(28)` / `send_message_to_all` / `send_message_to_horn`） |
+| `c=tavern`（`TavernHandler::HERO_POOL`） | 宝石与会客位置已存旧版 `trader_log`（`Model\TraderLog`，流水 `tavernjade_log`），但会客贸易的晋级 / 重置规则与价格是新版自定的（旧版走 `Trader` 表的 goto / get 概率）。依赖未移植：名将池、价格、展示数值不是旧版 Pub 数据；入库武将按名称+形象对上的模板（52 张飞、33 关羽、51 诸葛亮、6 赵云） |
 | `c=lottery&m=action` | 依赖未移植：旧版按 `Lottery` 分组概率抽奖；新版写死转盘的装备格「青钢名剑」在 MasterData 中不存在，抽中不发装备 |
-| `c=arena&m=shop_exchange` | 依赖未移植：旧版扣积分后发放；re_type 6 玉石、9 宝石碎片、14~16 精炼石类、17~25 装备精华、26 坐骑、27 将魂、28 宝石的玩家存储新版没有，这些商品返回 -3 不扣积分（`ArenaExchange` 里有 6 / 9 / 26 / 27 / 28 共 15 件） |
 | `c=arena`（`ArenaHandler`） | 依赖未移植：聊天室战报（`action` 夺得第 1 名广播、`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、信件战报 `pm_report`（信件存 Redis `user_messages`，`info.report` 为其 id）、主线任务 8 / 9、日常任务 10、`edifice` 首次打开记录、神树 `tree`（恒 0）、消费统计 `stat_model`；酒馆获得日志 `add_pub_log` |
-| `c=elite`（`EliteHandler`） | 依赖未移植：聊天室组队邀请广播（`sendinvite` 暂返回 0）、装备碎片 / 天赋卷轴及碎片奖励（类型 2 / 3 / 4 只回报不发放）、主线任务 10、春节送福计数、元宝流水与消费统计；主线进度按新版 `map` 推算（旧版 `open_map` 未移植）。实时组队层见下一行 |
+| `c=elite`（`EliteHandler`） | 依赖未移植：聊天室组队邀请广播（`sendinvite` 暂返回 0）、主线任务 10、春节送福计数、元宝流水与消费统计；主线进度按新版 `map` 推算（旧版 `open_map` 未移植）。实时组队层见下一行 |
 | 多人副本实时组队（`EliteRoom`） | 旧版实时服务器不在旧版代码包里，协议按 `elitepop.js` 还原，以下是客户端看不出旧版做法、按新版自定的部分：队伍名取队长昵称；不在开放时间登录回 `loginstatus` -3、服务端内部错误（加锁超时 / 异常）回各 `*_error` -9（客户端都落到 default 提示）；开战最少 2 人（按旧版 `action` 去重后只有 1 人不能开战；客户端语言键名为 `only_3_begin_battle`，旧版是否要求满 3 人未知）；创建 / 加入队伍不在服务端校验次数、VIP、元宝（客户端先校验，开战时 `fight` 校验）；`login` 的 `serverid` 不参与分组（新版单服）；`userin` / `userlogout` / `testmsg` 不发（客户端只打印日志）。`teaminvited` 依赖 `sendinvite` 成功，聊天室邀请广播未移植前客户端不会发。`c=elite&m=action` 只供 `startfight` 内部调用，HTTP 返回 `{status: 0, info: []}`（旧版可由任何持 token 的调用方直接开战） |
-| `c=copies`（`CopiesHandler`） | 依赖未移植：聊天室战报（`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、装备碎片奖励（类型 2，`CopiesReward` 里没有）、元宝 / 军令 / 声望流水（`gold_log` / `act_log` / `reputation_log`）、日常任务 5、翻牌活动计数 |
+| `c=copies`（`CopiesHandler`） | 依赖未移植：聊天室战报（`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、元宝 / 军令 / 声望流水（`gold_log` / `act_log` / `reputation_log`）、日常任务 5、翻牌活动计数 |
 | `c=equip_forge&m=fabrication` | 依赖未移植：旧版打造走 newequip 体系；只有图纸 1 能对上模板（Equip 22 青龙偃月刀），图纸 2、3 不可锻造 |
-| `c=map&m=action` 关卡掉落 | 已按旧版 `Mission` 发 gettype 1（装备）/ 3 / 4；依赖未移植：2 装备碎片、5 / 6 天赋卷轴（及碎片）不发放；`times` 刷图未移植（按单次攻击） |
-| `c=map&m=get_newresult` | 已按旧版 `Map` 表发 rewardtype 1（装备）；2 天赋卷轴 / 3 声望 / 4 坐骑依赖未移植，返回 -4 |
+| `c=map&m=action` 关卡掉落 | `times` 刷图未移植（按单次攻击） |
+| `c=map&m=get_newresult` | 奖励已按旧版 `Map` 表四类发放；但领取标记存 Redis `user_shili_claimed:{uid}:{id}`，不校验请求的势力是否为 `member_field.newresult`（旧版不是则 -1，并以 `open_map.newresult` 判重复领取），领取后把 `newresult` 清 0 |
 | `General::createFromTemplate` | 依赖未移植：获得武将气泡（`ongeneral`）、主公 80 级以上名将成就加成重算、主线任务 19 |
-| `Equipment::addFromTemplate` | 依赖未移植：碎片分支（旧版 `add_item` `$type = 1`、`itemchip_log`） |
 | `c=matrix`（`MatrixHandler`） | 依赖未移植：主线任务 5（阵法升级）/ 6（同时上阵 5 将）、消费统计 `stat_model->matrixlevelup` |
-| `c=muster&m=index` / `go_rest` | 依赖未移植：获得武将气泡 `member_field.ongeneral`、武将折旧 CD `member_field.general_sale`（`sale_cd` 按 0）、坐骑表 `own_mount.gid` 清零（新版坐骑在 Redis `user_mounts`） |
+| `c=muster&m=index` / `go_rest` | 依赖未移植：获得武将气泡 `member_field.ongeneral`、武将折旧 CD `member_field.general_sale`（`sale_cd` 按 0） |
 | `c=muster&m=sale_general` | 待按旧版重写。新版自定的遣散（按等级发银两、软删除）；旧版为 VIP 7 起的武将折旧（名将榜售价 × VIP 系数、7 天 CD、终止训练、下阵、卸装备 / 将魂 / 坐骑、重算名将成就） |
 | `c=worldboss`（`WorldBossHandler`） | 依赖未移植：最后一击聊天公告（`chat_model` 消息 12 / `send_message_to_all`，只标记 `final_horn`）、元宝流水与消费统计（`stat_model->worldboss_relive` / `worldboss_powerup`）、主线任务 11、日常任务 12。计划任务 `cron_acttask::worldboss` 的执行时间旧版代码包里没有，按键过期时间推定为每日 00:30（`WorldBossCron::RUN_AT`） |
-| `c=countryboss`（`CountryBossHandler`） | 依赖未移植：最后一击国家聊天公告（`chat_model` 消息 17 / `send_message_to_country`，只标记 `final_horn`）、奖励里的装备碎片（只回报不发放，同 `Equipment::addFromTemplate` 碎片分支）、元宝流水与消费统计（`stat_model->countryboss_relive` / `countryboss_powerup`）、宝石流水 `_tavernjade_log` |
+| `c=countryboss`（`CountryBossHandler`） | 依赖未移植：最后一击国家聊天公告（`chat_model` 消息 17 / `send_message_to_country`，只标记 `final_horn`）、元宝流水与消费统计（`stat_model->countryboss_relive` / `countryboss_powerup`） |
 | `c=challenge&m=action`（`ChallengeHandler`） | 依赖未移植：信件战报 `pm_report`（`record_pk_report`；信件存 Redis `user_messages`，`info.report` 为其 id）、春节送福活动计数（`actnewyear_model->add_task_num(version, 15)`） |
 | `c=epic`（`EpicHandler`） | 依赖未移植：日常任务 14（刷新，41 级以上）、元宝流水 / 日常任务 5 / 翻牌活动计数（`sub_gold`）、声望流水 `_reputation_log` |
-| `c=pass_general`（`PassGeneralHandler`、`PassGeneralCron`） | 活动时间取 `ActivityTime`（2016-12-31 00:00 已结束，接口一律 -1）。依赖未移植：奖励类型 6 玉石、9 宝石碎片、14~16 精炼石 / 五彩石 / 上古血石、17~25 装备精华只回报不发放（`PassgeneralReward` 第 1 层就有宝石碎片，第 3 层精炼石 / 五彩石 / 上古血石，第 4 层与超级大奖有装备精华）；紫装 / 7 星以上武将的小喇叭与聊天室广播（`chat_model` 45 / 46）；酒馆获得日志 `add_pub_log`；元宝 / 声望 / 原魂 / 军令 / 宝石流水 |
-| `c=sanctum`（`SanctumHandler`） | 依赖未移植：宝石碎片 `member.gem`（首杀 / 掉落 / 每日奖励的碎片只回报不发放，`all_chip` / `all_gem` / `gem` 恒为 0）、宝石 `own_gem` 与宝石包裹 `member.gemuse`（掉落按旧版掷点只回报不发放）、聊天室战报（`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、元宝 / 碎片流水、日常任务 5、翻牌活动计数 |
-| `c=heaven`（`HeavenHandler`） | 依赖未移植：精炼石 / 五彩石 / 上古血玉 `member.refinestone` / `colorstone` / `bloodstone`（`add_stone`：首杀、掉落、扫荡、每日奖励只回报不发放，`resource` 恒为 0）、装备精华 `equipment_model->add_tower_item`（掉落按旧版掷点只回报不发放）、聊天室战报（`send_to_chat` 暂返回 0 不扣元宝）、元宝 / 石头流水、日常任务 5、翻牌活动计数 |
-| `c=herothrone`（`HerothroneHandler`） | 依赖未移植：uc 服务器跨服排行（`uc_model->get_top_rank` / `update_top_rank`，uc 的 `herothrone_model` 不在旧版代码包里；`index` / `go_back` 的 `list` 恒为空，过关不上报）；奖励 2 玉石 `member.jade`、4 装备碎片、5 / 6 天赋卷轴、11~13 精炼石 / 五彩石 / 上古血玉、14 / 15 坐骑只回报不发放（`HerothroneMission` 宝箱里有 2 / 4 / 14）；元宝流水、日常任务 5、翻牌活动计数 |
+| `c=pass_general`（`PassGeneralHandler`、`PassGeneralCron`） | 活动时间取 `ActivityTime`（2016-12-31 00:00 已结束，接口一律 -1）。依赖未移植：紫装 / 7 星以上武将的小喇叭与聊天室广播（`chat_model` 45 / 46）；酒馆获得日志 `add_pub_log`；元宝 / 声望 / 原魂 / 军令流水 |
+| `c=sanctum`（`SanctumHandler`） | 依赖未移植：聊天室战报（`send_to_chat` 暂返回 0 不扣元宝，聊天室移植后恢复旧版扣 2 元宝 + 广播）、元宝流水、日常任务 5、翻牌活动计数 |
+| `c=heaven`（`HeavenHandler`） | 依赖未移植：聊天室战报（`send_to_chat` 暂返回 0 不扣元宝）、元宝流水、日常任务 5、翻牌活动计数 |
+| `c=herothrone`（`HerothroneHandler`） | 依赖未移植：uc 服务器跨服排行（`uc_model->get_top_rank` / `update_top_rank`，uc 的 `herothrone_model` 不在旧版代码包里；`index` / `go_back` 的 `list` 恒为空，过关不上报）；元宝 / 银币 / 声望 / 原魂流水、日常任务 5、翻牌活动计数 |
 | `c=island`（`IslandHandler`） | 依赖未移植：聊天室战报（`send_to_chat` 暂返回 0 不扣元宝）、日常任务 9（主公 41 级以上）、军令 / 元宝 / 银两流水、翻牌活动计数；维护计划任务 `cron::clear_island_report`（只保留每关最近 7 条战报，旧版代码包里没有执行时间） |
-| `c=compete`（`CompeteHandler`、`CompeteCron`） | 活动时间取 `ActivityTime`（compete 2016-12-31 00:00 已结束，接口一律 -1）。依赖未移植：神树 `tree`（恒 0）、奖励 6 玉石 `member.jade` 与 8 坐骑 `own_mount`（`mount_model->add_mount`；`CompeteReward` 每档都有坐骑，只回报模板不发放）、信件战报 `pm_report`（`record_pk_report`）、聊天室战报（`send_to_chat` 暂返回 0 不扣元宝）、元宝流水。计划任务 `cron::get_compete_reward` 的执行时间旧版代码包里没有，按每小时执行（只在活动结束后 10 小时内发放） |
-| `c=countrymine`（`CountryMineHandler`） | 依赖未移植：玉石 `member.jade`（开采收获、放弃、抢夺的玉石只回报不发放，`all_jade` 恒为 0）、好友 `friend_model`（`friend` 恒为 0）、信件战报 `pm_report`、日常任务 13、聊天室战报（`send_to_chat` 暂返回 0 不扣元宝）、玉石 / 元宝流水 |
-| `c=siege`（`SiegeHandler`、`SiegeCron`） | 依赖未移植：聊天室（至尊攻城小喇叭 `send_message_to_horn`、国战胜负全服公告、国家聊天室战报 18 ~ 21）、`get_reward` 的玉石 `member.jade`、都城效果 type 2 通商次数 `member_activity.freebusiness`；都城开放按全服 `map` 进度推算（旧版 `open_map` 未移植）。计划任务 `cron::siege_battle` / `clear_warstatus` 的执行时间旧版代码包里没有，按旧版逻辑推定为每分钟 / 每周六 00:00。都城效果只接入了将魂星路（4）、四象圣域（5）、通天塔（7）与征收次数（1，`getCityEffect` 内）；玉石作坊（3）、铜雀台（6）、通商（2）与 `member_model` 每日征收重置调用 `get_city_effect` 的玩法尚未按旧版移植 |
+| `c=compete`（`CompeteHandler`、`CompeteCron`） | 活动时间取 `ActivityTime`（compete 2016-12-31 00:00 已结束，接口一律 -1）。依赖未移植：神树 `tree`（恒 0）、信件战报 `pm_report`（`record_pk_report`）、聊天室战报（`send_to_chat` 暂返回 0 不扣元宝）、元宝流水。计划任务 `cron::get_compete_reward` 的执行时间旧版代码包里没有，按每小时执行（只在活动结束后 10 小时内发放） |
+| `c=countrymine`（`CountryMineHandler`） | 依赖未移植：好友 `friend_model`（`friend` 恒为 0）、信件战报 `pm_report`、日常任务 13、聊天室战报（`send_to_chat` 暂返回 0 不扣元宝）、元宝流水 |
+| `c=siege`（`SiegeHandler`、`SiegeCron`） | 依赖未移植：聊天室（至尊攻城小喇叭 `send_message_to_horn`、国战胜负全服公告、国家聊天室战报 18 ~ 21）、都城效果 type 2 通商次数 `member_activity.freebusiness`；都城开放按全服 `map` 进度推算（旧版 `open_map` 未移植）。计划任务 `cron::siege_battle` / `clear_warstatus` 的执行时间旧版代码包里没有，按旧版逻辑推定为每分钟 / 每周六 00:00。都城效果只接入了将魂星路（4）、四象圣域（5）、通天塔（7）与征收次数（1，`getCityEffect` 内）；玉石作坊（3）、铜雀台（6）、通商（2）与 `member_model` 每日征收重置调用 `get_city_effect` 的玩法尚未按旧版移植 |
 | `c=practice&m=practice_stop` | 待按旧版重写。新版自定的结算（按训练位倍率发经验）；`c=muster&m=go_rest` 终止训练已用旧版 `practice_stop`（`PracticeHandler::legacyStop`） |
 
 ## 战斗
@@ -770,21 +747,21 @@
 
 | 位置 | 现状 |
 |---|---|
-| 组队加成（`TeamBuilder::forMember`） | 依赖未移植，按 0 计：宝石 `gem_power`、坐骑（主战 100% / 备战 30% 及模板特殊属性）、锻造套装、将魂、主公天赋（91 级）、名将成就（81 级）、美人（60 级）、星魄（80 级）、国家学院（国家 30 级）、名将进阶（100 级）、神树 |
-| 推演加成（`BattleEngine`） | 依赖未移植，旧版对应分支不移植：将魂（暴击率 / 闪避 / 识破 / 暴击伤害 / 抗晕 / 生命）、名将成就 / 美人 / 星魄 / 国家学院（暴击率 / 闪避 / 识破 / 暴击伤害）、锻造套装（`suitbuff` 吸血 / 回气 / 偷气 / 清气 / 反伤，最终增伤 / 免伤、暴击伤害、血量伤害倍增、抗晕）、名将进阶（天赋攻防系数、血量）；`leftbuff` / `rightbuff` 的 `tree`（神树）恒为 0、`mount`（坐骑）恒为 `[]` |
+| 组队加成（`TeamBuilder::forMember`） | 依赖未移植，按 0 计：锻造套装、将魂、主公天赋（91 级）、名将成就（81 级）、美人（60 级）、星魄（80 级）、国家学院（国家 30 级）、名将进阶（100 级）、神树 |
+| 推演加成（`BattleEngine`） | 依赖未移植，旧版对应分支不移植：将魂（暴击率 / 闪避 / 识破 / 暴击伤害 / 抗晕 / 生命）、名将成就 / 美人 / 星魄 / 国家学院（暴击率 / 闪避 / 识破 / 暴击伤害）、锻造套装（`suitbuff` 吸血 / 回气 / 偷气 / 清气 / 反伤，最终增伤 / 免伤、暴击伤害、血量伤害倍增、抗晕、血量%；坐骑模板的血量% / 抗晕 / 免伤 / 吸血已计入）、名将进阶（天赋攻防系数、血量）；`leftbuff` / `rightbuff` 的 `tree`（神树）恒为 0 |
 | 技能 effect 30 / 31、攻击类型 16 | 旧版 `battle_model.php` 没有对应分支，按旧版照搬：655 袖里乾坤（type 16）没有受击位，656 飞花溅玉、668 地狱人间、669 逆命王轮只按 `ratio` 计伤害；技能描述里的偷气 / 眩晕 / 吸血 / 伤害上限等在这份旧版源码中没有实现 |
 | 守军 | 只有 `c=map&m=action` 按旧版取 `Mission` → `Monster`、`c=tower&m=pk` 按旧版取 `SoulMission` → `SoulMonster`、`c=copies&m=pk` 按旧版取 `CopiesInfo`（怪物行的 position1~9 → `CopiesInfo` 的行）、`c=elite&m=action` 按旧版团战取 `EliteMission` → `EliteMonster`，`c=sanctum&m=action` / `c=heaven&m=pk` / `c=herothrone&m=action` / `c=island&m=pk` 按旧版 `battle_mission` 取 `SanctumMission` → `SanctumMonster` / `HeavenMission` → `HeavenMonster` / `HerothroneMission` → `HerothroneMonster` / `Island` → `IslandMonster`。`c=worldboss&m=battle` / `c=countryboss&m=battle` 按旧版 `battle_worldboss` 取 `WorldBoss` 行 1 / 2 + 写死数值（`TeamBuilder::forBoss`）。`c=compete&m=action`、`c=countrymine&m=rob`、`c=siege&m=occupy`（至尊攻城）按旧版 `battle_pk` 打玩家，国战按旧版团战取玩家或 `CountryMission` → `CountryMonster` |
 | `c=map&m=mission` / `get_mission_list`，`c=map&m=action` 经验 | 据点名称、等级、经验仍取新版自定的 `MapHandler::getEnemyConfig`，与战斗中的旧版 `Mission` 守军不一致；`get_mission_by_id` 的场景 / 关卡开启校验、攻击 CD、强攻元宝未移植 |
 
 ## 数据结构缺口
 
-旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 61 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
+旧版 `zc_sanguo` 库 632 张表（另有 `zc_sanguo_uc` 14 张、`zc_sanguo_battle` 37 张）；新版 `database/schema.sql` 77 张，其余玩家状态约 90 类存于 Redis JSON 键。字段名取自旧版 `.frm` 文件。
 
 ### 已建表的缺失字段
 
 | 新表 ← 旧表 | 旧版有、新版无的字段 |
 |---|---|
-| `member` ← `member` | `jade`、`gem`、`gemuse`、`refinestone`、`colorstone`、`bloodstone`、`souluse`、`soulpack`、`newpm`、`newmail`、`status`、`statustime`、`rebate_firstpay`、`jointime`、`dateline`、`actdateline`、`levelupexp`、`missionworld`、`firstworld`、`server_reward`、`ndgift`、`channel`、`regchannel`、`guest`、`version`、`appversion`、`crontime`、`gift`、`bind91`、`bind360` |
+| `member` ← `member` | `newpm`、`newmail`、`status`、`statustime`、`rebate_firstpay`、`jointime`、`dateline`、`actdateline`、`levelupexp`、`missionworld`、`firstworld`、`server_reward`、`ndgift`、`channel`、`regchannel`、`guest`、`version`、`appversion`、`crontime`、`gift`、`bind91`、`bind360` |
 | `general` ← `own_general` | `disable`（`eid1`~`eid4` 不存储，由 `equipment.generalid` + 旧版 `get_item_site` 派生；其余旧字段已补，获得时从模板复制） |
 | `equipment` ← `own_equip` | `glevel`、`disable`、`dateline`（`gid` 即 `generalid`；其余旧字段已补，同一武将同一装配位置由 `uk_general_site` 约束） |
 | `member_field` ← `member_field` | `levyall`、`levystatus`、`exercisetimes`、`imposetimes`、`baijintimes`、`zhizuntimes`、`qiangstatus`、`qiangdateline`、`shopdateline`、`actnumber`、`actdateline`、`vip_reward`、`devicetoken`、`onmine`、`onworkshop`、`ongeneral`、`trends_times`、`newyeardinner`、`free_inherit`、`rebate_dateline`、`rebate_version`、`general_sale`、`advanced_time`、`close_invitation`、`clickreward`、`inherit_dateline`、`stone1_times`~`stone3_times`、`login_day`、`login_dateline`、`levelgift`、`first_recharge_an`、`treasure_free`、`macaddr`、`start_time` |
@@ -793,26 +770,26 @@
 | `practice` ← `own_practice` | 字段改名 `gid` → `generalid` |
 | `map` | 含义不同：旧版是关卡配置表（`name`/`premise`/`reward*`），新版是玩家进度表 |
 
-部分字段可能已转存 Redis（如 `general_star`、`general_talents`、`user_gems`、`user_mounts`），补字段前先确认是否已有替代存储，避免两处真相。
+部分字段可能已转存 Redis（如 `general_star`、`general_talents`），补字段前先确认是否已有替代存储，避免两处真相。
 
 ### 新版无对应存储的旧实体
 
 | 领域 | 旧表 |
 |---|---|
-| 将魂 | `own_soul`、`own_soul_mergelog`（将魂星路的掉落、背包已满判断依赖它们与 `member.soulpack` / `souluse`） |
-| 其他玩家资产 | `own_stone`、`own_achievement(_log)`、`own_addition`、`own_star_addition` |
+| 将魂 | `own_soul_mergelog` |
+| 其他玩家资产 | `own_stone`（赌石玩法的原石记录，与精炼石等三种石头无关）、`own_achievement(_log)`、`own_addition`、`own_star_addition` |
 | 邮件 / 私信 | `pm`、`pm_report`、`notice` |
-| 货币流水 | `gold_log`、`silver_log`、`jade_log`、`reputation_log`、`itemchip_log`、`debris_log` |
+| 货币流水 | `gold_log`、`silver_log`、`reputation_log`、`usesoul_log`、`act_log` |
 | 跨服（battle 库） | `god_*`、`war_*`、`gvg_*`、`world_arena`、`world_report(_log)`、`world_shop_log` |
 
 ### 存储风险
 
-大量玩家资产仅存于 Redis（宝石、坐骑、将星、天赋、背包状态等）。若 Redis 未开启 AOF / RDB 持久化，重启即丢档。
+大量玩家资产仅存于 Redis（将星、天赋、精炼词条、背包状态等）。若 Redis 未开启 AOF / RDB 持久化，重启即丢档。
 
 ## 建议补齐顺序
 
 0. 旧版配置表已生成到 `src/MasterData/`（`tools/gen_master_data.php`），补玩法时数值一律取自这里，不再手写配置。
 1. 战斗：各玩法改用旧版怪物表（`TeamBuilder::forMonsters`）与旧版控制器的响应结构（`res.battle` / `res.info`）。
 2. 军团体系的外围依赖：税金、谏言、国家庆典、聊天室等（代码中 `依赖未移植` 注释标出）。
-3. 将魂、beauty、gem 等缺口大的玩法。
+3. 将魂、beauty 等缺口大的玩法。
 4. 跨服 god / war / worldarena（含 `pack.use_item`），节日活动。

@@ -8,6 +8,7 @@ use Hanjiang\Battle\LegacyStats;
 use Hanjiang\Handler\City\MemberHandler;
 use Hanjiang\MasterData\Equip as EquipTemplate;
 use Hanjiang\MasterData\EquipEssence;
+use Hanjiang\Model\OwnGem;
 
 use OmniPHP\Http\Context;
 use OmniPHP\Database\DB;
@@ -26,6 +27,9 @@ final class PackHandler
 
     /** VIP 达到该等级出售装备时返还 100% 强化花费（旧版 pack.php） */
     private const int SALE_REFUND_VIP = 11;
+
+    /** 主公达到该等级出售装备时先卸下装备上的宝石（旧版 pack.php sale） */
+    private const int GEM_PACK_OFF_LEVEL = 140;
 
     /**
      * 背包列表: c=pack&m=index（旧版 controllers/pack.php:index）
@@ -193,8 +197,10 @@ final class PackHandler
             $saleprice = $saleprice * (int)$item['number'];
         }
 
-        // 依赖未移植：主公 140 级以上出售时卸下装备上的宝石（gem_model->pack_off_by_eid、member gemuse）；
-        // 新版宝石存 Redis user_gems，不按装备镶嵌
+        // 宝石卸下（主公 140 级以上）：卸下的个数加到宝石格子占用（旧版 add_gemuse 卸下 0 颗也加 1）
+        if ((int)($member['level'] ?? 0) >= self::GEM_PACK_OFF_LEVEL) {
+            OwnGem::addGemuse($uid, OwnGem::packOffByEid($uid, $itemid));
+        }
 
         $affected = DB::table('equipment')->where('uid', $uid)->where('id', $itemid)->whereNull('deleted_at')
             ->update(['deleted_at' => date('Y-m-d H:i:s'), 'sale_site' => 0]);

@@ -20,6 +20,9 @@ use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Equipment;
 use Hanjiang\Model\General;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberJade;
+use Hanjiang\Model\MemberStone;
+use Hanjiang\Model\OwnGem;
 use Hanjiang\Model\OwnMaterials;
 use Hanjiang\Model\PassGeneral;
 use OmniPHP\Cache\Redis;
@@ -43,13 +46,14 @@ use OmniPHP\Http\Context;
  * 客户端调用：index、action、achievement_reward、action_achievement_reward、reward_info、action_reward、
  * lottery_index、action_lottery（breakthroughworld.js）。
  *
+ * 奖励类型 6 玉石（MemberJade）、9 宝石碎片（OwnGem::addChip）、14 ~ 16 精炼石 / 五彩石 / 上古血石（MemberStone，member 三列）、
+ * 17 ~ 25 装备精华（Equipment::addTowerItem）照旧版发放并记流水。
+ *
  * 依赖未移植：
- * - 奖励类型 6 玉石（member.jade）、9 宝石碎片（member.gem）、14 ~ 16 精炼石 / 五彩石 / 上古血石（own_stone）、
- *   17 ~ 25 装备精华（equipment_model->add_tower_item）只回报不发放；
  * - 聊天室 / 小喇叭广播（紫装以上装备、7 星以上武将：chat_model->send_message_to_horn / get_message_str(45 / 46) +
  *   send_message_to_all）；酒馆获得日志 tavern_model->add_pub_log(gid, 1, 11)；
  * - member_model->sub_gold 的 gold_log 元宝流水、日常任务 task_model->task_action(5)、翻牌活动计数；
- *   add_reputation / add_soul / add_act 的流水；宝石流水 _tavernjade_log。
+ *   add_reputation / add_soul / add_act 的流水。
  */
 final class PassGeneralHandler
 {
@@ -66,6 +70,9 @@ final class PassGeneralHandler
     private const string ACHIEVE_ACTION_LOCK = '_passgeneral_acieve_action_lock';
     private const string REWARD_ACTION_LOCK = '_passgeneral_reward_action_lock';
     private const int LOCK_TTL = 30;
+
+    /** 物品流水的执行类（旧版 $this->class，即控制器名） */
+    private const string LOG_CLASS = 'pass_general';
 
     /** 旧版语言包 passgeneral_lang.php */
     private const string LANG_MONTH = '月';
@@ -118,7 +125,7 @@ final class PassGeneralHandler
             return $return;
         }
         $now = BossClock::now();
-        $activity = self::init($member, $now);
+        $activity = self::init($member, $now, 'index');
         // 活动未开启
         if ($activity === null) {
             return ['status' => -1, 'msg' => self::LANG_NOT_OPEN];
@@ -156,7 +163,7 @@ final class PassGeneralHandler
         }
         $uid = (int)$member['uid'];
         $now = BossClock::now();
-        $activity = self::init($member, $now);
+        $activity = self::init($member, $now, 'action');
         // 防止刷接口
         if (!self::addLock(self::ACTION_LOCK, $uid)) {
             return ['status' => 2, 'msg' => self::LANG_FAST_ERROR];
@@ -368,7 +375,7 @@ final class PassGeneralHandler
             return ['status' => 0];
         }
         $now = BossClock::now();
-        $activity = self::init($member, $now);
+        $activity = self::init($member, $now, 'achievement_reward');
         if ($activity === null) {
             return ['status' => -1, 'msg' => self::LANG_NOT_OPEN];
         }
@@ -433,7 +440,7 @@ final class PassGeneralHandler
         }
         $uid = (int)$member['uid'];
         $now = BossClock::now();
-        $activity = self::init($member, $now);
+        $activity = self::init($member, $now, 'action_achievement_reward');
         // 防刷接口
         if (!self::addLock(self::ACHIEVE_ACTION_LOCK, $uid)) {
             return ['status' => 5, 'msg' => self::LANG_FAST_ERROR];
@@ -505,7 +512,7 @@ final class PassGeneralHandler
             return ['status' => 0];
         }
         $now = BossClock::now();
-        $activity = self::init($member, $now);
+        $activity = self::init($member, $now, 'reward_info');
         if ($activity === null) {
             return ['status' => -1, 'msg' => self::LANG_NOT_OPEN];
         }
@@ -589,7 +596,7 @@ final class PassGeneralHandler
         }
         $uid = (int)$member['uid'];
         $now = BossClock::now();
-        $activity = self::init($member, $now);
+        $activity = self::init($member, $now, 'action_reward');
         // 防刷接口
         if (!self::addLock(self::REWARD_ACTION_LOCK, $uid)) {
             return ['status' => 4, 'msg' => self::LANG_FAST_ERROR];
@@ -714,7 +721,7 @@ final class PassGeneralHandler
             return ['status' => 0];
         }
         $now = BossClock::now();
-        if (self::init($member, $now) === null) {
+        if (self::init($member, $now, 'lottery_index') === null) {
             return ['status' => -1, 'msg' => self::LANG_NOT_OPEN];
         }
         // 获取我的兑奖券
@@ -739,7 +746,7 @@ final class PassGeneralHandler
         }
         $uid = (int)$member['uid'];
         $now = BossClock::now();
-        $activity = self::init($member, $now);
+        $activity = self::init($member, $now, 'action_lottery');
         // 防刷接口
         if (!self::addLock(self::LOTTERY_LOCK, $uid)) {
             return ['status' => 2, 'msg' => self::LANG_FAST_ERROR];
@@ -823,19 +830,19 @@ final class PassGeneralHandler
     }
 
     /**
-     * 每次请求本控制器时的初始化（构造函数 _init）：活动开启时执行每日清理
+     * 每次请求本控制器时的初始化（构造函数 _init）：活动开启时执行每日清理（$method 为当前接口，记物品流水用）
      *
      * @param array<string, mixed> $member
      * @return array<string, mixed>|null 活动信息；未开启时为 null
      */
-    private static function init(array $member, int $now): ?array
+    private static function init(array $member, int $now, string $method): ?array
     {
         if (!PassGeneral::isOpen($now)) {
             return null;
         }
         $activity = PassGeneral::activity();
         // 每日清理过关斩将信息
-        PassGeneral::dailyUpdate((int)$member['uid'], $activity['version'], $now);
+        PassGeneral::dailyUpdate((int)$member['uid'], $activity['version'], $now, self::LOG_CLASS, $method);
         return $activity;
     }
 
@@ -867,16 +874,16 @@ final class PassGeneralHandler
                 Member::addCurrency($uid, silver: $num);
                 break;
             case 3: // 黄宝石
-                TavernHandler::addJade($uid, 2, $num);
+                TavernHandler::addJade($uid, 2, $num, self::LOG_CLASS, $method);
                 break;
             case 4: // 紫宝石
-                TavernHandler::addJade($uid, 3, $num);
+                TavernHandler::addJade($uid, 3, $num, self::LOG_CLASS, $method);
                 break;
             case 5: // 原魂
                 Member::addCurrency($uid, soul: $num);
                 break;
             case 6: // 玉石
-                // 依赖未移植：member_model->add_jade（新版 member 表无 jade 字段）
+                MemberJade::add($uid, $num, self::LOG_CLASS, $method, $now);
                 break;
             case 7: // 声望
                 Member::addCurrency($uid, reputation: $num);
@@ -897,13 +904,13 @@ final class PassGeneralHandler
                 ];
                 break;
             case 9: // 宝石碎片
-                // 依赖未移植：member_model->add_gem（新版 member 表无 gem 字段）
+                OwnGem::addChip($uid, $num, self::LOG_CLASS, $method, $now);
                 break;
             case 10: // 突飞卡
                 PassGeneral::addFreeleap($uid, $num);
                 break;
             case 11: // 蓝宝石
-                TavernHandler::addJade($uid, 1, $num);
+                TavernHandler::addJade($uid, 1, $num, self::LOG_CLASS, $method);
                 break;
             case 12: // 武将
             case 26: // 神将
@@ -914,7 +921,7 @@ final class PassGeneralHandler
                     $pub = Pub::ROWS[$gid] ?? null;
                     if ($pub !== null) {
                         $jadenum = (int)$pub['price'] * PassGeneral::REBATE;
-                        TavernHandler::addJade($uid, 3, (int)round($jadenum));
+                        TavernHandler::addJade($uid, 3, (int)round($jadenum), self::LOG_CLASS, $method);
                         $return['info']['type'] = 3;
                         $return['info']['value'] = $jadenum;
                         $return['info']['name'] = self::LANG_TYPE[4];
@@ -936,15 +943,15 @@ final class PassGeneralHandler
                 break;
             case 14: // 精炼石
             case 15: // 五彩石
-            case 16: // 上古血玉
-                // 依赖未移植：member_model->add_stone（own_stone）
+            case 16: // 上古血玉（member_model->add_stone 类型 1 / 2 / 3，存 member 三列）
+                MemberStone::add($uid, $num, $type - 13, self::LOG_CLASS, $method, $now);
                 break;
             case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24: case 25: // 装备精华
                 $essInfo = EquipEssence::ROWS[PassGeneral::ESSENCE_ID[$type]] ?? [];
                 unset($essInfo['desc']); // 去除描述信息
                 if ($essInfo !== []) {
                     $essInfo['value'] = $num; // 奖励数量
-                    // 依赖未移植：equipment_model->add_tower_item 发放装备精华
+                    Equipment::addTowerItem($uid, PassGeneral::ESSENCE_ID[$type], $num);
                 }
                 $return['info'] = $essInfo;
                 $return['info']['type'] = $type;

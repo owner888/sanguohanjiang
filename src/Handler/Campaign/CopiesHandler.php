@@ -35,7 +35,6 @@ use OmniPHP\Http\Context;
  *
  * 依赖未移植：
  * - 聊天室战报广播 chat_model->get_message_str(53, …) / send_message_to_all（send_to_chat 暂返回 0，不扣元宝）；
- * - 装备碎片发放 equipment_model->add_item($info, 1, $num)（奖励类型 2；CopiesReward 里没有类型 2 的奖励）；
  * - member_model 的流水与附带计数：sub_gold 的 gold_log、日常任务 task_model->task_action(5)、翻牌活动 flopgold；
  *   sub_act 的 act_log、翻牌活动 flopact；add_reputation 的 reputation_log。
  */
@@ -318,7 +317,7 @@ final class CopiesHandler
         $info = self::monsterInfo($copiesId, $diffId, $monsterId);
 
         // 获取奖励信息
-        $reward = self::rewardInfo($member, $copiesId, $diffId, $monsterId, 1, $now);
+        $reward = self::rewardInfo($member, $copiesId, $diffId, $monsterId, 1, $now, 'get_monster_info');
 
         $price = 0;
         if ($beatInfo['free_times'] <= 0) {
@@ -795,7 +794,7 @@ final class CopiesHandler
             self::updateMonsterStatus($uid, $copiesId, $diffId, $monsterId, 1, $now);
 
             // 发奖
-            $reward = self::rewardInfo($member, $copiesId, $diffId, $monsterId, 0, $now);
+            $reward = self::rewardInfo($member, $copiesId, $diffId, $monsterId, 0, $now, 'pk');
             if (($reward['first_kill'] ?? 0) === 1) {
                 // 添加攻击日志
                 $reportId = self::addBeatLog($member, $copiesId, $diffId, $monsterId, (int)$battle['info']['assess'], $now);
@@ -936,7 +935,7 @@ final class CopiesHandler
         $reward = [];
         for ($i = 0; $i < $times; $i++) {
             // 发奖
-            $rewardRe = self::rewardInfo($member, $copiesId, $diffId, $monsterId, 0, $now);
+            $rewardRe = self::rewardInfo($member, $copiesId, $diffId, $monsterId, 0, $now, 'mop_up');
             $reputation += (int)$rewardRe['reputation'];
             foreach ($rewardRe['reward'] as $val) {
                 $reward[] = $val;
@@ -1099,9 +1098,10 @@ final class CopiesHandler
      *
      * @param array<string, mixed> $member
      * @param int $type 0 发奖，1 获取奖励信息
+     * @param string $method 当前接口（记碎片流水用）
      * @return array<string, mixed>
      */
-    private static function rewardInfo(array $member, int $copiesId, int $diffId, int $monsterId, int $type, int $now): array
+    private static function rewardInfo(array $member, int $copiesId, int $diffId, int $monsterId, int $type, int $now, string $method): array
     {
         $uid = (int)$member['uid'];
         $return = [];
@@ -1129,7 +1129,7 @@ final class CopiesHandler
                     'value' => $reward['first_value'],
                     'num' => $reward['first_num'],
                 ];
-                $return['first_reward'] = self::reward($uid, $firstReward, $type, 1, $now);
+                $return['first_reward'] = self::reward($uid, $firstReward, $type, 1, $now, $method);
                 $return['first_reward']['rate_info'] = self::rateInfo(100, 1);
             }
         } else {
@@ -1158,10 +1158,10 @@ final class CopiesHandler
                 // 随机发奖（旧版 rand(0, 100)，PHP 7.1 起即 mt_rand）
                 $rand = mt_rand(0, 100);
                 if ($reward['rate' . $i] >= $rand) {
-                    $reInfo[] = self::reward($uid, $rewardInfo, 0, 0, $now);
+                    $reInfo[] = self::reward($uid, $rewardInfo, 0, 0, $now, $method);
                 }
             } else {
-                $reInfo[] = self::reward($uid, $rewardInfo, $type, 0, $now);
+                $reInfo[] = self::reward($uid, $rewardInfo, $type, 0, $now, $method);
             }
         }
 
@@ -1178,7 +1178,7 @@ final class CopiesHandler
      * @param int $isFirst 是否首杀奖励（首杀不带概率信息）
      * @return array<string, mixed>
      */
-    private static function reward(int $uid, array $rewardInfo, int $isGet, int $isFirst, int $now): array
+    private static function reward(int $uid, array $rewardInfo, int $isGet, int $isFirst, int $now, string $method): array
     {
         $return = [];
         $type = $rewardInfo['type']; // 奖励类型
@@ -1199,7 +1199,10 @@ final class CopiesHandler
             case 2: // 装备碎片
                 $item = Equip::ROWS[$value] ?? null;
                 if ($item !== null) {
-                    // 依赖未移植：添加装备碎片 equipment_model->add_item($item['info'], 1, $num, uid)（Equipment 尚无碎片分支），不发放
+                    if ($isGet === 0) {
+                        // 添加装备碎片
+                        Equipment::addChip($uid, (int)$item['id'], (int)$num, 'copies', $method, $now);
+                    }
                     // 返回装备信息
                     $return = $item;
                 }

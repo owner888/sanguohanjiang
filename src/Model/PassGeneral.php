@@ -226,7 +226,7 @@ final class PassGeneral
      * 刷新时间不是今天时：有未领取的宝箱奖励（is_get = 2）就自动发放并发信，然后重置层数 / 过人进度 / 免费次数、
      * 记录刷新时间。以刷新时间做比较交换，多 Worker 并发请求只执行一次。
      */
-    public static function dailyUpdate(int $uid, int $version, int $now): void
+    public static function dailyUpdate(int $uid, int $version, int $now, string $class = '', string $method = ''): void
     {
         $userData = self::getInfo($uid, $version);
         if ($userData === null || date('Ymd', $now) === date('Ymd', $userData['refresh_time'])) {
@@ -239,7 +239,7 @@ final class PassGeneral
             return;
         }
         // 如果有未领取的奖励 自动发放给玩家
-        self::autoBoxReward($userData, $version, $now);
+        self::autoBoxReward($userData, $version, $now, $class, $method);
     }
 
     /**
@@ -249,8 +249,9 @@ final class PassGeneral
      * 开发者要求修正：每个玩家都发放本层奖励 $new_reward[0]。
      *
      * @param array<string, int> $userData 发放前的玩家记录
+     * @param string $class / $method 物品流水的执行类与方法（旧版取当前请求）
      */
-    public static function autoBoxReward(array $userData, int $version, int $now): void
+    public static function autoBoxReward(array $userData, int $version, int $now, string $class = '', string $method = ''): void
     {
         $uid = $userData['uid'];
         // 获取奖励
@@ -271,7 +272,7 @@ final class PassGeneral
         // 发放奖励
         for ($ii = 1; $ii <= 3; $ii++) {
             if (isset($newReward[0]['type' . $ii]) && $newReward[0]['type' . $ii] !== 0) {
-                $message .= self::getRewardItem((int)$newReward[0]['type' . $ii], (int)$newReward[0]['value' . $ii], $uid, $now);
+                $message .= self::getRewardItem((int)$newReward[0]['type' . $ii], (int)$newReward[0]['value' . $ii], $uid, $now, $class, $method);
             }
         }
 
@@ -314,7 +315,7 @@ final class PassGeneral
      * 旧版照搬：两个 case '12' 只有第一个（武将）生效，军令（13）、锻造材料（28）不处理；
      * 新获得武将时信件拼 $general['info']['name']（add_general 返回值没有 info，名字为空）。
      */
-    public static function getRewardItem(int $type, int $num, int $uid, int $now): string
+    public static function getRewardItem(int $type, int $num, int $uid, int $now, string $class = '', string $method = ''): string
     {
         $message = '';
         $item = self::LANG_CRON_ITEM[$type] ?? '';
@@ -328,11 +329,11 @@ final class PassGeneral
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 3: // 黄宝石
-                TavernHandler::addJade($uid, 2, $num);
+                TavernHandler::addJade($uid, 2, $num, $class, $method);
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 4: // 紫宝石
-                TavernHandler::addJade($uid, 3, $num);
+                TavernHandler::addJade($uid, 3, $num, $class, $method);
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 5: // 原魂
@@ -340,7 +341,7 @@ final class PassGeneral
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 6: // 玉石
-                // 依赖未移植：member_model->add_jade（新版 member 表无 jade 字段）
+                MemberJade::add($uid, $num, $class, $method, $now);
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 7: // 声望
@@ -355,7 +356,7 @@ final class PassGeneral
                 $message .= self::LANG_CRON_EQUIP . ($equip['name'] ?? '') . '，';
                 break;
             case 9: // 宝石碎片
-                // 依赖未移植：member_model->add_gem（新版 member 表无 gem 字段）
+                OwnGem::addChip($uid, $num, $class, $method, $now);
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 10: // 突飞卡
@@ -363,7 +364,7 @@ final class PassGeneral
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 11: // 蓝宝石
-                TavernHandler::addJade($uid, 1, $num);
+                TavernHandler::addJade($uid, 1, $num, $class, $method);
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 12: // 武将
@@ -375,7 +376,7 @@ final class PassGeneral
                     $pub = Pub::ROWS[$gid] ?? null;
                     if ($pub !== null) {
                         $jadenum = (int)$pub['price'] * self::REBATE;
-                        TavernHandler::addJade($uid, 3, (int)round($jadenum));
+                        TavernHandler::addJade($uid, 3, (int)round($jadenum), $class, $method);
                         $message .= self::LANG_CRON_CHANGE_PURPLE . $jadenum . self::LANG_CRON_GE;
                     }
                 } elseif (General::createFromTemplate($uid, $gid) !== null) {
@@ -385,13 +386,13 @@ final class PassGeneral
                 break;
             case 14: // 精炼石
             case 15: // 五彩石
-            case 16: // 上古血石
-                // 依赖未移植：member_model->add_stone（own_stone）
+            case 16: // 上古血石（member_model->add_stone 类型 1 / 2 / 3，存 member 三列）
+                MemberStone::add($uid, $num, $type - 13, $class, $method, $now);
                 $message .= $item . $num . self::LANG_CRON_GE;
                 break;
             case 17: case 18: case 19: case 20: case 21: case 22: case 23: case 24: case 25: // 装备精华
                 if (isset(EquipEssence::ROWS[self::ESSENCE_ID[$type]])) {
-                    // 依赖未移植：equipment_model->add_tower_item 发放装备精华
+                    Equipment::addTowerItem($uid, self::ESSENCE_ID[$type], $num);
                     $message .= $item . $num . self::LANG_CRON_GE;
                 }
                 break;

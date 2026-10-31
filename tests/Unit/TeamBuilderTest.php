@@ -22,6 +22,7 @@ use PHPUnit\Framework\TestCase;
  *               7 张梁 Lv15 turn0 type1 wuli80 zhili55 tili93 talent3 skill2 star3 无装备
  *   own_equip   7 赤铜刀 type1 power10 powerup10；8 赤铜甲 type3 5/5；10 苍狼披风 type4 9/9
  *               12 劈山刀 type1 Lv10 18/178；13 犀牛宝甲 type3 Lv10 9/89；15 苍狼披风 type4 9/9（均无精炼、无强化成就）
+ * dump 里该玩家没有宝石（own_gem）与坐骑（own_mount），宝石 / 坐骑加成见 testGemAndMountBonuses。
  * 主公 17 级，所有依赖未移植的加成在旧版也尚未开启（名将成就 81、美人 60、星魄 80、主公天赋 91、名将进阶 100）。
  */
 final class TeamBuilderTest extends TestCase
@@ -204,6 +205,62 @@ final class TeamBuilderTest extends TestCase
         $this->assertSame(1120, (new BattleEngine())->battle($built['team'], [])['leftteam'][4]['allblood']);
     }
 
+    /**
+     * 宝石与坐骑（dump 里这名玩家没有宝石 / 坐骑，这里按旧版表结构补行，期望值按旧版 battle_model 公式手算）
+     *
+     * gem_model->get_gem_by_eid：装备上的宝石 power 累加为该装备的 gem_power，加到对应属性（武器→攻击、铠甲→物防…）；
+     * 坐骑：own_general.mid0 主战 100%、mid1 ~ mid4 备战 ceil(× 0.3)；之后（精炼计算后）按坐骑模板 type 加特殊属性：
+     * 1 攻击 +intval(攻击 × (value + level × 坐骑等级) / 100)、3 抗暴击率 +(value + level × 坐骑等级)。
+     */
+    public function testGemAndMountBonuses(): void
+    {
+        // 廖化：赤铜刀镶 30 + 20、赤铜甲镶 7；主战越影（模板 1，type 0），备战比翼鸟（模板 103，type 1 value 5 level 1，坐骑 2 级）
+        foreach ([[7, 30, 1], [7, 20, 2], [8, 7, 1]] as [$legacyEid, $power, $site]) {
+            DB::table('own_gem')->insert(['uid' => self::UID, 'gemid' => 1, 'name' => '青龙石', 'type' => 1, 'level' => 0, 'power' => $power, 'eid' => $this->eid[$legacyEid], 'site' => $site]);
+        }
+        // 未镶嵌 / 已删除的宝石不计
+        DB::table('own_gem')->insert(['uid' => self::UID, 'gemid' => 1, 'name' => '青龙石', 'type' => 1, 'level' => 0, 'power' => 999, 'eid' => 0, 'site' => 0]);
+        DB::table('own_gem')->insert(['uid' => self::UID, 'gemid' => 1, 'name' => '青龙石', 'type' => 1, 'level' => 0, 'power' => 999, 'eid' => $this->eid[7], 'site' => 3, 'deleted_at' => '2026-01-01 00:00:00']);
+        $mount = static fn (int $mid, string $name, int $quality, int $level, int $attack, int $fang, int $hp): int => (int)DB::table('own_mount')->insert([
+            'uid' => self::UID, 'mid' => $mid, 'name' => $name, 'quality' => $quality, 'level' => $level,
+            'attack' => $attack, 'wufang' => $fang, 'cefang' => $fang, 'hp' => $hp,
+        ]);
+        $yueying = $mount(1, '越影', 1, 0, 900, 450, 2000);
+        $biyi = $mount(103, '比翼鸟', 7, 2, 11000, 5500, 15000);
+        DB::table('general')->where('id', $this->gid[3])->update(['mid0' => $yueying, 'mid1' => $biyi]);
+        // 周仓：主战风蹄（模板 107，type 3 value 20 level 1，坐骑 0 级）
+        $fengti = $mount(107, '风蹄', 7, 0, 10000, 5800, 20000);
+        DB::table('general')->where('id', $this->gid[5])->update(['mid0' => $fengti]);
+
+        $built = TeamBuilder::forMember(self::UID);
+        $liao = $built['team'][2];
+        // 攻击：190 + 宝石 50 = 240；+ 越影 900 + ceil(11000 × 0.3) = 3300 → 4440；比翼鸟 type 1：5 + 1 × 2 = 7%，intval(4440 × 0.07) = 310 → 4750
+        $this->assertSame(4750, $liao['attack']);
+        // 物防：95 + 宝石 7 + 450 + ceil(5500 × 0.3) = 1650 → 2202；策防：99 + 450 + 1650 = 2199
+        $this->assertSame(2202, $liao['defense1']);
+        $this->assertSame(2199, $liao['defense2']);
+        // 血量：780 + 2000 + ceil(15000 × 0.3) = 4500 → 7280
+        $this->assertSame(7280, $liao['all_blood']);
+        $this->assertSame(0, $liao['kcrit']);
+
+        $zhou = $built['team'][4];
+        // 风蹄主战：攻击 358 + 10000；物防 179 + 5800；抗暴击率 20 + 1 × 0 = 20
+        $this->assertSame([10358, 5979, 5899, 20780, 20], [$zhou['attack'], $zhou['defense1'], $zhou['defense2'], $zhou['all_blood'], $zhou['kcrit']]);
+
+        // 战斗 buff 的坐骑：本队品级最高的一匹（同品级不替换，取先出现的比翼鸟）
+        $battle = (new BattleEngine())->battle($built['team'], []);
+        $this->assertSame(['id' => 103, 'name' => '比翼鸟', 'quality' => 7], $battle['leftbuff']['mount']);
+        // intval(7280 × (1 + 71 × 0.002) × 1.0) = intval(8313.76) = 8313
+        $this->assertSame(8313, $battle['leftteam'][2]['allblood']);
+
+        // 坐骑 type 4 血量% / 5 抗晕（旧版 _suit_arr[ugid]，MountTemp 现有模板没有这两类）：记在单位的 suit 上，battle() 开头计入
+        $team = $built['team'];
+        $team[2]['suit'] = ['ptblood' => 10, 'kangyun' => 15];
+        $battle = (new BattleEngine())->battle($team, []);
+        // intval(8313 × (100 + 10) / 100) = intval(9144.3) = 9144
+        $this->assertSame(9144, $battle['leftteam'][2]['allblood']);
+    }
+
     public function testStarAndPveMatrixCap(): void
     {
         DB::table('general')->where('id', $this->gid[7])->update(['star' => 6]);
@@ -283,7 +340,7 @@ final class TeamBuilderTest extends TestCase
 
     private function cleanup(): void
     {
-        foreach (['general', 'equipment', 'matrix', 'member_field'] as $table) {
+        foreach (['general', 'equipment', 'matrix', 'member_field', 'own_gem', 'own_mount'] as $table) {
             DB::table($table)->where('uid', self::UID)->delete();
         }
     }

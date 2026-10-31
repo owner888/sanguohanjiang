@@ -11,6 +11,7 @@ use Hanjiang\MasterData\CountryMineEvent;
 use Hanjiang\MasterData\CountryMineRatio;
 use Hanjiang\Model\BossClock;
 use Hanjiang\Model\Member;
+use Hanjiang\Model\MemberJade;
 use OmniPHP\Cache\Redis;
 use OmniPHP\Database\DB;
 use OmniPHP\Http\Context;
@@ -27,15 +28,17 @@ use OmniPHP\Http\Context;
  * send_to_chat。
  *
  * 依赖未移植：
- * - 玉石 member.jade（member_model->add_jade）：开采收获、放弃、抢夺得到的玉石只回报不发放，all_jade 恒为 0；
  * - 好友（friend_model->get_list / get_friend_by_id，新版好友为自定数据），friend 恒为 0；
  * - message_model->record_pk_report 信件战报；日常任务 task_model->task_action(13)（主公 41 级以上）；
- * - 聊天室战报分享（send_to_chat，见该方法）；玉石 / 元宝流水。
+ * - 聊天室战报分享（send_to_chat，见该方法）；元宝流水。
  */
 final class CountryMineHandler
 {
     /** 矿战开放等级 */
     private const int OPEN_LEVEL = 91;
+
+    /** 玉石流水的执行类（旧版 $this->class） */
+    private const string LOG_CLASS = 'countrymine';
 
     /** 最大 / 最小的翻页数 */
     private const int MAX_PAGE = 10;
@@ -317,7 +320,7 @@ final class CountryMineHandler
         // 触发随机事件
         $event = self::emptyEvent();
         if (mt_rand(1, 100) <= $calc['rate']) {
-            $event = self::triggerEvent($uid, $calc['total_reward']);
+            $event = self::triggerEvent($uid, $calc['total_reward'], 'get_reward');
             $calc['total_reward'] = $event['jade'];
         }
 
@@ -325,7 +328,7 @@ final class CountryMineHandler
         if ($calc['total_reward'] < 0) {
             $calc['total_reward'] = 0;
         }
-        // 依赖未移植：member_model->add_jade 玉石（新服 member 表无 jade 字段）
+        $allJade = MemberJade::add($uid, (int)$calc['total_reward'], self::LOG_CLASS, 'get_reward', $now)['jade'];
 
         self::updateMineDateline($uid, $now, true);
 
@@ -337,7 +340,7 @@ final class CountryMineHandler
         $return['event_value'] = $event['value'];
         $return['event_add'] = $event['add'];
         $return['jade'] = $calc['total_reward'];
-        $return['all_jade'] = 0;
+        $return['all_jade'] = $allJade;
         $return['all_gold'] = (int)$after['gold'];
         return $return;
     }
@@ -496,10 +499,11 @@ final class CountryMineHandler
         if ($return['jade'] < 0) {
             $return['jade'] = 0;
         }
-        // 依赖未移植：member_model->add_jade 玉石（新服 member 表无 jade 字段），all_jade 恒为 0
-        $return['all_jade'] = 0;
-        // 执行放弃操作（只放弃读到的这个矿）
+        $return['all_jade'] = MemberJade::get($uid);
+        // 执行放弃操作（只放弃读到的这个矿）；旧版先加玉石再放弃，这里放弃成功才加，并发收获 / 被抢时不重复发
         if (self::clearMine($uid, $log, $now)) {
+            // 增加玉石
+            $return['all_jade'] = MemberJade::add($uid, $return['jade'], self::LOG_CLASS, 'give_up', $now)['jade'];
             // 放弃成功
             $return['status'] = 1;
             self::updateMineDateline($uid, $now, true);
@@ -612,14 +616,14 @@ final class CountryMineHandler
 
             // 触发随机事件
             if ($getJade > 0 && mt_rand(1, 100) <= $reward['rate']) {
-                $event = self::triggerEvent($uid, $getJade);
+                $event = self::triggerEvent($uid, $getJade, 'rob');
                 $getJade = (int)$event['jade'];
             }
 
             // 发信
             $pmid = self::sendMessage($member, $touid, sprintf(self::LANG_MESSAGE_COUNTRYMINE_LOSE, $getJade));
 
-            // 依赖未移植：member_model->add_jade 玉石（新服 member 表无 jade 字段）
+            MemberJade::add($uid, $getJade, self::LOG_CLASS, 'rob', $now);
 
             self::updateMineDateline($touid, $now, true);
             self::updateMineDateline($uid, $now);
@@ -645,7 +649,7 @@ final class CountryMineHandler
         $info['win'] = $assess;
         $info['robtimes'] = $log['robtimes'] - 1;
         $info['jade'] = $getJade;
-        $info['all_jade'] = 0;
+        $info['all_jade'] = MemberJade::get($uid);
         $info['gender'] = $toMember !== null ? (int)$toMember['gender'] : null;
         $info['name'] = $toMember !== null ? (string)$toMember['nickname'] : null;
         $info['all_gold'] = (int)$after['gold'];
@@ -858,7 +862,7 @@ final class CountryMineHandler
      *
      * @return array{status: int, name: string, type: int, value: int|float, add: int, jade: int} jade 为事件后的玉石数
      */
-    private static function triggerEvent(int $uid, int $jade): array
+    private static function triggerEvent(int $uid, int $jade, string $method): array
     {
         $event = self::emptyEvent();
         $event['jade'] = $jade;
@@ -883,7 +887,7 @@ final class CountryMineHandler
         $row = $list[$eventKey];
         if ($row['type'] === 1) {
             // 添加紫宝石
-            TavernHandler::addJade($uid, 3, (int)$row['value']);
+            TavernHandler::addJade($uid, 3, (int)$row['value'], self::LOG_CLASS, $method);
         } elseif ($row['type'] === 2) {
             // 获得的玉石加倍
             $total = (int)($jade * $row['value']);
