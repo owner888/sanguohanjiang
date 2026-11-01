@@ -79,6 +79,7 @@
 │   ├── schema.sql           # 完整的最新表结构（空库启动时自动导入）
 │   └── migrations/          # PHP 迁移，服务启动时自动执行；sql/ 为旧的手写 .sql 历史
 ├── tools/
+│   ├── gen_img_fallback.php # 重新生成客户端缺图回退表（base.js 的 xGame.imgFallback）
 │   ├── gen_master_data.php  # 从旧版 mysqldump 重新生成 src/MasterData
 │   ├── migrate.php          # 手动迁移：migrate / status / rollback / reset --force / refresh --force
 │   ├── make-migration.php   # 生成幂等的迁移模板

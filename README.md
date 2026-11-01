@@ -79,6 +79,7 @@ This modern edition rebuilds the backend into a resident-memory, event-driven mi
 │   ├── schema.sql           # Complete current schema (imported automatically into an empty database)
 │   └── migrations/          # PHP migrations, run automatically at server start; sql/ = old hand-written .sql history
 ├── tools/
+│   ├── gen_img_fallback.php # Regenerates the client's missing-hero-art fallback map (xGame.imgFallback in base.js)
 │   ├── gen_master_data.php  # Regenerates src/MasterData from the legacy mysqldump
 │   ├── migrate.php          # Migrations by hand: migrate / status / rollback / reset --force / refresh --force
 │   ├── make-migration.php   # Generates an idempotent migration template

@@ -35,7 +35,7 @@ return [
     'activity_open' => getenv('ACTIVITY_OPEN') ?: '',
     'activity_open_days' => in_array(getenv('ACTIVITY_OPEN_DAYS'), [false, ''], true) ? 30 : (int)getenv('ACTIVITY_OPEN_DAYS'),
     'assets' => [
-        'version'    => getenv('ASSET_VERSION') ?: '20261102_1',
+        'version'    => getenv('ASSET_VERSION') ?: '20261102_2',
         'static_url' => getenv('STATIC_URL') ?: 'static/',
         'cdn_url'    => getenv('CDN_URL') ?: 'static/',
         'api_url'    => getenv('API_URL') ?: 'index.php',

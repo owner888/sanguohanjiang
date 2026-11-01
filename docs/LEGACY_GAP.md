@@ -152,6 +152,7 @@
 | `c=springlottery`（`SpringlotteryHandler`） | 不移植：`cron::get_springlottery_reward`（旧版注释为手动发放，带忽略结束时间的参数，运维接口）。旧版 `copies_model->get_materials_info_by_arr` 不在旧版代码包里，按调用方还原。活动时间取 `ActivityTime`（starttime = endtime = 0，从未开放） |
 | 年夜饭（`c=newyeardinner`） | 未移植：客户端没有年夜饭界面（`newyeardinnerpop.js` 不在客户端里，`miscpop.js` / `cd.js` 只有提示与倒计时），控制器 `index` / `get_member_list` / `get_menu_list` / `order_dishes` / `start` / `get_reward` 与手动补发 `cron::get_dinner_reward` 不暴露；`member_field.newyeardinner` 随之不建（见「已建表的缺失字段」）。主城 `dinner_get` 照旧版写死的 2013 年时段输出 |
 | `c=ios&m=savetoken` | 依赖未移植：用 `member_field.devicetoken` 推送的计划任务（`iospushapi`，矿区可收获等） |
+| 资源缺失：武将美术（`public/static/img/hero`、`img/avatar`） | 本地只有 image 1–114、201–212 的武将形象，旧版其余形象从已失效的 CDN `img2.hanjiangsanguo.com` 加载。神 / 魔将领已回退到原型将领的本地形象（`xGame.imgFallback`，`tools/gen_img_fallback.php` 生成，共 31 个，如神张飞 163→54、神关羽 157→58）；其中 116、154、156、160、342、348、418、452、453、461、473 的原型战斗图尺寸不同（301×210 / 260×210），站立图能显示，攻击动画仍按神将的 315×253 帧格（`hero_ini`）切图，可能错位。以下 222 个 image id 既没有本地美术、也找不到原型将领（MasterData 各表引用到的，`php tools/gen_img_fallback.php --missing`），客户端只显示名字 / 血条、头像为空，需要开发者提供美术：115、117、151–153、161–162、164、301–318、320、324–341、346、349–361、367–388、390–394、396–415、417、420–423、425–430、433–439、443、445、448、450–451、455–459、462–465、467–470、472、474–534、536–551、554、557 |
 
 ## 战斗
 
